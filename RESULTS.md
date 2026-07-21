@@ -42,6 +42,12 @@ enumeration).
 | 45 | COMPLETE, eng=S, subsets=490899 | 551.9s | **MATCH** (29858202121833974366127520253547500517971464443016809773917504800) |
 | 46 | COMPLETE, eng=S, subsets=300 | 678.4s | **B-FILE ERROR FOUND** — see below |
 | 47 | COMPLETE, eng=S, subsets=25 | 386.2s | **MATCH** (1754681573582232514378787438934811607312193893426436545338224933544695955200) |
+| 48 | TIMEOUT (1h cap, v2 baseline) | >3600s | deferred — b-file says 94237804886307950779486130179671488973571078333724597158459950718126090200; whole hour inside one k=44 subset ({1..47}\{16,32,46}), cap 4.3e9 — engine-bound like 40/49 |
+
+**Tail sweep complete (v2 baseline, 1h caps): 7 complete (41–47), all validated
+— 6 matches + 1 published-value error found (46, ours strictly larger, doubly
+verified). 2 timeouts (40, 48), deferred to the optimized engine, alongside
+benchmark target 49.**
 
 ### Base 46: published OEIS value is suboptimal
 
