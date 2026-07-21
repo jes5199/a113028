@@ -52,6 +52,11 @@ enumeration).
 - The b-file arrangement breaks descending order at digit 28 (…29,27,26,…28
   buried in the tail); the solver's keeps 28 in place (…29,28,27,…) and is
   strictly greater. The published a(46) is therefore not maximal.
+- Independently re-verified from scratch by boss-clod (second Python check,
+  2026-07-21): same subset, same lcm, both divisible, ours strictly larger.
+  Relayed to jes as an OEIS-correction candidate. Consequence: the b-file is
+  no longer a blind oracle for remaining bases — any divergence gets the same
+  treatment (verify validity + strict comparison before assigning blame).
 
 ## Base 49 (out-of-range target; jes's independent answer, ~1 week on a 2020 laptop)
 
