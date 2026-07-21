@@ -77,6 +77,11 @@ escalations and yields the answer). Two worlds for b40's escalating k=34 subset:
 
 - **Survivor is dead** → order-e subset filter (v3) kills it pre-engine and the
   base collapses to seconds. The 5-min b40 probe with v3 answers this.
+  **PROBE RESULT: no kill.** b40's k=34 survivor passes order-e (mod 9 e=3,
+  mod 7 e=6) — with 34 digits and tiny moduli the partition DP is almost always
+  feasible, so the filter cannot refute large survivors. Order-e stays merged
+  (free insurance, will matter for smaller-k survivors at other bases), but
+  b40 = b49 = engine-bound. Engine speed is the only live path for both.
 - **Survivor is alive** (like b38's) → subset filters can't help; need faster
   engines:
   - **Engine S incremental residues**: today each scan iteration recomputes the
