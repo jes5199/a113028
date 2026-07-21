@@ -31,3 +31,7 @@ enumeration).
 
 ## Tail runs (bases 40–48)
 (updated as they land)
+
+| base | outcome | wall-clock | validation |
+|------|---------|-----------|------------|
+| 40 | TIMEOUT (1h cap, v2 baseline) | >3600s | deferred — b-file says 2949491266532658135493053371770319593915307331801883500; awaiting optimized engine |
