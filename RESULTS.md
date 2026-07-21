@@ -40,6 +40,18 @@ enumeration).
 | 43 | COMPLETE, eng=S, subsets=23 | 1430.0s | **MATCH** (9374765438594117074250580509957460813483601689280434597219126021600) |
 | 44 | COMPLETE, eng=S, subsets=50789 | 2067.9s | **MATCH** (12428520662963836843722648681332672663852331283150932087854716800) |
 | 45 | COMPLETE, eng=S, subsets=490899 | 551.9s | **MATCH** (29858202121833974366127520253547500517971464443016809773917504800) |
+| 46 | COMPLETE, eng=S, subsets=300 | 678.4s | **B-FILE ERROR FOUND** — see below |
+
+### Base 46: published OEIS value is suboptimal
+
+- b-file:  315044747190120671695735975284033252460559821155925276163089767538975200
+- solver:  315044747190120671695735975284412123404260147529994283460952247723479200 (larger)
+- Independently verified in Python: BOTH values use the same 43-digit subset
+  {1..45}\{22,23} (itself uniquely forced: ten-rule removes 23, then digit-sum
+  mod 45 forces d≡22), both divisible by lcm = 409547311252279200.
+- The b-file arrangement breaks descending order at digit 28 (…29,27,26,…28
+  buried in the tail); the solver's keeps 28 in place (…29,28,27,…) and is
+  strictly greater. The published a(46) is therefore not maximal.
 
 ## Base 49 (out-of-range target; jes's independent answer, ~1 week on a 2020 laptop)
 
