@@ -37,3 +37,16 @@ enumeration).
 | 40 | TIMEOUT (1h cap, v2 baseline) | >3600s | deferred — b-file says 2949491266532658135493053371770319593915307331801883500; awaiting optimized engine |
 | 41 | COMPLETE, eng=S, subsets=22 | 49.0s | **MATCH** (791222981626154999235100158499550255615325307057668641337271200) |
 | 42 | COMPLETE, eng=S, subsets=2293810 | 116.0s | **MATCH** (650828754201915243697436482327806321775960031977171416000) |
+
+## Base 49 (out-of-range target; jes's independent answer, ~1 week on a 2020 laptop)
+
+- jes's answer decodes (0-9, A-Z=10-35, α..ν=36-48) to
+  27480664153312064994836939532520844560984511658005210290838348871641700981823200
+  = 47 distinct digits, missing exactly {24}, divisible by lcm — self-consistent.
+- Theory validated at subset level: 49 ≡ 1 (mod 16) and (mod 3) force digit-sum
+  conditions that UNIQUELY determine the removed digit d=24 (d≡8 mod 16, d≡0 mod 3).
+- v2 baseline 1h run: TIMEOUT. stderr shows the whole hour spent inside exactly
+  that one subset (filters isolated it instantly; budget escalated to 4.3e9).
+  Conclusion: b49's cost is arrangement-search inside an ALIVE subset — subset
+  filters are already optimal here; engine speed is the whole game. b49 is now
+  the primary optimization benchmark (known answer, known-hard).
