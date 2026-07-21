@@ -53,6 +53,29 @@ the current code goes blind.
 5. **Parallelism** across subsets (pthreads) — deferred; box is 4-core and
    shared, load already ~3.8.
 
+## Strategic fork (post-regression insight, 2026-07-21 evening)
+
+Real baseline data shows `scanned=1` on every slow base (34–39): the order-1/2
+filters already isolate a single surviving subset, and ~all wall-clock is
+engine work *inside* it (b38: one k=35 subset, 116s, engine S wins after cap
+escalations and yields the answer). Two worlds for b40's escalating k=34 subset:
+
+- **Survivor is dead** → order-e subset filter (v3) kills it pre-engine and the
+  base collapses to seconds. The 5-min b40 probe with v3 answers this.
+- **Survivor is alive** (like b38's) → subset filters can't help; need faster
+  engines:
+  - **Engine S incremental residues**: today each scan iteration recomputes the
+    full number's residue = O(k) u128 divisions. Maintain per-position prefix
+    residues and recompute only below the highest changed digit (skips mostly
+    touch low digits) — plausible 5–30× constant-factor win on exactly the
+    114s-per-base grind. Alternative/complementary: CRT residue vector (u64
+    per prime power) instead of u128 % LCM.
+  - **Engine D order-3 prefix prune** (q=9 for B=40, state ~13·13·9) at
+    shallow depths, plus **nilpotent m==t feasibility** (at m==t, the last t
+    digits alone determine n mod q for q | B^t; e.g. q=25, t=2 for B=40:
+    prune d1 unless some avail d0 has 40·d1+d0 ≡ 0 mod 25). Together these
+    could flip D ahead of S on weak-modulus bases.
+
 ## Ops log
 - Source reconstructed from a 3-part Telegram paste; compiled clean first try;
   bases 2–39 all match the OEIS b-file exactly → reconstruction is faithful.

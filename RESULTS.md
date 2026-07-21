@@ -15,12 +15,18 @@ range:
 
 | base | engine | subsets checked | scanned | time |
 |------|--------|-----------------|---------|-------|
-| 34 | S | 20 | 3 | 1.7s |
-| 35 | S | 86 | 3 | 2.9s |
-| 36 | S | 2 | 1 | 0.5s |
+| 34 | S | 171 | 1 | 1.8s |
+| 35 | S | 139212 | 1 | 0.5s |
+| 36 | S | 22943 | 1 | 2.1s |
 | 37 | S | 20 | 1 | 27.5s |
 | 38 | S | 210 | 1 | 116.4s |
 | 39 | S | 3196 | 1 | 69.1s |
+
+Note: on every slow base, `scanned=1` — the order-1/2 filters already reduce to
+a single surviving subset, and essentially all wall-clock is engine work inside
+it. So subset-level filters only help further if that survivor is *dead*;
+otherwise the win has to come from faster engines (prefix pruning, suffix
+enumeration).
 | 40 | — | — | — | >1h (first run killed mid-flight at 17e9-node budget; bounded rerun in progress) |
 
 ## Tail runs (bases 40–48)
