@@ -53,6 +53,21 @@ the current code goes blind.
 5. **Parallelism** across subsets (pthreads) — deferred; box is 4-core and
    shared, load already ~3.8.
 
+## Model correction (b42 outcome)
+
+Predicted b42 as worst-in-range (41, 43 both prime) — WRONG: completed in 116s
+(2.29M subsets checked, filters killed nearly all instantly). The smoothness
+model was too crude. Refined model: what matters is the **size of the usable
+order-1/2 moduli**, where usable means the prime power can divide lcm(S), i.e.
+p ≤ B−1. B−1 prime is therefore the BEST case, not the worst: digit B−1 brings
+a giant order-1 modulus (digit-sum ≡ 0 mod B−1, a 1-in-(B−1) filter). The bad
+case is B−1 with *mid-size* factors and B+1's factors useless (> B−1):
+- B=40: 39 = 3·13 → only small order-1 moduli; 41, 1601, 547 all > 39 →
+  blind. Uniquely bad in range.
+- B=42: 41 prime = B−1 → giant digit-sum filter → fast. Same for 44 (43),
+  48 (47).
+- Remaining risk in range: B=46 (45 = 9·5 small moduli, 47 > 45 useless).
+
 ## Strategic fork (post-regression insight, 2026-07-21 evening)
 
 Real baseline data shows `scanned=1` on every slow base (34–39): the order-1/2
