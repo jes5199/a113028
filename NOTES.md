@@ -101,3 +101,14 @@ escalations and yields the answer). Two worlds for b40's escalating k=34 subset:
   bases 2–39 all match the OEIS b-file exactly → reconstruction is faithful.
 - Tail strategy: per-base detached runs, `timeout 3600` each (bases 40–48),
   sequential (shared 4-core box), results appended to run_output.txt.
+
+## Peeling-era notes (2026-07-22)
+
+- SATURATION-PROFILES verified: b40/b48 coprime bodies are DP-inert (all
+  DP-able layers fill far below the band) — peeling is the ENTIRE available
+  win at those bases; no cheap-condition upgrade can matter there. b49's
+  layers fill at m≈12–14 on intervals; any in-band sub-saturation is a
+  reachable-gap-set property, so the b49 window profile MUST be computed on
+  actual visited sets, never the interval convention.
+- v12 validation ladder: after regression, peeled-b40 runs as the
+  known-answer wall-clock check (v9 baseline 6856s) before v12 touches b48.
