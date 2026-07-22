@@ -98,6 +98,76 @@ Encode one endgame instance (fixed prefix, m free positions, CRT constraints)
 for OR-tools as an independent cross-check of Engine C on single instances.
 Not a production path (max-lex objective + huge L handled poorly).
 
+## Is Engine C near-optimal? (analysis, 2026-07-22)
+
+**1. The top descent is already free.** Above the divergence band, the DFS
+tries the largest available digit first and (by the density argument m! ≫
+L_eff) that choice essentially always has a completion — and no *larger*
+choice exists to refute, because the descending arrangement is the lex-max of
+all arrangements. So Engine C walks the forced prefix once, O(k) — seed #1
+("skip the descent") is already achieved; there is no slack there.
+
+**2. The irreducible core is critical-band refutation.** All real work is
+refuting wrong turns at levels m ∈ [m*−c, m*+c] (c ≈ 2–3; above the band
+wrong turns don't exist, below it per-q DPs bite). A wrong turn there is
+lex-larger than the answer but has no completion, while *every cheap per-q
+test passes* — necessarily: if a completion existed, that wrong turn would BE
+the answer. Refutation currently means sweeping the subtree at per-q-feasible
+granularity down to the P-leaf.
+
+**3. Could an exact joint oracle kill the sweeps?** With a poly-time exact
+completion-feasibility oracle, greedy descent would never backtrack: total
+cost O(k·B·oracle). But the joint problem — a bijection of digits to
+positions satisfying independent class-partition constraints per prime power
+simultaneously — is a CRT-coupled assignment problem; the coupling across
+moduli is exactly what the per-q relaxations lose, and positions do NOT
+collapse into equivalence classes (a position's type is its residue vector
+(i mod e_1, …, i mod e_r); for hard bases lcm(e_i) ≫ m, so all types are
+distinct). This is 3-partition/exact-matching-flavored; we conjecture the
+band decision is NP-hard in general (no reduction written down — open), and
+in the band it sits at density Θ(1) where relaxation-based certificates
+provably cannot decide. MITM re-dies in the band for the same reason it died
+globally: halves are injections (choose digits AND arrange), 21!/10! ≈ 1e13.
+Verdict: **Engine C has the right shape; the band sweep is (morally)
+irreducible.** Remaining slack is multiplicative, not asymptotic:
+
+- **(a) Incremental in-band DPs (biggest lever, est. 10–100× on structured
+  bases).** v6 dropped e=4..6 node pruning because recomputing each DP from
+  scratch costs ~73µs/node. But sibling nodes share 95% of the DP work —
+  maintained incrementally (update tables as digits are placed/unplaced),
+  ALL small-e moduli become affordable in-band, multiplying the pruning
+  factor by the dropped q_e's (b49: ×11 (e=5), ×13 (e=6), …).
+- **(b) Leaf widening Δ (est. 2–5×).** At depth P+Δ, enumerate the ≤
+  B^Δ·(B^P/L) candidate values by decomposition (O(P) each) instead of
+  DFS-ing the last Δ levels; breakeven Δ ≈ 2–3.
+- **(c) Parallelism (×cores).** Band wrong-turn subtrees are independent;
+  trivial work-stealing across them.
+- **(e) Algebraic refutation (Fourier certificates) — investigated, fails
+  exactly where needed.** The completion count is N(t) = (m!/L)·(1 +
+  Σ_{a≠0} ω^{−at}·F(a)) where F(a) are Fourier coefficients of the
+  permutation-sum distribution (permanental averages, boundable via
+  row-product/Brégman-style estimates). If the bounded tail is < 1, we get
+  N(t) > 0 (feasible) or N(t) < 1 (refuted) WITHOUT any search — a
+  certificate oracle. But in the critical band the density is Θ(1) and the
+  Fourier tail is Θ(1) too, so the bounds cannot separate 0 from 1 there.
+  This independently confirms the band's irreducibility: any oracle whose
+  power comes from concentration (relaxations, Fourier, counting bounds)
+  fails precisely on the band decisions. Useful nonetheless as a cheap
+  *above-band* certificate replacing the heuristic gate.
+- **(d) A possible theorem, worth pursuing:** an EGZ/Cauchy–Davenport-style
+  coverage result ("for m ≥ f(q), permutation sums mod q with ≥2 distinct
+  weights and ≥2 distinct digits cover all residues") would make the
+  above-band always-feasible claim *provable*, sharpening band edges and
+  removing heuristic slack from the gate. Doesn't remove the band itself.
+
+**Bottom line for jes:** Engine C is near-optimal in shape; expect another
+1–2 orders of magnitude from (a)+(b)+(c) engineering, but no poly-time
+algorithm for the band unless the NP-hardness intuition is wrong. The
+divergence-depth law bounds the intrinsic difficulty of any base: work ≈
+band sweeps of width m*(B) — bases with small L_eff relative to k! stay easy
+forever; bases where m* creeps toward k get exponentially harder for ANY
+algorithm of this family.
+
 ## Implementation plan (v5)
 
 - v5 = v3 source + Engine C replacing `hybrid()`; keep old engines behind a
