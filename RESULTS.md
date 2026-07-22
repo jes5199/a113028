@@ -65,6 +65,21 @@ benchmark target 49.**
   no longer a blind oracle for remaining bases — any divergence gets the same
   treatment (verify validity + strict comparison before assigning blame).
 
+## Engine C benchmarks (v6, idle box, vs v2 baseline)
+
+| base | v2 | v6 | ratio |
+|------|----|----|-------|
+| 33 | 0.04s | 0.056s | ~parity |
+| 36 | 2.1s | 12.1s | 5.8× slower |
+| 37 | 27.5s | 34.1s | 1.24× slower |
+| 38 | 106s (idle A/B) | 12.2s | **8.7× faster** |
+| 39 | 69s | 69.2s | parity |
+| 43 | 1430s | 2738s | 1.9× slower |
+
+Pattern: v6 wins where the band has strong e2/e3 structure (b38), loses where
+the band is wide with weak mid-band pruning (b36, b43). v7 (leaf widening +
+restored in-band e5/e6 at reduced frequency) targets the losses.
+
 ## Base 49 (out-of-range target; jes's independent answer, ~1 week on a 2020 laptop)
 
 - jes's answer decodes (0-9, A-Z=10-35, α..ν=36-48) to
