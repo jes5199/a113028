@@ -1,0 +1,6 @@
+b38 Q=39: true survivors=6261
+  decile histogram (surviving-children fraction): {5: 905, 6: 1, 7: 754, 8: 665, 9: 3936}
+  fb mean per node: 0.36 ms; per-child-DP(memoized) mean: 0.92 ms over 40
+b39 Q=3120: true survivors=153
+  decile histogram (surviving-children fraction): {5: 7, 6: 1, 7: 1, 8: 11, 9: 133}
+  fb mean per node: 0.51 ms; per-child-DP(memoized) mean: 1.36 ms over 40
