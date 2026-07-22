@@ -99,8 +99,8 @@ the predicted size of the irreducible search band.
 | 45 | `ιθηζεδγβZYXWVUTSQPONLM1D4GCH287EBAJ563F` | 551.913s | 19 | 9.5 |
 | 46 | `κιθηζεδγβαZYXWVUTSRQPOLKJ628BID1G45F3CAH79E` **(corrected — see note)** | 678.427s | 19 | 9.5 |
 | 47 | `λκιθηζεδγβαZYXWVUTSRQPOMLKHGF7D46JI1ACE958B23` | 386.158s | 20 | 9.7 |
-| 48 | `μκιθηζεδγβαZYXVUTSRQPNMKL1J92B3HI8C675DEAF4O` | >1h (deferred) | 20 | 9.7 |
-| 49 | `νμλκιθηζεδγβαZYXWVUTSRQPNMK9CJ23BFAE6GI81DHL547` | in progress | 21 | 9.9 |
+| 48 | `μκιθηζεδγβαZYXVUTSRQPNMKL1J92B3HI8C675DEAF4O` | certified (peeling) | 20 | 9.7 |
+| 49 | `νμλκιθηζεδγβαZYXWVUTSRQPNMK9CJ23BFAE6GI81DHL547` | certified (peeling) | 21 | 9.9 |
 
 
 ### Correction to the published a(46)
@@ -114,9 +114,13 @@ its descending slot; the corrected one keeps it. Verified independently
 - published (suboptimal): `315044747190120671695735975284033252460559821155925276163089767538975200`
 - corrected: `315044747190120671695735975284412123404260147529994283460952247723479200`
 
-The divergence-depth law below flags the published a(40) and a(48) as
-suspect for the same reason (their divergence exceeds the law's prediction
-by the same margin a(46)'s did); they are pending fresh solves.
+The divergence-depth law initially flagged the published a(40) and a(48)
+for the same reason — both were subsequently CLEARED (a(40) by direct
+solve, a(48) by a nilpotent-peeling certificate): their divergence
+outliers are *forced nilpotent-suffix effects* (the last digits are pinned
+to 20 resp. 24 by suffix arithmetic), now fully explained. Final audit:
+3 flags → 1 real error (a46, corrected above), 2 cleared. a(49), beyond
+the published b-file, is certified: see NILPOTENT-PEELING.md.
 
 ## Method (Engine C)
 
