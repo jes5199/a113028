@@ -80,6 +80,12 @@ Pattern: v6 wins where the band has strong e2/e3 structure (b38), loses where
 the band is wide with weak mid-band pruning (b36, b43). v7 adds quantitative
 leaf widening (only when band pruning power ≤ 32): b36 12.1s → 2.4s (parity).
 
+## Wall-clock records campaign (2026-07-22, canonical = this box)
+
+| base | prior best | new | engine | verdict |
+|------|-----------|-----|--------|---------|
+| 43 | 1430s (v2) | **968.0s** | v4 (incremental scan) | value matches b-file ✓ — RECORD |
+
 Monster attempts: b49 under v6 = 1h TIMEOUT (while sharing the box with b40;
 band sweep estimate ~8.4e9 nodes ≈ 42 min solo — near miss). Next: solo 2h
 rerun, then v8 = Barrett constants for tracked-moduli updates (3–5× node cost)
