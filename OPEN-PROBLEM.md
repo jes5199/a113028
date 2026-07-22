@@ -51,17 +51,42 @@ i.e. **feasibility transitions from rare to certain inside a window of
 observed width ≤ ~3 levels** around m*. The transition is sharp and
 law-like across 47 heterogeneous instances.
 
-## The conjecture
+## The conjectures
 
-**Threshold conjecture.** There is a constant c = c(C₀) (absolute, or at
-worst slowly growing in B) such that for every instance with the interval
-structure above and every target t satisfying the cheap conditions:
+*(Revised 2026-07-22 after external review: the original single statement
+conflated two different claims — coverage, which makes the greedy descent
+safe but was already the cheap part, and refutation volume, which is the
+actual computational cost. They are separated below. The "cheap conditions"
+are also upgraded: per-prime-power marginals are NOT sufficient — the right
+conditions are the joint cyclotomic-layer conditions, DP-decidable mod
+Q_e = Π{largest p-powers with B^e ≡ 1} for each small e; Q_e | B^e − 1 so
+this stays polynomial for bounded e. Base-16 witness: at m = 9 the
+marginals mod 9, 7, 13 admit 273 targets while the joint layer mod 819
+admits 253 — exactly the true image.)*
+
+**Conjecture A (coverage).** There is a constant c = c(C₀) such that for
+every instance with the interval structure above and every target t
+satisfying the joint cyclotomic-layer conditions:
 
     m ≥ m*(L_eff) + c   ⟹   PERM-FEAS(B, A, L_eff, t) = YES.
 
-Equivalently: above a bounded-width window, *the cheap necessary conditions
-are sufficient* — the set {N(σ) mod L_eff : σ} is exactly the coset cut out
-by the arrangement-invariant congruences.
+Above a bounded-width window, the joint layer conditions are sufficient —
+{N(σ) mod L_eff : σ} is exactly the set they cut out. (Empirically, with
+*joint* layers, sufficiency holds by m* + 2 across exhaustive scans of
+bases 7–18; with marginals only, base 16 needs m* + 3.)
+
+**Conjecture B (bounded refutation volume) — the algorithmically decisive
+statement.** Every *infeasible* prefix node of the largest-first search has
+at most B^{O(c)}·poly(B) descendants that continue to satisfy the joint
+cyclotomic-layer conditions.
+
+Conjecture A alone does **not** bound the running time: it certifies that
+the descending prefix is safe, which the cost analysis (ALGORITHMS.md)
+already showed is the free part. The expensive part is *certifying
+infeasible children impossible* — e.g. at base 49, m* = 21, the child that
+takes digit 21 is infeasible, and refuting it is the entire search cost.
+Conjecture B is what implies the poly(B) per-base bound; A is what makes
+the surviving branch correct to follow.
 
 **Counting form** (stronger, circle-method-shaped): for m ≥ m* + c,
 uniformly over admissible t,
@@ -81,8 +106,16 @@ for targets satisfying the cheap conditions, with the counting form
 E ≫ m (orders of many prime powers), every class is a singleton, P(m,E) =
 m!, and the m* form above is unchanged — but an analytic attack must count
 class partitions, and the ln L_eff coupon-collector factor is what makes
-the observed window width c ≈ 1–2 (one depth level multiplies the count by
-≈ m ≈ m*, while the required oversampling is only ln L_eff ≈ m*·ln m*).
+the observed window width c ≈ 1–2 (one depth level multiplies the count
+by ≈ m, while the required oversampling is only ln L_eff).
+
+Two formal corrections (external review, 2026-07-22): (i) at the frontier
+the *remaining* interval has top M′ ≍ m ≍ B/ln B while ln L_eff ≍ B — the
+symbol M above refers to the original digit ceiling B−1, not the remaining
+interval's top; conflating them describes the wrong asymptotic family.
+(ii) When the cheap conditions cut out a proper subset T_m of the quotient,
+the correct counting main term is m!/|T_m| (or P(m,E)/|T_m|), not
+m!/L_eff — the two agree only once T_m fills the effective quotient.
 
 **Anti-conjecture** (equally valuable): PERM-FEAS restricted to these
 interval instances with composite Λ is NP-hard. This would prove the
@@ -129,6 +162,21 @@ essentially as far as one cares to run it.
   poly-time; the class DP already decides bounded-order cases. The
   conjecture's entire content is the *joint* statement across prime powers
   — the coupling is what the relaxations lose.
+- **The distinct-coordinate sieve (Li–Wan; see also Li–Yu)**: for an
+  additive character χ, the Fourier coefficient of N(σ) over bijections has
+  the exact cycle expansion  μ̂(χ) = (1/m!)·Σ_{τ∈S_m} (−1)^{m−c(τ)}
+  Π_{C∈cycles(τ)} S_A(Σ_{i∈C} B^i),  with S_A(u) = Σ_{d∈A} χ(ud) an
+  explicit geometric sum plus O(C₀) hole terms for interval A. Large
+  Fourier mass therefore requires many cycles resonating,
+  Σ_{i∈C} B^i ≡ 0 (mod q) — turning the analytic attack into a
+  combinatorial lemma about zero-sum subsets of a geometric orbit, which
+  proliferate exactly in the low-order cyclotomic layers the joint DPs
+  already handle. This route is far closer to the statistic here than a
+  generic circle-method permanent bound. See also Nagy, *Permutations over
+  cyclic groups* (the "braid trick" for how transpositions move
+  permutational sums) and the recent Littlewood–Offord theory on S_m
+  (anti-concentration of Σ w_i v_{π(i)}, currently at polynomial rather
+  than 1/L_eff scale).
 
 ## Status
 
