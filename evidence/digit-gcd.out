@@ -1,0 +1,4 @@
+4 [2, 5, 8] 27 H: 9 observed: 9 True
+10 [3, 9, 15, 21] 81 H: 27 observed: 27 True
+odd digits: 25 == 800/H: 25
+constructed example covers 35 / 35

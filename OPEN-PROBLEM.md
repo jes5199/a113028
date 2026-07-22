@@ -93,6 +93,12 @@ takes digit 21 is infeasible, and refuting it is the entire search cost.
 Conjecture B is what implies the poly(B) per-base bound; A is what makes
 the surviving branch correct to follow.
 
+*Equivalent form (Bridge Theorem, BRIDGE-AND-HARDNESS.md):* modulo the
+non-clumping hypothesis NC, Conjecture B is equivalent to decay of the
+measurable survivor-density profile β_i = K·(1 + m·V·T̄_{m−1}/L_eff)
+below 1 past a bounded burn-in — with fibers computed on reachable
+residual sets, H-aware per the instance-class decision above.
+
 **Counting form** (stronger, circle-method-shaped): for m ≥ m* + c,
 uniformly over admissible t,
 
@@ -217,14 +223,35 @@ Partial progress in this repository:
   set is the 50-element invariant coset — complete for interval states
   from m = 14, though NOT for holey digit sets (stride sub-invariants;
   see E4), so search nodes must use the local ℓ-condition.
-- **THEOREM-2-DOUBLE-PRIME.md** — proved: **the qualitative half of
-  Conjecture A is now a theorem.** For ANY modulus Λ coprime to B there is
-  m₀(Λ, B) beyond which the invariant congruence mod V = gcd(Λ, B−1) is
-  exactly sufficient on interval instances (digit-stride invisibility
-  gadgets; no independence, layer, or excluded-prime hypotheses). The
-  anti-conjecture therefore cannot rest on any algebraic obstruction at
-  any depth: what remains open is purely *quantitative* — lowering m₀ from
-  stride scale (≈ Λ) to m* + c (Conjecture A proper) — plus Conjecture B.
+- **THEOREM-2-DOUBLE-PRIME.md** — proved (as corrected by
+  ERRATA-DIGIT-GCD.md): joint exactness via digit-stride isolation — in
+  the *generalized interval-coefficient model*, every fixed (B, Λ) has an
+  explicit finite saturation bound beyond which the invariant congruence
+  is exactly sufficient. Caution [A3/A4]: in the A113028 family Λ grows
+  with B, so this gives no uniform information near m*; for the actual
+  interval family nothing is proved about hardness in either direction.
+- **ERRATA-DIGIT-GCD.md** — the digit-gcd lemma (proved, verified): the
+  arrangement-difference group is exactly H·Z_Λ with
+  H = gcd(Λ, (B−1)·g(A)), g(A) = gcd of digit differences. Subsumes
+  Theorem 1′(a)-completeness (g = 1 ⇒ H = V) and derives the odd-digit
+  stride counterexample. Unlike mod-V (root-only), H grows as digits are
+  removed — a genuine per-node cheap condition for gap-scattered nodes.
+- **BRIDGE-AND-HARDNESS.md** — (i) the Bridge Theorem: under the single
+  hypothesis NC (non-clumping), refutation volume equals an explicit
+  product over the measurable survivor-density profile — so Conjecture B
+  is equivalent, modulo NC, to profile decay (β_i < 1 past burn-in), a
+  measurable statement; (ii) **general PERM-FEAS is NP-complete** (single
+  prime, ord 2, adversarial digit sets, full blocking reduction; gadget
+  verified). The open hardness question is the interval/reachable family
+  only.
+
+**Instance-class decision (2026-07-22):** the search's reachable residual
+sets are NOT interval-minus-C₀ (gaps accumulate). We adopt the *widened*
+instance class: the conjectures are now about reachable residual sets,
+with the digit-gcd invariant H(A′) replacing V in coset statements, and
+fibers depending on per-node g(A′). (Alternative — restructuring the
+sweep to bounded-hole frontiers — rejected: it changes the algorithm to
+fit the conjecture rather than the conjecture to fit the mathematics.)
 - **JOINT-COVERAGE.md** — proved: joint coverage across several prime
   powers with independent orders (mutually invisible exchange gadgets) —
   the first rigorous statement about the coupling; plus exact-enumeration

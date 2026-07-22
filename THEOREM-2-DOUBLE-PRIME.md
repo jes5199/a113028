@@ -1,4 +1,12 @@
-# Theorem 2″: unconditional joint exactness — and errata to Theorem 1′
+# Theorem 2″: joint exactness via digit-stride isolation — and errata to Theorem 1′
+
+> **ERRATA APPLIED (2026-07-22, second review):** corrections A1–A6 from
+> ERRATA-DIGIT-GCD.md are incorporated below (retitle; containment
+> paragraph fixed; Remark 2 downgraded — the saturation statement lives in
+> the generalized interval-coefficient model and says nothing uniform near
+> m* when Λ grows with B, as in A113028; anti-conjecture claims removed;
+> Engine C reachable-node correction; verification table relabeled). The
+> digit-gcd lemma in that file strictly subsumes the completeness clause.
 
 *(Companion to OPEN-PROBLEM.md, SINGLE-MODULUS.md, THEOREM-1-PRIME.md,
 JOINT-COVERAGE.md. Two parts. Part I adopts the external review of
@@ -137,11 +145,12 @@ suffices). Then the achievable set of N mod Λ is **exactly**
 
 ### Proof
 
-**Containment** is Theorem 1′(a) as corrected in E1/E2 above, which
-is already global (V = gcd(Λ, B−1); the congruence needs nothing,
-completeness needs ℓ ≥ 2, which holds since the required APs exist
-— in the degenerate case where all w_j = 0 the statement is the
-containment alone and there is nothing to prove).
+**Containment** follows directly from B ≡ 1 (mod V); no completeness
+clause from Theorem 1′ is needed [A2 — the previous derivation of
+ℓ ≥ 2 from "the APs exist" was wrong: an AP of stride > 1 contains no
+consecutive pair]. If every w_j = 0 then Q_j = V_j for every group,
+hence Λ = V and containment is already equality. Otherwise the gadget
+construction below proves coverage.
 
 **Coverage.** Gadget j sweeps a w_j-subset S of its progression
 U_j between position classes 0 and 1 (mod E); distinct gadgets use
@@ -183,14 +192,20 @@ correct coset. ∎
    counterexample is this same digit-side mechanism arising
    naturally as an obstruction in stride-restricted digit sets.
 
-2. **The qualitative half of Conjecture A is now a theorem.** For
-   every fixed Λ coprime to B there is m₀(Λ, B) beyond which the
-   invariant congruence is exactly sufficient on interval instances.
-   Consequently the anti-conjecture cannot rest on any algebraic
-   obstruction at any depth: whatever hardness exists lives at
-   threshold scale. Conjecture A proper is now precisely the
-   quantitative task of lowering m₀(Λ) from stride scale (≈ Λ) to
-   m* + c.
+2. **[Downgraded per A3/A4.]** In the *generalized
+   interval-coefficient model* (coefficient sets A ⊆ {1,…,M} of
+   unbounded size, weights B^i mod Λ), every fixed pair (B, Λ) has an
+   explicit finite saturation bound beyond which the invariant
+   congruence is exactly sufficient. Within the radix-digit model the
+   conclusion applies only when B−1 is large enough to contain the
+   required gadgets — and in the A113028 family Λ grows with B, so
+   fixed-Λ saturation gives no uniform information near m*(Λ).
+   (The k = 1 case already followed from corrected Theorem 1′; the
+   new content is the isolation gadget and the partition/stride
+   tradeoff.) Nothing here rules out hardness of the interval family:
+   NP-hardness could live below the saturation bound, or in the
+   Λ-grows-with-B regime — which is the case of interest. For the
+   actual interval family, nothing is proved in either direction.
 
 3. **The strides are the price.** S_j ≈ Λ/Q_j makes the digit-AP
    requirement M ≳ 2w_j·S_j astronomically deep for many-prime Λ.
@@ -203,7 +218,11 @@ correct coset. ∎
    k = 1 recovers corrected Theorem 1′ with Q = Λ. Optimizing the
    partition is an easy lever if anyone wants tighter m₀ bounds.
 
-### Verification (exact class-partition DP, A = {1,…,m})
+### Additional exact-coverage data (exact class-partition DP, A = {1,…,m})
+
+[A6: these depths do not satisfy Theorem 2″'s AP/slot hypotheses, so they
+are evidence for early coset fill, not exercises of the construction. The
+example that exercises the construction is ERRATA-DIGIT-GCD.md Part C.]
 
 Prediction: image contained in the invariant coset at every depth,
 equal to it above some fill depth. "coset" = Λ/V.
