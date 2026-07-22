@@ -56,7 +56,17 @@ Computed from a_p = v_p(lcm(1..B−1)) and v_p(B):
 
 These match Sol's T values (1, 3, 2) exactly.
 
-## 3. The base-48 exclusion theorem (new; set-level pruning)
+## 3. ~~The base-48 exclusion theorem~~ — STRUCK, see CORRECTION-SPECTRUM.md
+
+> **RETRACTED (2026-07-22):** true but trivial — 48 | 864, so the
+> statement reduces to "no valid number is divisible by B", which the
+> classical B ∤ lcm(set) constraint (enforced by the engine's ten-rule
+> since v1) already implies. The {27,32} corollary is strictly weaker
+> than that classical constraint. Independently caught two ways: the
+> engine-subsumption observation (repo log, msg the same hour) and the
+> nilpotent-spectrum computation (CORRECTION-SPECTRUM.md, which also
+> proves NO nontrivial nilpotent exclusions exist at b40/b48 at the
+> exponent-vector level). Text below retained for the record only.
 
 **Theorem.** No base-48 number with distinct nonzero digits is
 divisible by 864 = 2⁵ · 3³.
