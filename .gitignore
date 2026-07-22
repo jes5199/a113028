@@ -1,2 +1,10 @@
 a113028
+a113028_v[0-9]
 run_stderr.txt
+v[0-9]_*.txt
+v[0-9]*_err.txt
+ab_*.txt
+tail_b49.*
+v5_ladder*
+v6_ladder*
+gmon.out
