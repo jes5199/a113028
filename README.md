@@ -45,8 +45,10 @@ forward-looking so the notation is total.
 
 ## Known values
 
-Wall-clock times are single-core (nice'd, shared 4-core 2020-era box) using
-the engines in this repo; m\* and log₁₀ W are the hardness metrics defined
+Wall-clock times are single-core canonical bests measured on this box
+(quiet, nice'd; full record sweep 2026-07-22 — winning engine varies per
+base: v4 incremental scan on most, v12/v13 peeling where nilpotent
+structure pays); m\* and log₁₀ W are the hardness metrics defined
 in the *Method* section — m\* is the divergence depth (how many trailing
 positions differ from the plain descending arrangement) and W ≈ m\*!/P! is
 the predicted size of the irreducible search band.
@@ -67,38 +69,38 @@ the predicted size of the irreducible search band.
 | 13 | `CBA95847213` | 0.000s | 7 | 2.3 |
 | 14 | `DCBA8513492` | 0.000s | 7 | 1.6 |
 | 15 | `EDCB8219473` | 0.000s | 8 | 2.5 |
-| 16 | `FEDCB59726A1348` | 0.029s | 8 | 2.5 |
-| 17 | `GFEDCB93652741A` | 0.006s | 9 | 3.5 |
+| 16 | `FEDCB59726A1348` | 0.021s | 8 | 2.5 |
+| 17 | `GFEDCB93652741A` | 0.003s | 9 | 3.5 |
 | 18 | `HGFEDCAB2514376` | 0.001s | 9 | 2.7 |
-| 19 | `IHGFEDCB2671A3854` | 0.009s | 10 | 3.7 |
-| 20 | `JIHGE9137B264DC` | 0.012s | 10 | 3.7 |
-| 21 | `KJIHGFDBC286A4153` | 0.011s | 10 | 3.7 |
-| 22 | `LKJIHGFED981C456732` | 0.017s | 10 | 3.7 |
-| 23 | `MLKJIHGFEDC87521A6943` | 0.011s | 11 | 3.9 |
-| 24 | `NLKJIHFEA679541B32DC` | 0.078s | 12 | 5.0 |
-| 25 | `ONMLKJIHGFDB51284E3976A` | 0.238s | 12 | 5.0 |
-| 26 | `PONMLKJIHGFB97461E325A8` | 0.032s | 12 | 5.0 |
-| 27 | `QPONMLKJIHGFC6B72A85E3149` | 0.100s | 13 | 5.2 |
-| 28 | `RQPONMKJIHF1352B69A8GD4` | 0.332s | 12 | 5.0 |
-| 29 | `SRQPONMLKJIHGFDC2619485BA37` | 0.014s | 13 | 5.2 |
-| 30 | `TSRQONMLJI2B1E4H8G397D6` | 0.883s | 13 | 5.2 |
-| 31 | `UTSRQPONMLKJIHGE89A265D41BC37` | 0.058s | 14 | 5.4 |
-| 32 | `VUTSRQPONMLKJIHF1758A9BC324E6DG` | 7.324s | 16 | 6.8 |
-| 33 | `WVUTSRQPONLKJIHG7C813D59AE426` | 0.040s | 15 | 6.6 |
-| 34 | `XWVUTSRQPONMLKJIEB72963C458F1DA` | 1.774s | 15 | 6.6 |
+| 19 | `IHGFEDCB2671A3854` | 0.002s | 10 | 3.7 |
+| 20 | `JIHGE9137B264DC` | 0.005s | 10 | 3.7 |
+| 21 | `KJIHGFDBC286A4153` | 0.002s | 10 | 3.7 |
+| 22 | `LKJIHGFED981C456732` | 0.006s | 10 | 3.7 |
+| 23 | `MLKJIHGFEDC87521A6943` | 0.014s | 11 | 3.9 |
+| 24 | `NLKJIHFEA679541B32DC` | 0.009s | 12 | 5.0 |
+| 25 | `ONMLKJIHGFDB51284E3976A` | 0.16s | 12 | 5.0 |
+| 26 | `PONMLKJIHGFB97461E325A8` | 0.035s | 12 | 5.0 |
+| 27 | `QPONMLKJIHGFC6B72A85E3149` | 0.084s | 13 | 5.2 |
+| 28 | `RQPONMKJIHF1352B69A8GD4` | 0.045s | 12 | 5.0 |
+| 29 | `SRQPONMLKJIHGFDC2619485BA37` | 0.032s | 13 | 5.2 |
+| 30 | `TSRQONMLJI2B1E4H8G397D6` | 0.795s | 13 | 5.2 |
+| 31 | `UTSRQPONMLKJIHGE89A265D41BC37` | 0.125s | 14 | 5.4 |
+| 32 | `VUTSRQPONMLKJIHF1758A9BC324E6DG` | 3.53s | 16 | 6.8 |
+| 33 | `WVUTSRQPONLKJIHG7C813D59AE426` | 0.059s | 15 | 6.6 |
+| 34 | `XWVUTSRQPONMLKJIEB72963C458F1DA` | 1.0s | 15 | 6.6 |
 | 35 | `YXWVUTRQPONMKJIBCG16H59328D4A` | 0.498s | 15 | 6.6 |
-| 36 | `ZYXWVUTSQPONMLKJF586A4E2B13D7HC` | 2.086s | 15 | 6.6 |
-| 37 | `αZYXWVUTSRQPONMLKJHDB7A3G562E8F1C49` | 27.507s | 16 | 6.8 |
-| 38 | `βαZYXWVUTSRQPONMLKGFDE2986BH3C4157A` | 116.446s | 16 | 6.8 |
-| 39 | `γβαZYXWVUTSRPONMLKJ54H31E72B9FAC8G6` | 69.127s | 16 | 6.8 |
-| 40 | `δγαZYXVUTSRQPNMLJIFEC6AB13D9254H7K` | 14.3s (v12 peeling) | 15 | 6.6 |
-| 41 | `εδγβαZYXWVUTSRQPONMLJIFGC8574AED6H1932B` | 49.028s | 17 | 8.0 |
-| 42 | `ζεδγβαYXWVUTRQPONM6KDF8JA239G5HB14C` | 116.019s | 18 | 8.2 |
-| 43 | `ηζεδγβαZYXWVUTSRQPONMKIAD5BCHFE78369421GJ` | 1429.939s | 18 | 8.2 |
-| 44 | `θηζεδγβαZYWVUTSRQPONGJ5H198CD2I76FE3AL4` | 2067.884s | 19 | 9.5 |
-| 45 | `ιθηζεδγβZYXWVUTSQPONLM1D4GCH287EBAJ563F` | 551.913s | 19 | 9.5 |
-| 46 | `κιθηζεδγβαZYXWVUTSRQPOLKJ628BID1G45F3CAH79E` **(corrected — see note)** | 678.427s | 19 | 9.5 |
-| 47 | `λκιθηζεδγβαZYXWVUTSRQPOMLKHGF7D46JI1ACE958B23` | 386.158s | 20 | 9.7 |
+| 36 | `ZYXWVUTSQPONMLKJF586A4E2B13D7HC` | 1.5s | 15 | 6.6 |
+| 37 | `αZYXWVUTSRQPONMLKJHDB7A3G562E8F1C49` | 16.8s | 16 | 6.8 |
+| 38 | `βαZYXWVUTSRQPONMLKGFDE2986BH3C4157A` | 11.3s | 16 | 6.8 |
+| 39 | `γβαZYXWVUTSRPONMLKJ54H31E72B9FAC8G6` | 46.4s | 16 | 6.8 |
+| 40 | `δγαZYXVUTSRQPNMLJIFEC6AB13D9254H7K` | 9.03s (peeled) | 15 | 6.6 |
+| 41 | `εδγβαZYXWVUTSRQPONMLJIFGC8574AED6H1932B` | 24.9s | 17 | 8.0 |
+| 42 | `ζεδγβαYXWVUTRQPONM6KDF8JA239G5HB14C` | 1m 12.6s | 18 | 8.2 |
+| 43 | `ηζεδγβαZYXWVUTSRQPONMKIAD5BCHFE78369421GJ` | 16m 8s | 18 | 8.2 |
+| 44 | `θηζεδγβαZYWVUTSRQPONGJ5H198CD2I76FE3AL4` | 20m 40.7s | 19 | 9.5 |
+| 45 | `ιθηζεδγβZYXWVUTSQPONLM1D4GCH287EBAJ563F` | 5m 43.8s | 19 | 9.5 |
+| 46 | `κιθηζεδγβαZYXWVUTSRQPOLKJ628BID1G45F3CAH79E` **(corrected — see note)** | 6m 28.2s | 19 | 9.5 |
+| 47 | `λκιθηζεδγβαZYXWVUTSRQPOMLKHGF7D46JI1ACE958B23` | 4m 1.9s | 20 | 9.7 |
 | 48 | `μκιθηζεδγβαZYXVUTSRQPNMKL1J92B3HI8C675DEAF4O` | certified (peeling) | 20 | 9.7 |
 | 49 | `νμλκιθηζεδγβαZYXWVUTSRQPNMK9CJ23BFAE6GI81DHL547` | certified (peeling) | 21 | 9.9 |
 
