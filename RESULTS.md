@@ -34,7 +34,7 @@ enumeration).
 
 | base | outcome | wall-clock | validation |
 |------|---------|-----------|------------|
-| 40 | TIMEOUT (1h cap, v2 baseline) | >3600s | deferred — b-file says 2949491266532658135493053371770319593915307331801883500; awaiting optimized engine |
+| 40 | **SOLVED by Engine C (v9)**, eng=C, subsets=502588 | 6856.5s (~114 min) | **MATCH** (2949491266532658135493053371770319593915307331801883500) — published a(40) CONFIRMED; its divergence-law flag was a false alarm (legit +3 outlier) |
 | 41 | COMPLETE, eng=S, subsets=22 | 49.0s | **MATCH** (791222981626154999235100158499550255615325307057668641337271200) |
 | 42 | COMPLETE, eng=S, subsets=2293810 | 116.0s | **MATCH** (650828754201915243697436482327806321775960031977171416000) |
 | 43 | COMPLETE, eng=S, subsets=23 | 1430.0s | **MATCH** (9374765438594117074250580509957460813483601689280434597219126021600) |

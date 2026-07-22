@@ -11,6 +11,10 @@ from functools import lru_cache
 
 B = int(sys.argv[1]); Q = int(sys.argv[2]); LOG = sys.argv[3]
 E = 2  # layer order (both testbeds have only the e=2 layer nontrivial)
+# Guard rails (PEELING-SUPPORT.md 5.6) - the b39 modulus bug preventer:
+import math as _m
+assert _m.gcd(B, Q) == 1, f"layer modulus {Q} shares a factor with B={B}"
+assert pow(B, E, Q) == 1 % Q, f"B^{E} != 1 mod {Q}: wrong layer order"
 WTS = [1 % Q, B % Q]
 
 @lru_cache(maxsize=None)

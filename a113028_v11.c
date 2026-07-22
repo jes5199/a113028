@@ -319,6 +319,13 @@ static void build_layers(void){
         if(qe3>q1) QL_[1]*=qe3;
     }
     for(int i=0;i<2;i++){ if(QL_[i]<2) QL_[i]=1; ql_bm[i]=QL_[i]>1?(u64)(~0ULL)/QL_[i]:0; ql_res[i]=0; }
+    // Guard rail (PEELING-SUPPORT.md 5.6): layer moduli must be coprime to B.
+    // The b39 analysis bug was exactly a violation of this in offline code.
+    for(int i=0;i<2;i++) if(QL_[i]>1 && gcd64(QL_[i],(u64)B)!=1){
+        fprintf(stderr,"FATAL: layer modulus %llu shares a factor with B=%d\n",
+                (unsigned long long)QL_[i],B);
+        exit(9);
+    }
 }
 static u64 smallest_p(u64 q){ for(u64 p=2;p*p<=q;p++) if(q%p==0) return p; return q; }
 static int mod_elig(u64 q){ u64 p=smallest_p(q); return ((u64)B%p)!=0 && ((u64)(B-1))%p!=0; }
