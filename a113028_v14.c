@@ -1189,6 +1189,11 @@ static int peeled_solve_candidate(int *nd_result){
     int W0 = (g_guess_mode==1) ? (gate_+1) : g_guess_mode;
     if(W0<1) W0=1;
     if(W0>m) W0=m;
+    if(getenv("ENGC_GUESS_DEBUG"))
+        fprintf(stderr,"DBG peeled_candidate: base=%d k=%d s=%d m=%d Lc=%llu gate_=%d W0=%d "
+                "nwtup=%d P_=%d BW_=%d ne2=%d noe36=%d noe56=%d QL0=%llu QL1=%llu\n",
+                B,k,s,m,(unsigned long long)(u64)Lc,gate_,W0,nwtup,P_,BW_,ne2,noe36,noe56,
+                (unsigned long long)QL_[0],(unsigned long long)QL_[1]);
 
     int best_h[MAXK];
     for(int W=W0; W<=m; W++){
@@ -1291,6 +1296,11 @@ int solve_base(int base,int verbose){
                 // through them is CANDIDATE-UNPROVEN, never a certified solve.
                 int pr, got;
                 if(g_guess_mode){
+                    if(getenv("ENGC_GUESS_DEBUG")){
+                        fprintf(stderr,"DBG subset attempt: base=%d k=%d S=[",B,k);
+                        for(int di=0;di<k;di++) fprintf(stderr,"%d ",S[di]);
+                        fprintf(stderr,"]\n"); fflush(stderr);
+                    }
                     pr = peeled_solve_candidate(nd);
                     got = (pr==-1) ? engineC_candidate(nd) : pr;
                 } else {

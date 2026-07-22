@@ -945,7 +945,9 @@ static int peeled_solve(int *nd_result){
         }
         if(have){
             int cmp=0;
-            for(int i=0;i<m;i++){ if(peel_comp[w][i]!=best_h[i]){ cmp = peel_comp[w][i]>best_h[i] ? 1 : -1; break; } }
+            // peel_comp is rank-ordered (index 0 = MSB of the bound);
+            // best_h is position-ordered (index 0 = LSB): read it MSB-first.
+            for(int i=0;i<m;i++){ if(peel_comp[w][i]!=best_h[m-1-i]){ cmp = peel_comp[w][i]>best_h[m-1-i] ? 1 : -1; break; } }
             // sorted descending by upper bound: once one witness's own upper
             // bound (its complement set sorted descending) can't beat the
             // best ACHIEVED high word so far, no later witness in this order
@@ -960,7 +962,8 @@ static int peeled_solve(int *nd_result){
         // word found by earlier (higher-bound) witnesses; the DFS abandons
         // any prefix strictly lex-below it (sound: such a completion cannot
         // become the global max; ties allowed, broken later by suffix).
-        if(have){ inc_active=1; for(int i=0;i<m;i++) inc_h[i]=best_h[i]; inc_state=0; }
+        // inc_h is indexed by DFS level (0 = MSB); best_h by position (0 = LSB)
+        if(have){ inc_active=1; for(int i=0;i<m;i++) inc_h[i]=best_h[m-1-i]; inc_state=0; }
         else inc_active=0;
         c_avail=avail;
         for(int j=0;j<ntq;j++) c_res[j]=0;
