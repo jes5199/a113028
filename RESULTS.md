@@ -85,6 +85,7 @@ leaf widening (only when band pruning power ≤ 32): b36 12.1s → 2.4s (parity)
 | base | prior best | new | engine | verdict |
 |------|-----------|-----|--------|---------|
 | 43 | 1430s (v2) | **968.0s** | v4 (incremental scan) | value matches b-file ✓ — RECORD |
+| 40 | 6856s (v9) | **14.322s** | v12 (witness-liveness peeling) | value matches ✓; node count 2,504,310 = jes's prototype EXACTLY — RECORD (479×) |
 
 Monster attempts: b49 under v6 = 1h TIMEOUT (while sharing the box with b40;
 band sweep estimate ~8.4e9 nodes ≈ 42 min solo — near miss). Next: solo 2h
