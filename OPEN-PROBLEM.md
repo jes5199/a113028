@@ -68,6 +68,22 @@ uniformly over admissible t,
 
     #{σ : N(σ) ≡ t (mod L_eff)} = (m!/L_eff)·(1 + o(1)).
 
+**Refinement (see JOINT-COVERAGE.md).** When E = lcm{e_q : q ∥ L_eff}
+satisfies E ≤ m, N(σ) mod L_eff factors through the position-class
+partition, and the correct first-moment count is the class-partition number
+P(m, E) = m!/Π_r k_r! (k_r the class sizes), not m!. The honest general
+statement is therefore
+
+    P(m, E) ≥ L_eff · ln L_eff   ⟹   PERM-FEAS(B, A, L_eff, t) = YES
+
+for targets satisfying the cheap conditions, with the counting form
+#{σ : N(σ) ≡ t} = (P(m,E)/L_eff)·(1+o(1)). In genuine A113028 instances
+E ≫ m (orders of many prime powers), every class is a singleton, P(m,E) =
+m!, and the m* form above is unchanged — but an analytic attack must count
+class partitions, and the ln L_eff coupon-collector factor is what makes
+the observed window width c ≈ 1–2 (one depth level multiplies the count by
+≈ m ≈ m*, while the required oversampling is only ln L_eff ≈ m*·ln m*).
+
 **Anti-conjecture** (equally valuable): PERM-FEAS restricted to these
 interval instances with composite Λ is NP-hard. This would prove the
 current algorithm is essentially optimal.
@@ -120,3 +136,16 @@ Open, to our knowledge (2026-07). The empirical evidence (47 instances,
 window ≤ 3) is in this repository (FRONTIER.md, RESULTS.md); the divergence
 law alone has already exposed one wrong published value (a(46)) and flags
 two more (a(40), a(48)). Contact: open an issue on this repo.
+
+Partial progress in this repository:
+
+- **SINGLE-MODULUS.md** — proved: single-modulus feasibility for interval
+  digit sets is unobstructed (every target achievable) for q with
+  gcd(q, B(B−1)) = 1 under the depth condition w² ≥ q−1.
+- **JOINT-COVERAGE.md** — proved: joint coverage across several prime
+  powers with independent orders (mutually invisible exchange gadgets) —
+  the first rigorous statement about the coupling; plus exact-enumeration
+  evidence that single- and joint-modulus thresholds are pure
+  coupon-collector with no structural obstruction found anywhere (scripts
+  in `scripts/`, raw outputs in `evidence/`), and the P(m,E) correction to
+  the first-moment count adopted above.

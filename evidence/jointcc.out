@@ -1,0 +1,5 @@
+qs=[11, 37, 41] Q=16687 lambda=21.75 empty=0 poisson=0.0
+qs=[7, 11, 13, 41] Q=41041 lambda=8.84 empty=12 poisson=5.9
+qs=[7, 13, 37, 11] Q=37037 lambda=9.80 empty=11767 poisson=2.1
+qs=[7, 13, 41, 37] Q=138047 lambda=2.63 empty=13455 poisson=9963.5
+qs=[11, 13, 37, 41] Q=216931 lambda=1.67 empty=41174 poisson=40722.9

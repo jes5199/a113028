@@ -150,3 +150,10 @@ Elementary; believed correct as stated; not refereed. If the exchange
 argument or the unit-difference step fails in some edge case you hit in
 practice (small m, huge C₀), the failure will be at the boundary of the
 depth condition, not in the interior. Issues welcome on this repo.
+
+Independently verified (proof read line-by-line; exact class-partition-DP
+enumeration over 96 legal instances found zero counterexamples — see
+`scripts/verify.py`, `evidence/verify.out`). Continued in
+**JOINT-COVERAGE.md**: joint coverage across moduli with independent
+orders, coupon-collector threshold evidence, and the P(m,E) first-moment
+correction.
