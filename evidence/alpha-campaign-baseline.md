@@ -31,3 +31,22 @@ visit change): rung 1's exact mask check at depth≥12 already screens
 what the loose sum bound would catch. Tightening lever identified:
 per-path available-digit pools instead of the global envelope.
 Soundness gate re-passed at both levels (1 survivor = known completion).
+
+## Rung 2′ (per-path pools) and FINAL VERDICT
+
+Rung 2′: provably sound, strictly tighter than rung 2, zero added
+memory — and inert: visits moved <0.001%, wall WORSENED at 3+4
+(9.6s→13.4s, per-visit bit-scan cost with no pruning payoff).
+Soundness gate re-passed at both levels. p2′ implemented + gate-tested,
+not measured (p1 showed no life, pattern already established).
+
+**FINAL: α = 0.7065. Ladder: baseline 6.1× → rung1 7.5× → rung2/2′
+7.5× (saturated). Pre-registered 30× GO bar NOT met. VERDICT: NO-GO
+for a prime-base production carry-trie; the mechanism is sound (beats
+pair count 30×, engine baseline ~2.8×–7.5×) but its pruning ceiling
+is ~7.5× at b53. Moment-based budgets have no purchase over 19 digits
+regardless of bound tightness — a genuine, cleanly-attributed negative.
+Carry-trie stands as a validated instrument (PRUNE_LEVEL 0–3
+reproducible) with a measured constant. Architecture verdict per §5:
+peel-plus-asymmetric-meet near-optimal pending shafts 3/4 (algebraic
+certificates; non-marginal high-order use).**

@@ -382,6 +382,29 @@ static inline uint64_t maskOf(const std::vector<int> &digits) {
 
 static inline uint64_t bit(int d) { return (uint64_t)1 << d; }
 
+// Sum of the k smallest / k largest set-bit positions (=digit values) in mask.
+// mask has at most 19 bits set (digits from A19), so k <= 12 always terminates
+// in <= k <= 12 iterations. Used for the per-path rung-2' remaining-leaf-digit
+// sum envelope (see walkOne).
+static inline int32_t sumSmallestK(uint64_t mask, int k) {
+    int32_t s = 0;
+    for (int i = 0; i < k && mask; i++) {
+        int p = __builtin_ctzll(mask);
+        s += p;
+        mask &= mask - 1;
+    }
+    return s;
+}
+static inline int32_t sumLargestK(uint64_t mask, int k) {
+    int32_t s = 0;
+    for (int i = 0; i < k && mask; i++) {
+        int p = 63 - __builtin_clzll(mask);
+        s += p;
+        mask &= ~((uint64_t)1 << p);
+    }
+    return s;
+}
+
 // digits of a u128 value n, LSD-first, exactly ndig digits base B
 static std::array<uint8_t, DEPTH> digitsLSDof(u128 n) {
     std::array<uint8_t, DEPTH> out{};
@@ -444,30 +467,35 @@ static void walkOne(const Trie &trie, u128 W, uint64_t allowedMinusX, uint64_t x
             uint64_t Rexact = A19mask & ~xmask & ~f.used;
             if (Rexact & ~node.orMask) continue;
         }
+        // RUNG 2' (per-path availability envelope, replaces the global-A19
+        // envelope of the first rung-2 attempt, which measured as a no-op).
+        // Exact partition identity: sum(leaf)+sum(y)+sum(x) = S_A19 (additive,
+        // TASK-MITM-FP.md §1) => sum(y) = S_A19 - xP1 - sum(leaf). sum(leaf) is
+        // f.sumP1 (placed so far) plus whatever the remaining R leaf digits
+        // contribute. Those R digits are drawn from avail = A19\x\used(so far)
+        // -- the CURRENT live mask, not the static A19 set -- so their sum lies
+        // in [sumSmallestK(avail,R), sumLargestK(avail,R)], a per-path bound
+        // strictly at least as tight as the old global one (avail ⊆ A19mask).
+        // Soundness subtlety (per Lead's note): y's own digits also come out of
+        // avail, so the TRUE remaining-leaf pool is avail minus whatever y ends
+        // up taking -- smaller than avail. Using the full avail mask (not that
+        // smaller true pool) can only WIDEN [min,max], never narrow it past the
+        // true range, so the bound stays sound (never rejects a real survivor).
+        uint64_t avail = A19mask & ~xmask & ~f.used;
         if (PRUNE_LEVEL >= 2) {
-            // RUNG 2a (p1 / digit-sum budget). Exact partition identity:
-            //   sum(leaf) + sum(y) + sum(x) = S_A19   (proved additive, TASK-MITM-FP.md §1)
-            // => sum(y) = S_A19 - xP1 - sum(leaf). sum(leaf) is only fully
-            // known at depth>=12 (used final); before that it is f.sumP1 plus
-            // whatever the remaining R leaf digits will contribute, and R
-            // *distinct* digits drawn from A19 (ignoring which are still
-            // available -- a safe over-approximation, since restricting
-            // availability can only shrink the true achievable range) sum to
-            // somewhere in [prefixP1Asc[R], prefixP1Desc[R]]. That gives a
-            // sound envelope [loY1, hiY1] on sum(y); prune if node's
-            // [minP1,maxP1] range over descendant y-masks misses it entirely.
-            int32_t loRemain = br.prefixP1Asc[R];
-            int32_t hiRemain = br.prefixP1Desc[R];
+            int32_t loRemain = sumSmallestK(avail, R);
+            int32_t hiRemain = sumLargestK(avail, R);
             int32_t loY1 = br.S_A19 - xP1 - f.sumP1 - hiRemain;
             int32_t hiY1 = br.S_A19 - xP1 - f.sumP1 - loRemain;
             if (node.maxP1 < loY1 || node.minP1 > hiY1) continue;
         }
         if (PRUNE_LEVEL >= 3) {
-            // RUNG 2b (p2 / digit-square-sum budget), identical argument with
-            // squares: sum_sq(y) = S2_A19 - xP2 - sum_sq(leaf), enveloped the
-            // same way via prefixP2Asc/Desc.
-            int64_t loRemain2 = br.prefixP2Asc[R];
-            int64_t hiRemain2 = br.prefixP2Desc[R];
+            // p2' analog, same avail-based per-path envelope but over squares.
+            int64_t loRemain2 = 0, hiRemain2 = 0;
+            {
+                uint64_t m1 = avail; for (int i = 0; i < R && m1; i++) { int p = __builtin_ctzll(m1); loRemain2 += (int64_t)p*p; m1 &= m1-1; }
+                uint64_t m2 = avail; for (int i = 0; i < R && m2; i++) { int p = 63-__builtin_clzll(m2); hiRemain2 += (int64_t)p*p; m2 &= ~((uint64_t)1<<p); }
+            }
             int64_t loY2 = br.S2_A19 - xP2 - f.sumP2 - hiRemain2;
             int64_t hiY2 = br.S2_A19 - xP2 - f.sumP2 - loRemain2;
             if (node.maxP2 < loY2 || node.minP2 > hiY2) continue;
@@ -736,16 +764,20 @@ static void runGate(const Constants &c) {
                     uint64_t Rexact = A19mask & ~xmask & ~f.used;
                     if (Rexact & ~node.orMask) continue;
                 }
+                uint64_t avail = A19mask & ~xmask & ~f.used;
                 if (PRUNE_LEVEL >= 2) {
-                    int32_t loRemain = br.prefixP1Asc[R];
-                    int32_t hiRemain = br.prefixP1Desc[R];
+                    int32_t loRemain = sumSmallestK(avail, R);
+                    int32_t hiRemain = sumLargestK(avail, R);
                     int32_t loY1 = br.S_A19 - xP1 - f.sumP1 - hiRemain;
                     int32_t hiY1 = br.S_A19 - xP1 - f.sumP1 - loRemain;
                     if (node.maxP1 < loY1 || node.minP1 > hiY1) continue;
                 }
                 if (PRUNE_LEVEL >= 3) {
-                    int64_t loRemain2 = br.prefixP2Asc[R];
-                    int64_t hiRemain2 = br.prefixP2Desc[R];
+                    int64_t loRemain2 = 0, hiRemain2 = 0;
+                    {
+                        uint64_t m1 = avail; for (int i = 0; i < R && m1; i++) { int p = __builtin_ctzll(m1); loRemain2 += (int64_t)p*p; m1 &= m1-1; }
+                        uint64_t m2 = avail; for (int i = 0; i < R && m2; i++) { int p = 63-__builtin_clzll(m2); hiRemain2 += (int64_t)p*p; m2 &= ~((uint64_t)1<<p); }
+                    }
                     int64_t loY2 = br.S2_A19 - xP2 - f.sumP2 - hiRemain2;
                     int64_t hiY2 = br.S2_A19 - xP2 - f.sumP2 - loRemain2;
                     if (node.maxP2 < loY2 || node.minP2 > hiY2) continue;
