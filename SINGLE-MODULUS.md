@@ -157,3 +157,9 @@ enumeration over 96 legal instances found zero counterexamples — see
 **JOINT-COVERAGE.md**: joint coverage across moduli with independent
 orders, coupon-collector threshold evidence, and the P(m,E) first-moment
 correction.
+
+**SUPERSEDED** by THEOREM-1-PRIME.md (exact cosets per cyclotomic layer,
+all prime powers coprime to B — the old gcd(q, B(B−1)) = 1 restriction is
+gone) and THEOREM-2-DOUBLE-PRIME.md (unconditional joint exactness for
+arbitrary Λ coprime to B). The interval lemma proved here remains in use
+by both.

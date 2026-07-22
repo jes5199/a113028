@@ -62,7 +62,12 @@ conditions are the joint cyclotomic-layer conditions, DP-decidable mod
 Q_e = Π{largest p-powers with B^e ≡ 1} for each small e; Q_e | B^e − 1 so
 this stays polynomial for bounded e. Base-16 witness: at m = 9 the
 marginals mod 9, 7, 13 admit 273 targets while the joint layer mod 819
-admits 253 — exactly the true image.)*
+admits 253 — the joint DP is exact at every depth. Above the layer's fill
+depth (m ≥ 10 here) the joint image is provably the invariant coset of
+size 273 and coincides with the product of the marginals
+(THEOREM-1-PRIME.md); the joint upgrade is thus a below-fill-depth
+phenomenon — precisely the window region, which is why marginals-only
+scanning needed m* + 3 at base 16 while joint layers need m* + 2.)*
 
 **Conjecture A (coverage).** There is a constant c = c(C₀) such that for
 every instance with the interval structure above and every target t
@@ -99,7 +104,10 @@ partition, and the correct first-moment count is the class-partition number
 P(m, E) = m!/Π_r k_r! (k_r the class sizes), not m!. The honest general
 statement is therefore
 
-    P(m, E) ≥ L_eff · ln L_eff   ⟹   PERM-FEAS(B, A, L_eff, t) = YES
+    P(m, E) ≥ |T| · ln |T|   ⟹   PERM-FEAS(B, A, L_eff, t) = YES
+    (|T| = the size of the set cut out by the cheap conditions; above
+    fill depth |T| equals the effective quotient, recovering the
+    L_eff·ln L_eff form)
 
 for targets satisfying the cheap conditions, with the counting form
 #{σ : N(σ) ≡ t} = (P(m,E)/L_eff)·(1+o(1)). In genuine A113028 instances
@@ -132,11 +140,13 @@ refutation is an exhaustive sweep of size ~m*!/P! where P = ⌈log_B L⌉ —
 super-polynomial, ≈ exp(Θ(n·ln ln n / ln n)) at n = B−1, which caps
 consecutive computability of A113028 near B ≈ 60–65 forever.
 
-With the conjecture (bounded c): every feasibility question outside the
-window is answered by the cheap conditions in polynomial time; refutation
-recursion is confined to windows of bounded depth, giving ~B^{O(c)}·poly(n)
-per base. **The frontier dissolves** — the sequence becomes computable
-essentially as far as one cares to run it.
+With **Conjecture B** (bounded refutation volume): each infeasible window
+node is refuted after visiting only B^{O(c)}·poly(n)
+layer-condition-surviving descendants; and with **Conjecture A** the branch
+that survives is correct to follow — together giving ~B^{O(c)}·poly(n) per
+base. **The frontier dissolves** — the sequence becomes computable
+essentially as far as one cares to run it. Conjecture A alone yields only
+the (already cheap) safety of the greedy descent.
 
 ## Where this lives in the literature (pointers, not claims)
 
@@ -172,11 +182,16 @@ essentially as far as one cares to run it.
   combinatorial lemma about zero-sum subsets of a geometric orbit, which
   proliferate exactly in the low-order cyclotomic layers the joint DPs
   already handle. This route is far closer to the statistic here than a
-  generic circle-method permanent bound. See also Nagy, *Permutations over
-  cyclic groups* (the "braid trick" for how transpositions move
-  permutational sums) and the recent Littlewood–Offord theory on S_m
-  (anti-concentration of Σ w_i v_{π(i)}, currently at polynomial rather
-  than 1/L_eff scale).
+  generic circle-method permanent bound.
+- **Nagy, *Permutations over cyclic groups* (arXiv 1211.6875; EJC 2014)**:
+  the closest published relative of Conjecture A's shape — it *proves*
+  that permutational sums 1·a_{π(1)} + ⋯ + m·a_{π(m)} cover Z_m apart
+  from classifiable exceptional multisets, via EGZ-style induction and
+  Cauchy–Davenport lemmas. Linear weights and modulus m instead of
+  geometric weights and modulus ≫ m — but the same "apart from
+  classifiable obstructions, a permutation exists" conclusion. Also the
+  recent Littlewood–Offord theory on S_m (anti-concentration of
+  Σ w_i v_{π(i)}, currently at polynomial rather than 1/L_eff scale).
 
 ## Status
 
@@ -187,9 +202,29 @@ two more (a(40), a(48)). Contact: open an issue on this repo.
 
 Partial progress in this repository:
 
-- **SINGLE-MODULUS.md** — proved: single-modulus feasibility for interval
-  digit sets is unobstructed (every target achievable) for q with
-  gcd(q, B(B−1)) = 1 under the depth condition w² ≥ q−1.
+- **SINGLE-MODULUS.md** — proved (now superseded by THEOREM-1-PRIME.md;
+  its interval lemma remains in use): single-modulus feasibility for
+  interval digit sets is unobstructed for q with gcd(q, B(B−1)) = 1 under
+  the depth condition w² ≥ q−1.
+- **THEOREM-1-PRIME.md** — proved (supersedes the single-modulus theorem;
+  errata E1–E5 applied, see THEOREM-2-DOUBLE-PRIME.md): for any cyclotomic
+  layer (prime powers coprime to B with orders dividing e), the achievable
+  set mod Q is contained in the coset {t ≡ Σ_{d∈A} d (mod V)},
+  V = gcd(Q, B−1), unconditionally (ℓ ≥ 2 for completeness) — and equals
+  it exactly under the depth condition w² ≥ Q/V − 1. No excluded moduli:
+  p | B−1 and p = 2 are handled uniformly (the Δ = 1 exchange dodges all
+  lifting-the-exponent cases). At base 49 the Q₂ = 800 layer's admissible
+  set is the 50-element invariant coset — complete for interval states
+  from m = 14, though NOT for holey digit sets (stride sub-invariants;
+  see E4), so search nodes must use the local ℓ-condition.
+- **THEOREM-2-DOUBLE-PRIME.md** — proved: **the qualitative half of
+  Conjecture A is now a theorem.** For ANY modulus Λ coprime to B there is
+  m₀(Λ, B) beyond which the invariant congruence mod V = gcd(Λ, B−1) is
+  exactly sufficient on interval instances (digit-stride invisibility
+  gadgets; no independence, layer, or excluded-prime hypotheses). The
+  anti-conjecture therefore cannot rest on any algebraic obstruction at
+  any depth: what remains open is purely *quantitative* — lowering m₀ from
+  stride scale (≈ Λ) to m* + c (Conjecture A proper) — plus Conjecture B.
 - **JOINT-COVERAGE.md** — proved: joint coverage across several prime
   powers with independent orders (mutually invisible exchange gadgets) —
   the first rigorous statement about the coupling; plus exact-enumeration

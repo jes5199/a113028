@@ -1,0 +1,41 @@
+base16 Q3: B=16 e=3 Q=819 comps=[9, 7, 13] V=3 coset=273
+  m= 9: image=253/273 contained=True exact=False
+  m=10: image=273/273 contained=True exact=True
+  m=11: image=273/273 contained=True exact=True
+  m=12: image=273/273 contained=True exact=True
+  m=13: image=273/273 contained=True exact=True
+base49 Q2: B=49 e=2 Q=800 comps=[32, 25] V=16 coset=50
+  m= 6: image=10/50 contained=True exact=False
+  m= 7: image=13/50 contained=True exact=False
+  m= 8: image=17/50 contained=True exact=False
+  m= 9: image=21/50 contained=True exact=False
+  m=10: image=26/50 contained=True exact=False
+  m=11: image=31/50 contained=True exact=False
+  m=12: image=37/50 contained=True exact=False
+  m=13: image=43/50 contained=True exact=False
+  m=14: image=50/50 contained=True exact=True
+base7 q=32: B=7 e=4 Q=32 comps=[32] V=2 coset=16
+  m= 6: image=16/16 contained=True exact=True
+  m= 7: image=16/16 contained=True exact=True
+  m= 8: image=16/16 contained=True exact=True
+  m= 9: image=16/16 contained=True exact=True
+  m=10: image=16/16 contained=True exact=True
+  m=11: image=16/16 contained=True exact=True
+  m=12: image=16/16 contained=True exact=True
+base7 mixed Q=160: B=7 e=4 Q=160 comps=[32, 5] V=2 coset=80
+  m= 6: image=78/80 contained=True exact=False
+  m= 7: image=80/80 contained=True exact=True
+  m= 8: image=80/80 contained=True exact=True
+  m= 9: image=80/80 contained=True exact=True
+  m=10: image=80/80 contained=True exact=True
+  m=11: image=80/80 contained=True exact=True
+  m=12: image=80/80 contained=True exact=True
+  m=13: image=80/80 contained=True exact=True
+  m=14: image=80/80 contained=True exact=True
+base10 q=27: B=10 e=3 Q=27 comps=[27] V=9 coset=3
+  m= 4: image=3/3 contained=True exact=True
+  m= 5: image=3/3 contained=True exact=True
+  m= 6: image=3/3 contained=True exact=True
+  m= 7: image=3/3 contained=True exact=True
+  m= 8: image=3/3 contained=True exact=True
+  m= 9: image=3/3 contained=True exact=True

@@ -1,0 +1,35 @@
+B=10 Lambda=297 E=6 V=9 coset=33
+  m=5: 21/33 contained=True exact=False
+  m=6: 30/33 contained=True exact=False
+  m=7: 33/33 contained=True exact=True
+  m=8: 33/33 contained=True exact=True
+  m=9: 33/33 contained=True exact=True
+  m=10: 33/33 contained=True exact=True
+  m=11: 33/33 contained=True exact=True
+B=7 Lambda=288 E=12 V=6 coset=48
+  m=6: 48/48 contained=True exact=True
+  m=7: 48/48 contained=True exact=True
+  m=8: 48/48 contained=True exact=True
+  m=9: 48/48 contained=True exact=True
+  m=10: 48/48 contained=True exact=True
+  m=11: 48/48 contained=True exact=True
+  m=12: 48/48 contained=True exact=True
+  m=13: 48/48 contained=True exact=True
+  m=14: 48/48 contained=True exact=True
+B=10 Lambda=21 E=6 V=3 coset=7
+  m=4: 7/7 contained=True exact=True
+  m=5: 7/7 contained=True exact=True
+  m=6: 7/7 contained=True exact=True
+  m=7: 7/7 contained=True exact=True
+  m=8: 7/7 contained=True exact=True
+  m=9: 7/7 contained=True exact=True
+B=10 Lambda=2079 E=6 V=9 coset=231
+  m=6: 198/231 contained=True exact=False
+  m=7: 231/231 contained=True exact=True
+  m=8: 231/231 contained=True exact=True
+  m=9: 231/231 contained=True exact=True
+  m=10: 231/231 contained=True exact=True
+  m=11: 231/231 contained=True exact=True
+  m=12: 231/231 contained=True exact=True
+E2: [2, 6]
+E4: 25 expect 25
