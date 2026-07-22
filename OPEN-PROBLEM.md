@@ -245,6 +245,25 @@ Partial progress in this repository:
   verified). The open hardness question is the interval/reachable family
   only.
 
+**Capstone negative (IRREDUCIBILITY-LAW.md, verified + table reproduced):**
+the cheap-conditions arc is CLOSED by a two-line counting law: every
+prime power of order e divides B^e−1, so ln Q_{≤E₀} < E₀²·ln B while
+ln L_eff ≥ c₀·B — all bounded-order congruence conditions jointly address a
+vanishing fraction of the modulus, and Bridge-sense profile decay is
+impossible for this entire condition class at every base (max capture
+observed anywhere, even at E₀=12: 76%; decay needs ~100%). Every measured
+saturation of the campaign is a row of this table. The Law delimits itself:
+it bounds marginal congruence *filters*, not problem *transformations* —
+nilpotent peeling escapes it (rewrites the problem: removes digits, shrinks
+the modulus, lowers the leaf horizon) and is the campaign's only large
+measured win. Peeling is inert at prime bases (T=0), so **the frontier now
+lives at prime bases** (41, 43, 47, 53, 59, 61…). Designated next direction
+there: meet-in-the-middle on the factorial itself — with the honest caveat
+(cf. the MITM rejection above) that position-split halves are injections,
+so the window arithmetic is ~m!/(m/2)! ≈ √(m!)·2^{m/2} time with (m/2)!
+memory: only competitive where sweeps exceed ~10¹³, i.e. beyond-frontier
+prime bases, and untested.
+
 **Instance-class decision (2026-07-22):** the search's reachable residual
 sets are NOT interval-minus-C₀ (gaps accumulate). We adopt the *widened*
 instance class: the conjectures are now about reachable residual sets,
