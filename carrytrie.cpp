@@ -203,7 +203,41 @@ struct Branch {
     int candidate;          // 21 or 20
     std::vector<int> A19;   // free digit pool (19 digits), sorted ascending
     u128 T_target;          // required M (mod L_c)
+
+    // RUNG 2 support: since leaf ∪ x ∪ y digits exactly partition A19 (proved in
+    // TASK-MITM-FP.md §1, "moments are additive across halves"), sum(y) =
+    // S_A19 - sum(x) - sum(leaf), and likewise for sum-of-squares. S_A19/S2_A19
+    // are the fixed totals; ascAsc/descPrefix give, for any remaining leaf-slot
+    // count R, a valid (loose but sound) [min,max] envelope on what R additional
+    // *distinct* digits drawn from A19 could still sum/sum-of-squares to —
+    // computed ignoring which specific digits are still available, which is a
+    // safe over-approximation (excluding digits can only shrink the true
+    // achievable range, never grow it).
+    int32_t S_A19 = 0;
+    int64_t S2_A19 = 0;
+    std::vector<int32_t> prefixP1Asc, prefixP1Desc;   // prefixP1Asc[k] = sum of k smallest A19 digits
+    std::vector<int64_t> prefixP2Asc, prefixP2Desc;   // prefixP2Asc[k] = sum of squares of k smallest
 };
+
+static void computeMomentBounds(Branch &br) {
+    std::vector<int> asc = br.A19;
+    std::sort(asc.begin(), asc.end());
+    std::vector<int> desc = asc;
+    std::reverse(desc.begin(), desc.end());
+    int n = (int)asc.size();
+    br.prefixP1Asc.assign(n + 1, 0);
+    br.prefixP1Desc.assign(n + 1, 0);
+    br.prefixP2Asc.assign(n + 1, 0);
+    br.prefixP2Desc.assign(n + 1, 0);
+    for (int k = 0; k < n; k++) {
+        br.prefixP1Asc[k + 1]  = br.prefixP1Asc[k]  + asc[k];
+        br.prefixP1Desc[k + 1] = br.prefixP1Desc[k] + desc[k];
+        br.prefixP2Asc[k + 1]  = br.prefixP2Asc[k]  + (int64_t)asc[k] * asc[k];
+        br.prefixP2Desc[k + 1] = br.prefixP2Desc[k] + (int64_t)desc[k] * desc[k];
+    }
+    br.S_A19 = br.prefixP1Asc[n];
+    br.S2_A19 = br.prefixP2Asc[n];
+}
 
 static Branch buildBranch(const Constants &c, int candidate) {
     Branch br;
@@ -237,6 +271,7 @@ static Branch buildBranch(const Constants &c, int candidate) {
         fprintf(stderr, "FATAL: A19 size = %zu, expected 19 (candidate=%d)\n", br.A19.size(), candidate);
         exit(1);
     }
+    computeMomentBounds(br);
     return br;
 }
 
@@ -262,12 +297,31 @@ static void forEachPermutation(const std::vector<int> &pool, int k, CB cb) {
 }
 
 // ================= Trie =================
+// Pruning ladder (CARRY-TRIE-JOIN.md §4):
+//   0 = no pruning beyond the base walk (digit-membership + distinctness)
+//   1 = + rung 1: subtree mask-union bitsets (andMask/orMask over descendant y-masks)
+//   2 = + rung 2a: p1 (first-moment / digit-sum) subtree budgets
+//   3 = + rung 2b: p2 (second-moment / digit-square-sum) subtree budgets
+static int PRUNE_LEVEL = 3; // set from CLI; see main()
+
 struct TrieNode {
     // children: (edge digit 0..48, child node index)
     std::vector<std::pair<uint8_t,int32_t>> children;
     // present only at depth==DEPTH nodes: ordered y-digit-lists (positions 12..12+NY-1,
     // i.e. index0 = relative position 12) that hash to this trie leaf.
     std::vector<std::vector<int>> terminalY;
+
+    // RUNG 1 (§4.1): OR/AND of every descendant terminal's y-digit-mask.
+    //   andMask: bits set in EVERY descendant y-mask (empty subtree -> all-ones,
+    //            i.e. no constraint, via the identity element of AND).
+    //   orMask:  bits set in AT LEAST ONE descendant y-mask.
+    uint64_t andMask = ~0ULL;
+    uint64_t orMask  = 0;
+
+    // RUNG 2 (§4.2): min/max of p1 (=sum of digits) and p2 (=sum of squares of
+    // digits) of the y-digit-set, taken over every descendant terminal.
+    int32_t minP1 = INT32_MAX, maxP1 = INT32_MIN;
+    int64_t minP2 = INT64_MAX, maxP2 = INT64_MIN;
 };
 
 static const int DEPTH = 14;
@@ -288,6 +342,35 @@ struct Trie {
         int32_t cur = 0;
         for (int d = 0; d < DEPTH; d++) cur = childOrCreate(cur, digitsLSD[d]);
         nodes[cur].terminalY.push_back(ydigitsOrdered);
+    }
+
+    // Bottom-up (post-order) aggregation of the rung-1/rung-2 subtree summaries.
+    // Recursion depth is bounded by DEPTH=14, so this is safe even with tens of
+    // millions of nodes (breadth, not depth, is what's large).
+    void computeAggregates(int32_t idx) {
+        TrieNode &node = nodes[idx];
+        for (auto &pr : node.children) {
+            computeAggregates(pr.second);
+            TrieNode &child = nodes[pr.second];
+            node.andMask &= child.andMask;
+            node.orMask  |= child.orMask;
+            node.minP1 = std::min(node.minP1, child.minP1);
+            node.maxP1 = std::max(node.maxP1, child.maxP1);
+            node.minP2 = std::min(node.minP2, child.minP2);
+            node.maxP2 = std::max(node.maxP2, child.maxP2);
+        }
+        for (auto &ydigits : node.terminalY) {
+            uint64_t m = 0;
+            int32_t p1 = 0;
+            int64_t p2 = 0;
+            for (int d : ydigits) { m |= ((uint64_t)1 << d); p1 += d; p2 += (int64_t)d * d; }
+            node.andMask &= m;
+            node.orMask  |= m;
+            node.minP1 = std::min(node.minP1, p1);
+            node.maxP1 = std::max(node.maxP1, p1);
+            node.minP2 = std::min(node.minP2, p2);
+            node.maxP2 = std::max(node.maxP2, p2);
+        }
     }
 };
 
@@ -320,21 +403,77 @@ struct StackFrame {
     int depth;
     int borrow;
     uint64_t used;
+    int32_t sumP1;   // running sum of leaf digits chosen so far (depth<=12)
+    int64_t sumP2;   // running sum of squares of leaf digits chosen so far
 };
 
 // Walk the trie for one (x, lift j) pair. allowedMinusX = A19mask & ~xmask.
+// xP1/xP2 are the (fixed, per-x) sum and sum-of-squares of the x digits.
 static void walkOne(const Trie &trie, u128 W, uint64_t allowedMinusX, uint64_t xmask,
                      uint64_t A19mask, WalkStats &stats,
-                     std::vector<std::array<int,19>> *survivorLog,
-                     const std::vector<int> &xdigits) {
+                     const Branch &br, int32_t xP1, int64_t xP2) {
     auto Wdig = digitsLSDof(W);
     std::vector<StackFrame> stack;
-    stack.push_back({0, 0, 0, 0});
+    stack.reserve(64);
+    stack.push_back({0, 0, 0, 0, 0, 0});
     while (!stack.empty()) {
         StackFrame f = stack.back();
         stack.pop_back();
         stats.visits++;
         const TrieNode &node = trie.nodes[f.node];
+
+        // ---- Pruning ladder (sound at every rung; see CARRY-TRIE-JOIN.md §4) ----
+        if (PRUNE_LEVEL >= 1) {
+            // RUNG 1a: if some digit is present in EVERY descendant y-mask
+            // (bit set in andMask) and that digit is already unavailable
+            // (claimed by x, or already used as a leaf digit on this path),
+            // then EVERY descendant fails the terminal disjointness/leftover
+            // check -> the whole subtree is dead. Sound because andMask only
+            // has a bit set when literally all descendants share it.
+            uint64_t forbidden = xmask | f.used;
+            if (node.andMask & forbidden) continue;
+        }
+        int R = (f.depth <= 12) ? (12 - f.depth) : 0; // remaining leaf slots to be chosen
+        if (PRUNE_LEVEL >= 1 && f.depth >= 12) {
+            // RUNG 1b: once depth>=12, 'used' is final (leaf digits fixed), so
+            // the exact required y-mask R_exact = A19mask & ~xmask & ~used is
+            // known. If some digit in R_exact is absent from EVERY descendant
+            // (bit missing from orMask), no descendant can equal R_exact ->
+            // prune. Sound: orMask is the union over all descendants, so a
+            // missing bit there is missing everywhere.
+            uint64_t Rexact = A19mask & ~xmask & ~f.used;
+            if (Rexact & ~node.orMask) continue;
+        }
+        if (PRUNE_LEVEL >= 2) {
+            // RUNG 2a (p1 / digit-sum budget). Exact partition identity:
+            //   sum(leaf) + sum(y) + sum(x) = S_A19   (proved additive, TASK-MITM-FP.md §1)
+            // => sum(y) = S_A19 - xP1 - sum(leaf). sum(leaf) is only fully
+            // known at depth>=12 (used final); before that it is f.sumP1 plus
+            // whatever the remaining R leaf digits will contribute, and R
+            // *distinct* digits drawn from A19 (ignoring which are still
+            // available -- a safe over-approximation, since restricting
+            // availability can only shrink the true achievable range) sum to
+            // somewhere in [prefixP1Asc[R], prefixP1Desc[R]]. That gives a
+            // sound envelope [loY1, hiY1] on sum(y); prune if node's
+            // [minP1,maxP1] range over descendant y-masks misses it entirely.
+            int32_t loRemain = br.prefixP1Asc[R];
+            int32_t hiRemain = br.prefixP1Desc[R];
+            int32_t loY1 = br.S_A19 - xP1 - f.sumP1 - hiRemain;
+            int32_t hiY1 = br.S_A19 - xP1 - f.sumP1 - loRemain;
+            if (node.maxP1 < loY1 || node.minP1 > hiY1) continue;
+        }
+        if (PRUNE_LEVEL >= 3) {
+            // RUNG 2b (p2 / digit-square-sum budget), identical argument with
+            // squares: sum_sq(y) = S2_A19 - xP2 - sum_sq(leaf), enveloped the
+            // same way via prefixP2Asc/Desc.
+            int64_t loRemain2 = br.prefixP2Asc[R];
+            int64_t hiRemain2 = br.prefixP2Desc[R];
+            int64_t loY2 = br.S2_A19 - xP2 - f.sumP2 - hiRemain2;
+            int64_t hiY2 = br.S2_A19 - xP2 - f.sumP2 - loRemain2;
+            if (node.maxP2 < loY2 || node.minP2 > hiY2) continue;
+        }
+        // ---- end pruning ladder ----
+
         if (f.depth == DEPTH) {
             if (f.borrow == 0) {
                 for (const auto &ydigits : node.terminalY) {
@@ -358,10 +497,11 @@ static void walkOne(const Trie &trie, u128 W, uint64_t allowedMinusX, uint64_t x
                 uint64_t wdbit = bit(wd);
                 if (!(allowedMinusX & wdbit)) continue;
                 if (f.used & wdbit) continue;
-                stack.push_back({child, f.depth + 1, nb, f.used | wdbit});
+                stack.push_back({child, f.depth + 1, nb, f.used | wdbit,
+                                  f.sumP1 + wd, f.sumP2 + (int64_t)wd * wd});
             } else {
                 if (wd != 0) continue;
-                stack.push_back({child, f.depth + 1, nb, f.used});
+                stack.push_back({child, f.depth + 1, nb, f.used, f.sumP1, f.sumP2});
             }
         }
     }
@@ -385,6 +525,7 @@ static Trie buildTrie(const Branch &br, const Constants &c, int NX, int NY, u64 
         trie.insert(digs, ydigits);
         yCount++;
     });
+    trie.computeAggregates(0);
     return trie;
 }
 
@@ -430,11 +571,13 @@ static RunResult runMeasurement(const Branch &br, const Constants &c, int NX, in
         uint64_t xmask = 0;
         for (int d : xdigits) xmask |= bit(d);
         uint64_t allowedMinusX = A19mask & ~xmask;
+        int32_t xP1 = 0; int64_t xP2 = 0;
+        for (int d : xdigits) { xP1 += d; xP2 += (int64_t)d * d; }
 
         WalkStats stats;
         for (int j = 0; j < c.lifts; j++) {
             u128 W = c_x + (u128)j * Lc;
-            walkOne(trie, W, allowedMinusX, xmask, A19mask, stats, nullptr, xdigits);
+            walkOne(trie, W, allowedMinusX, xmask, A19mask, stats, br, xP1, xP2);
         }
         rr.totalVisits += stats.visits;
         rr.totalSurvivors += stats.survivors;
@@ -554,6 +697,8 @@ static void runGate(const Constants &c) {
         int depth;
         int borrow;
         uint64_t used;
+        int32_t sumP1;
+        int64_t sumP2;
         std::array<int,12> leaf; // leaf[0..depth-1] valid when depth<=12
     };
 
@@ -567,16 +712,45 @@ static void runGate(const Constants &c) {
         uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
         uint64_t allowedMinusX = A19mask & ~xmask;
         bool thisIsKnownX = (xdigits[0]==knownX[0] && xdigits[1]==knownX[1] && xdigits[2]==knownX[2]);
+        int32_t xP1 = 0; int64_t xP2 = 0;
+        for (int d : xdigits) { xP1 += d; xP2 += (int64_t)d * d; }
 
         for (int j = 0; j < c.lifts; j++) {
             u128 W = c_x + (u128)j * Lc;
             auto Wdig = digitsLSDof(W);
             std::vector<DecodeFrame> stack;
-            stack.push_back({0,0,0,0,{}});
+            stack.push_back({0,0,0,0,0,0,{}});
             while (!stack.empty()) {
                 DecodeFrame f = stack.back(); stack.pop_back();
                 totalVisits++;
                 const TrieNode &node = trie.nodes[f.node];
+
+                // Same pruning ladder as walkOne(); see comments there for the
+                // soundness argument of each rung.
+                if (PRUNE_LEVEL >= 1) {
+                    uint64_t forbidden = xmask | f.used;
+                    if (node.andMask & forbidden) continue;
+                }
+                int R = (f.depth <= 12) ? (12 - f.depth) : 0;
+                if (PRUNE_LEVEL >= 1 && f.depth >= 12) {
+                    uint64_t Rexact = A19mask & ~xmask & ~f.used;
+                    if (Rexact & ~node.orMask) continue;
+                }
+                if (PRUNE_LEVEL >= 2) {
+                    int32_t loRemain = br.prefixP1Asc[R];
+                    int32_t hiRemain = br.prefixP1Desc[R];
+                    int32_t loY1 = br.S_A19 - xP1 - f.sumP1 - hiRemain;
+                    int32_t hiY1 = br.S_A19 - xP1 - f.sumP1 - loRemain;
+                    if (node.maxP1 < loY1 || node.minP1 > hiY1) continue;
+                }
+                if (PRUNE_LEVEL >= 3) {
+                    int64_t loRemain2 = br.prefixP2Asc[R];
+                    int64_t hiRemain2 = br.prefixP2Desc[R];
+                    int64_t loY2 = br.S2_A19 - xP2 - f.sumP2 - hiRemain2;
+                    int64_t hiY2 = br.S2_A19 - xP2 - f.sumP2 - loRemain2;
+                    if (node.maxP2 < loY2 || node.minP2 > hiY2) continue;
+                }
+
                 if (f.depth == DEPTH) {
                     if (f.borrow == 0) {
                         for (const auto &ydigits : node.terminalY) {
@@ -616,6 +790,8 @@ static void runGate(const Constants &c) {
                         nf.node = child; nf.depth = f.depth+1; nf.borrow = nb;
                         nf.used = f.used | wdbit;
                         nf.leaf[f.depth] = wd;
+                        nf.sumP1 = f.sumP1 + wd;
+                        nf.sumP2 = f.sumP2 + (int64_t)wd * wd;
                         stack.push_back(nf);
                     } else {
                         if (wd != 0) continue;
@@ -667,19 +843,26 @@ int main(int argc, char **argv) {
     printGuardSummary(c);
 
     if (argc < 2) {
-        fprintf(stderr, "usage: %s smoke|gate|full <cand> <NX> <NY>\n", argv[0]);
+        fprintf(stderr, "usage: %s smoke|gate|full <cand> <NX> <NY> [pruneLevel]\n", argv[0]);
+        fprintf(stderr, "  pruneLevel: 0=none 1=rung1(mask-union) 2=+rung2a(p1) 3=+rung2b(p2) [default 3]\n");
         return 1;
     }
     std::string mode = argv[1];
     if (mode == "smoke") {
+        if (argc >= 3) PRUNE_LEVEL = atoi(argv[2]);
+        fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
         runSmoke(c);
     } else if (mode == "gate") {
+        if (argc >= 3) PRUNE_LEVEL = atoi(argv[2]);
+        fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
         runGate(c);
     } else if (mode == "full") {
         if (argc < 5) { fprintf(stderr, "full requires <cand> <NX> <NY>\n"); return 1; }
         int cand = atoi(argv[2]);
         int NX = atoi(argv[3]);
         int NY = atoi(argv[4]);
+        if (argc >= 6) PRUNE_LEVEL = atoi(argv[5]);
+        fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
         runFull(c, cand, NX, NY);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());

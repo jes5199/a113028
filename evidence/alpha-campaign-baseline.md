@@ -17,3 +17,17 @@ b53 projection (|X|≈|Y|≈3e6, Π≈2.7e12): total ≈ 4.4e11 ≈ **6.1× unde
 Verdict per §5 pre-registration: in-between (≥30× GO not met at zero
 upgrades; not a NO-GO — §4 pruning rungs unimplemented). Baseline
 established for per-upgrade attribution.
+
+## Pruning ladder (same protocol, gate re-passed at each rung)
+
+| pruning | α | b53 projection | Π/total |
+|---------|---|----------------|---------|
+| baseline | 0.7092 | 4.41e11 | 6.1× |
+| rung 1 (mask-union) | 0.7065 | 3.61e11 | 7.5× |
+| rung 1+2 (+ loose moment budgets) | 0.7065 | 3.61e11 | 7.5× |
+
+Rung 2 as implemented (sound global envelope) fires ~never (<0.01%
+visit change): rung 1's exact mask check at depth≥12 already screens
+what the loose sum bound would catch. Tightening lever identified:
+per-path available-digit pools instead of the global envelope.
+Soundness gate re-passed at both levels (1 survivor = known completion).
