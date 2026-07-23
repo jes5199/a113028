@@ -85,7 +85,9 @@ leaf widening (only when band pruning power ≤ 32): b36 12.1s → 2.4s (parity)
 | base | prior best | new | engine | verdict |
 |------|-----------|-----|--------|---------|
 | 43 | 1430s (v2) | **968.0s** | v4 (incremental scan) | value matches b-file ✓ — RECORD |
-| 40 | 6856s (v9) | **14.322s** | v12 (witness-liveness peeling) | value matches ✓; node count 2,504,310 = jes's prototype EXACTLY — RECORD (479×) |
+| 40 | 6856s (v9) | **14.322s** → 9.03s (v13) → **5.81s** (v13 fixed) | v12→v13 peeling | value matches ✓ — RECORD chain |
+| 48 | no our-box solve (24h grind pending) | **10.35s CERTIFIED** (both branches, 69 suffix triples, gates passed, value char-exact) | shallow-bucket join, auto-configured | 19× Sol's own verifier; prefix-release digit 24 DISCOVERED from congruences |
+| 49 | no our-box solve | **~4.4s certificate-equivalent** (cand-21 zero + cand-20 known completion, direct-verified) | shallow-bucket join | b49's cert structure reproduced our-box |
 
 Monster attempts: b49 under v6 = 1h TIMEOUT (while sharing the box with b40;
 band sweep estimate ~8.4e9 nodes ≈ 42 min solo — near miss). Next: solo 2h

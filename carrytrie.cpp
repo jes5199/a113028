@@ -1881,6 +1881,561 @@ static void runFull(const Constants &c, int candidate, int NX, int NY) {
     }
 }
 
+// ================= Base-48 auto-configured bucket join =================
+//
+// A fourth, fully independent A/B arm: the same shallow-bucket-join method
+// validated above at base 49, retargeted at base 48's own certificate. Every
+// numeric parameter is DERIVED from base parameters at runtime -- nothing is
+// copied from NILPOTENT-PEELING.md except the branch decomposition itself
+// (fixed descending prefix; candidate 21 = known-NO branch, candidate 20 =
+// known-YES branch), per the task brief. In particular the suffix-digit
+// congruence condition, the forced-reservation of digit 24, and the 34/35
+// admissible-suffix-triple counts are all DISCOVERED here by direct
+// computation/search, not asserted from the doc -- they are only compared
+// against the doc's stated 34/35 as an external cross-check after the fact.
+namespace b48 {
+
+static const int B48 = 48;
+
+struct Constants48 {
+    std::vector<int> D;         // {1..47} \ {16,32,46}
+    u128 L;
+    u128 Lnil;                  // 216, given as a base parameter (2^3 * 3^3)
+    u128 Lc;
+    int T = 0;                  // suffix length: minimal T with B48^T % Lnil == 0
+    int Pc = 0;                 // leaf horizon: minimal P with B48^P >= Lc
+    int lifts = 0;
+    std::vector<int> prefix;    // fixed descending prefix, MSB..LSB (high to low)
+};
+
+static Constants48 deriveConstants48() {
+    Constants48 c;
+    for (int d = 1; d <= 47; d++) if (d != 16 && d != 32 && d != 46) c.D.push_back(d);
+    if (c.D.size() != 44) { fprintf(stderr, "FATAL b48: |D|=%zu != 44\n", c.D.size()); exit(1); }
+
+    u128 L = 1;
+    for (int d : c.D) L = lcm_u128(L, (u128)d);
+    c.L = L;
+    // Guard-rail cross-check against the doc's independently stated value.
+    {
+        const char *lit = "110680160865928453800";
+        u128 v = 0; for (const char *p = lit; *p; p++) v = v * 10 + (u128)(*p - '0');
+        if (c.L != v) { fprintf(stderr, "FATAL b48: L mismatch: computed=%s expected=%s\n",
+                                 u128_to_string(c.L).c_str(), u128_to_string(v).c_str()); exit(1); }
+    }
+    fprintf(stderr, "[b48 guard] L = %s (assert OK)\n", u128_to_string(c.L).c_str());
+
+    c.Lnil = 216; // given base parameter: Lambda_nil = 2^3 * 3^3
+    if (c.L % c.Lnil != 0) { fprintf(stderr, "FATAL b48: Lnil does not divide L\n"); exit(1); }
+    c.Lc = c.L / c.Lnil;
+    {
+        const char *lit = "512408152157076175";
+        u128 v = 0; for (const char *p = lit; *p; p++) v = v * 10 + (u128)(*p - '0');
+        if (c.Lc != v) { fprintf(stderr, "FATAL b48: Lc mismatch: computed=%s expected=%s\n",
+                                  u128_to_string(c.Lc).c_str(), u128_to_string(v).c_str()); exit(1); }
+    }
+    fprintf(stderr, "[b48 guard] Lc = %s (assert OK)\n", u128_to_string(c.Lc).c_str());
+
+    // gcd(Lnil, Lc) must be 1 for the CRT split (mod Lnil, mod Lc) to be
+    // equivalent to (mod L); derive and check, don't assume.
+    if (gcd_u128(c.Lnil, c.Lc) != 1) { fprintf(stderr, "FATAL b48: gcd(Lnil,Lc) != 1\n"); exit(1); }
+    fprintf(stderr, "[b48 guard] gcd(Lnil, Lc) = 1 (assert OK)\n");
+
+    // gcd(Lc mod B48, B48) == 1, needed for B48 to be invertible mod Lc.
+    u64 g = std::gcd((u64)(c.Lc % (u128)B48), (u64)B48);
+    if (g != 1) { fprintf(stderr, "FATAL b48: gcd(Lc mod B48, B48) = %llu != 1\n", (unsigned long long)g); exit(1); }
+    fprintf(stderr, "[b48 guard] gcd(Lc mod %d, %d) = 1 (assert OK)\n", B48, B48);
+
+    // T: minimal T with B48^T === 0 (mod Lnil) -- beyond this many low digits,
+    // higher digit positions cannot affect N mod Lnil at all.
+    { u128 p = 1; int T = 0; do { T++; p = (p * (u128)B48) % c.Lnil; } while (p != 0 && T < 10);
+      if (p != 0) { fprintf(stderr, "FATAL b48: B48^T never reaches 0 mod Lnil\n"); exit(1); }
+      c.T = T; }
+    fprintf(stderr, "[b48 guard] T (suffix length, derived) = %d\n", c.T);
+
+    // Pc: minimal P with B48^P >= Lc.
+    { u128 v = 1; int P = 0; while (v < c.Lc) { v *= (u128)B48; P++; }
+      c.Pc = P;
+      u128 lifts128 = (v + c.Lc - 1) / c.Lc; // ceil(B48^Pc / Lc)
+      c.lifts = (int)lifts128; }
+    fprintf(stderr, "[b48 guard] Pc (leaf horizon, derived) = %d, lifts = %d\n", c.Pc, c.lifts);
+
+    return c;
+}
+
+// Adaptively determine the fixed descending prefix for a given candidate
+// digit. Starts from the naive maximal descending run (47 downto 22, skipping
+// D's own exclusions), then -- if that leaves ZERO admissible suffix triples
+// -- searches for which single prefix digit must be reserved (held out of the
+// prefix, added back to the pool) to make the suffix congruence solvable,
+// trying candidates closest to the boundary first (mirrors the doc's own
+// language: "the maximal descending branch that consumes it is immediately
+// impossible"). This *discovers* the digit-24 reservation rather than
+// assuming it.
+static int countAdmissibleSuffixTriples(const std::vector<int> &pool, int T, u128 Lnil,
+                                         std::vector<std::array<int,3>> *outTriples = nullptr) {
+    if (T != 3) { fprintf(stderr, "FATAL b48: suffix-triple search hardcodes T==3\n"); exit(1); }
+    int cnt = 0;
+    for (int d0 : pool) {
+        u128 p0 = (u128)d0;
+        for (int d1 : pool) {
+            if (d1 == d0) continue;
+            u128 p1 = p0 + (u128)d1 * (u128)B48;
+            for (int d2 : pool) {
+                if (d2 == d0 || d2 == d1) continue;
+                u128 val = p1 + (u128)d2 * (u128)B48 * (u128)B48;
+                if (val % Lnil == 0) {
+                    cnt++;
+                    if (outTriples) outTriples->push_back({d0, d1, d2});
+                }
+            }
+        }
+    }
+    return cnt;
+}
+
+static std::vector<int> findPrefix(const Constants48 &c, int candidate) {
+    std::vector<int> naivePrefix;
+    for (int d = 47; d >= 22; d--) {
+        if (std::find(c.D.begin(), c.D.end(), d) == c.D.end()) continue; // D-excluded
+        naivePrefix.push_back(d);
+    }
+    auto poolFor = [&](const std::vector<int> &prefix) {
+        std::vector<int> pool;
+        for (int d : c.D) {
+            if (d == candidate) continue;
+            if (std::find(prefix.begin(), prefix.end(), d) != prefix.end()) continue;
+            pool.push_back(d);
+        }
+        return pool;
+    };
+
+    int naiveCount = countAdmissibleSuffixTriples(poolFor(naivePrefix), c.T, c.Lnil);
+    if (naiveCount > 0) {
+        fprintf(stderr, "[b48] candidate=%d: naive maximal descending prefix already admits %d suffix triples\n",
+                candidate, naiveCount);
+        return naivePrefix;
+    }
+
+    fprintf(stderr, "[b48] candidate=%d: naive prefix admits 0 suffix triples; searching for a digit to reserve...\n",
+            candidate);
+    // Try reserving each prefix digit, closest to the candidate (low end)
+    // first, since that's structurally where the doc's own reasoning places
+    // the obstruction.
+    for (auto it = naivePrefix.rbegin(); it != naivePrefix.rend(); ++it) {
+        int reserve = *it;
+        std::vector<int> trial;
+        for (int d : naivePrefix) if (d != reserve) trial.push_back(d);
+        int cnt = countAdmissibleSuffixTriples(poolFor(trial), c.T, c.Lnil);
+        if (cnt > 0) {
+            fprintf(stderr, "[b48] candidate=%d: reserving digit %d from the prefix admits %d suffix triples\n",
+                    candidate, reserve, cnt);
+            return trial;
+        }
+    }
+    fprintf(stderr, "[b48] FATAL: no single-digit prefix reservation makes the suffix congruence solvable\n");
+    exit(1);
+}
+
+// ---- Shallow-bucket machinery, reimplemented locally for B48/Pc so the
+// base-49 arms above are untouched. Structurally identical to the validated
+// base-49 bucket join (SHALLOW-RADIX-BUCKET-JOIN.md Phase A): flat
+// (u_y, y_mask) records, counting-sort into B48^K buckets, root envelope
+// sieve, exact direct leaf decode. ----
+
+static std::array<uint8_t, 16> digitsLSDof48(u128 n, int ndig) {
+    std::array<uint8_t, 16> out{};
+    for (int i = 0; i < ndig; i++) { out[i] = (uint8_t)(n % (u128)B48); n /= (u128)B48; }
+    return out;
+}
+
+struct LeafEnvelope48 { u128 lo, hi; };
+static LeafEnvelope48 leafEnvelope48(uint64_t available, int count) {
+    int digs[20]; int nd = 0;
+    uint64_t av = available;
+    while (av) { digs[nd++] = __builtin_ctzll(av); av &= av - 1; }
+    LeafEnvelope48 out{0, 0};
+    for (int i = 0; i < count; i++) out.lo = out.lo * (u128)B48 + (u128)digs[i];
+    for (int i = 0; i < count; i++) out.hi = out.hi * (u128)B48 + (u128)digs[nd - 1 - i];
+    return out;
+}
+static inline bool envelopeIntersects48(u128 W, u128 leaf_lo, u128 leaf_hi, u128 domLo, u128 domHi) {
+    if (W < leaf_lo) return false;
+    u128 hiU = W - leaf_lo;
+    u128 loU = (W > leaf_hi) ? (W - leaf_hi) : (u128)0;
+    if (hiU < domLo) return false;
+    if (loU > domHi) return false;
+    return true;
+}
+
+struct BucketRecord48 { u128 u; uint64_t yMask; };
+struct BucketIndex48 {
+    std::vector<uint32_t> offsets;
+    std::vector<BucketRecord48> records;
+    int K = 3;
+    u64 bucketCount = 0;
+};
+
+// One admissible suffix triple's induced branch: fixed prefix+candidate+
+// suffix, leaving `pool17` (freeblock digits) for the coprime-window search.
+struct SuffixBranch {
+    std::array<int,3> suffix; // (d0,d1,d2), positions 0,1,2
+    std::vector<int> freeDigits; // pool minus suffix, size = Pc + (NX+NY)
+    u128 T_target;   // target residue for the freeblock's own value, mod Lc
+};
+
+static SuffixBranch buildSuffixBranch(const Constants48 &c, const std::vector<int> &prefix,
+                                       int candidate, const std::vector<int> &pool,
+                                       const std::array<int,3> &suffix) {
+    SuffixBranch sb;
+    sb.suffix = suffix;
+    for (int d : pool) {
+        if (d == suffix[0] || d == suffix[1] || d == suffix[2]) continue;
+        sb.freeDigits.push_back(d);
+    }
+    u128 Lc = c.Lc;
+    u128 C = 0;
+    // prefix digits occupy positions 43 downto 21 (MSB-first in `prefix`)
+    int pos = 20 + (int)prefix.size();
+    for (int dd : prefix) {
+        u128 term = mulmod_u128((u128)dd, powmod_u128((u128)B48, (u128)pos, Lc), Lc);
+        C = (C + term) % Lc;
+        pos--;
+    }
+    C = (C + mulmod_u128((u128)candidate, powmod_u128((u128)B48, 20, Lc), Lc)) % Lc;
+    u128 S = (u128)suffix[0] + (u128)suffix[1] * (u128)B48 + (u128)suffix[2] * (u128)B48 * (u128)B48;
+    C = (C + S) % Lc;
+
+    u128 BTinv = modinv_u128(powmod_u128((u128)B48, (u128)c.T, Lc), Lc);
+    u128 negC = (Lc - (C % Lc)) % Lc;
+    sb.T_target = mulmod_u128(negC, BTinv, Lc);
+    return sb;
+}
+
+// Builds the bucket index for one suffix branch's coprime-window search,
+// with Pc/NY/K all explicit.
+static BucketIndex48 buildBucketIndex48Real(const std::vector<int> &A, int NY, int K, int Pc, u128 Lc,
+                                             u64 &yCount, double &genSeconds, double &sortSeconds,
+                                             long rssBudgetKB = -1) {
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+    u128 BPcModLc = powmod_u128((u128)B48, (u128)Pc, Lc);
+    u64 bucketCount = 1;
+    for (int i = 0; i < K; i++) bucketCount *= (u64)B48;
+    u128 bucketMod = (u128)bucketCount;
+
+    std::vector<BucketRecord48> raw;
+    std::vector<uint32_t> key;
+    std::vector<uint32_t> counts(bucketCount + 1, 0);
+
+    forEachPermutation(A, NY, [&](const std::vector<int> &ydigits) {
+        u128 y_val = 0, Bpow = 1;
+        for (int i = 0; i < NY; i++) { y_val += (u128)ydigits[i] * Bpow; Bpow *= (u128)B48; }
+        u128 u_y = mulmod_u128(BPcModLc, y_val % Lc, Lc);
+        uint64_t m = 0; for (int d : ydigits) m |= bit(d);
+        raw.push_back({u_y, m});
+        uint32_t k = (uint32_t)(u_y % bucketMod);
+        key.push_back(k);
+        counts[k + 1]++;
+    });
+    yCount = raw.size();
+    auto t1 = clock::now();
+    genSeconds = std::chrono::duration<double>(t1 - t0).count();
+    checkRssBudget(rssBudgetKB, "b48-bucket-post-generation");
+
+    for (u64 i = 0; i < bucketCount; i++) counts[i + 1] += counts[i];
+    BucketIndex48 idx;
+    idx.K = K; idx.bucketCount = bucketCount;
+    idx.offsets = counts;
+    idx.records.resize(raw.size());
+    std::vector<uint32_t> cursor(idx.offsets.begin(), idx.offsets.end());
+    for (size_t i = 0; i < raw.size(); i++) {
+        uint32_t k = key[i];
+        idx.records[cursor[k]++] = raw[i];
+    }
+    auto t2 = clock::now();
+    sortSeconds = std::chrono::duration<double>(t2 - t1).count();
+    checkRssBudget(rssBudgetKB, "b48-bucket-post-build");
+    return idx;
+}
+
+template <typename CB>
+static void enumLeafPrefix48(int depth, int K, int borrow, uint64_t used, uint64_t key, uint64_t keyMul,
+                              const std::array<uint8_t,16> &Wdig, uint64_t allowed, CB &&cb) {
+    if (depth == K) { cb(key, used); return; }
+    uint64_t rem = allowed & ~used;
+    while (rem) {
+        int l = __builtin_ctzll(rem);
+        rem &= rem - 1;
+        int raw = (int)Wdig[depth] - borrow - l;
+        int u_i, nb;
+        if (raw < 0) { u_i = raw + B48; nb = 1; } else { u_i = raw; nb = 0; }
+        enumLeafPrefix48(depth + 1, K, nb, used | bit(l), key + (uint64_t)u_i * keyMul, keyMul * (uint64_t)B48,
+                         Wdig, allowed, cb);
+    }
+}
+
+static inline bool decodeDistinctLeaf48(u128 leaf, uint64_t allowed, int Pc, uint64_t &outMask) {
+    uint64_t mask = 0;
+    for (int i = 0; i < Pc; i++) {
+        int d = (int)(leaf % (u128)B48);
+        leaf /= (u128)B48;
+        if (d == 0) return false;
+        uint64_t db = bit(d);
+        if (!(allowed & db)) return false;
+        if (mask & db) return false;
+        mask |= db;
+    }
+    outMask = mask;
+    return true;
+}
+
+struct BucketStats48 {
+    u64 roots = 0, rootsRejected = 0, lookups = 0, scans = 0, maskPasses = 0, survivors = 0;
+};
+
+template <typename OnSurvivor>
+static void bucketSearchX48(const BucketIndex48 &idx, u128 c_x, u128 Lc, int lifts, int Pc,
+                             uint64_t xmask, uint64_t Amask, int K, BucketStats48 &stats,
+                             const std::array<u128,16> &Bpow, OnSurvivor &&onSurvivor) {
+    uint64_t allowed = Amask & ~xmask;
+    LeafEnvelope48 env{};
+    if (SIEVE_LEVEL & 1) env = leafEnvelope48(allowed, Pc);
+
+    for (int j = 0; j < lifts; j++) {
+        u128 W = c_x + (u128)j * Lc;
+        if (SIEVE_LEVEL & 1) {
+            stats.roots++;
+            if (W < env.lo) { stats.rootsRejected++; continue; }
+            u128 minReq = (W > env.hi) ? (W - env.hi) : (u128)0;
+            if (minReq >= Lc) { stats.rootsRejected++; continue; }
+        } else {
+            stats.roots++;
+        }
+        auto Wdig = digitsLSDof48(W, K > Pc ? K : Pc);
+        enumLeafPrefix48(0, K, 0, 0, 0, 1, Wdig, allowed,
+            [&](uint64_t key, uint64_t lowLeafMask) {
+                stats.lookups++;
+                uint32_t lo = idx.offsets[key], hi = idx.offsets[key + 1];
+                for (uint32_t p = lo; p < hi; p++) {
+                    stats.scans++;
+                    const BucketRecord48 &r = idx.records[p];
+                    if (r.yMask & (xmask | lowLeafMask)) continue;
+                    if (W < r.u) continue;
+                    u128 leaf = W - r.u;
+                    if (leaf >= Bpow[Pc]) continue;
+                    stats.maskPasses++;
+                    uint64_t decodedMask;
+                    if (!decodeDistinctLeaf48(leaf, allowed, Pc, decodedMask)) continue;
+                    uint64_t required = Amask & ~xmask & ~r.yMask;
+                    if (decodedMask != required) continue;
+                    stats.survivors++;
+                    onSurvivor(r, leaf, decodedMask);
+                }
+            });
+    }
+}
+
+// Direct verification: reconstruct the full 44-digit number and check
+// N mod L == 0, independent of the bucket-join machinery (mirrors
+// verifySurvivorDirect for base 49).
+static bool verifySurvivorDirect48(const Constants48 &c, const std::vector<int> &prefix, int candidate,
+                                    const std::array<int,3> &suffix,
+                                    const std::vector<int> &freeDigitsMSBfirst /* upper..leaf, MSD..LSD */) {
+    std::vector<int> digitsMSBfirst;
+    for (int dd : prefix) digitsMSBfirst.push_back(dd);
+    digitsMSBfirst.push_back(candidate);
+    for (int d : freeDigitsMSBfirst) digitsMSBfirst.push_back(d);
+    digitsMSBfirst.push_back(suffix[2]);
+    digitsMSBfirst.push_back(suffix[1]);
+    digitsMSBfirst.push_back(suffix[0]);
+    if ((int)digitsMSBfirst.size() != (int)c.D.size()) {
+        fprintf(stderr, "FATAL b48 verify: digit count %zu != %zu\n", digitsMSBfirst.size(), c.D.size());
+        exit(1);
+    }
+    u128 acc = 0;
+    for (int d : digitsMSBfirst) {
+        acc = mulmod_u128(acc, (u128)B48, c.L);
+        acc = (acc + (u128)d) % c.L;
+    }
+    return acc == 0;
+}
+
+// a(48) is the ordinary INTEGER whose base-48 positional value is the digit
+// sequence (sum d_i * 48^i), same convention as verifySurvivorDirect48's
+// "mod L" check and as base49's known reconstructed value in
+// NILPOTENT-PEELING.md -- NOT a concatenation of decimal digit labels (44
+// digits, mixed 1- and 2-digit labels, would give 79 decimal characters;
+// the true base-48 value gives 74, matching the target). Minimal base-1e9
+// bignum: Horner's method, multiply-by-48-add-digit, MSD to LSD.
+static std::string reconstructDecimal48(const std::vector<int> &prefix, int candidate,
+                                         const std::array<int,3> &suffix,
+                                         const std::vector<int> &freeDigitsMSBfirst) {
+    std::vector<int> digitsMSBfirst;
+    for (int d : prefix) digitsMSBfirst.push_back(d);
+    digitsMSBfirst.push_back(candidate);
+    for (int d : freeDigitsMSBfirst) digitsMSBfirst.push_back(d);
+    digitsMSBfirst.push_back(suffix[2]);
+    digitsMSBfirst.push_back(suffix[1]);
+    digitsMSBfirst.push_back(suffix[0]);
+
+    // Base-1,000,000,000 limbs, little-endian (limb 0 = least significant).
+    std::vector<uint32_t> limbs(1, 0);
+    const uint64_t BASE = 1000000000ULL;
+    for (int d : digitsMSBfirst) {
+        uint64_t carry = (uint64_t)d;
+        for (size_t i = 0; i < limbs.size(); i++) {
+            uint64_t v = (uint64_t)limbs[i] * 48ULL + carry;
+            limbs[i] = (uint32_t)(v % BASE);
+            carry = v / BASE;
+        }
+        while (carry) { limbs.push_back((uint32_t)(carry % BASE)); carry /= BASE; }
+    }
+    // Strip leading (most-significant) zero limbs.
+    while (limbs.size() > 1 && limbs.back() == 0) limbs.pop_back();
+    std::string s = std::to_string(limbs.back());
+    for (int i = (int)limbs.size() - 2; i >= 0; i--) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%09u", limbs[i]);
+        s += buf;
+    }
+    return s;
+}
+
+static void runBranch(const Constants48 &c, int candidate, int NX, int NY, int K, long rssBudgetKB,
+                       const char *expectedDecimalOrNull) {
+    using clock = std::chrono::steady_clock;
+    auto tBranch0 = clock::now();
+
+    std::vector<int> prefix = findPrefix(c, candidate);
+    std::vector<int> pool;
+    for (int d : c.D) {
+        if (d == candidate) continue;
+        if (std::find(prefix.begin(), prefix.end(), d) != prefix.end()) continue;
+        pool.push_back(d);
+    }
+    std::vector<std::array<int,3>> triples;
+    int nTriples = countAdmissibleSuffixTriples(pool, c.T, c.Lnil, &triples);
+    fprintf(stderr, "[b48] candidate=%d: prefix len=%zu, pool size=%zu, admissible suffix triples=%d "
+                    "(doc cross-check: expect ~34/35)\n",
+            candidate, prefix.size(), pool.size(), nTriples);
+
+    std::array<u128,16> Bpow{}; { u128 p = 1; for (int i = 0; i < 16; i++) { Bpow[i] = p; p *= (u128)B48; } }
+
+    u64 totalSurvivors = 0, totalRoots = 0, totalRootsRejected = 0, totalLookups = 0, totalScans = 0;
+    u64 verifiedOk = 0, verifiedBad = 0;
+    std::string foundDecimal;
+    double totalGen = 0, totalSort = 0, totalSearch = 0;
+
+    for (size_t ti = 0; ti < triples.size(); ti++) {
+        const auto &suffix = triples[ti];
+        SuffixBranch sb = buildSuffixBranch(c, prefix, candidate, pool, suffix);
+        u64 freeCount = sb.freeDigits.size();
+        if ((int)freeCount != c.Pc + NX + NY) {
+            fprintf(stderr, "FATAL b48: freeDigits size %llu != Pc+NX+NY=%d\n",
+                    (unsigned long long)freeCount, c.Pc + NX + NY);
+            exit(1);
+        }
+        uint64_t Amask = 0; for (int d : sb.freeDigits) Amask |= bit(d);
+
+        auto t0 = clock::now();
+        u64 yCount = 0; double genS = 0, sortS = 0;
+        BucketIndex48 idx = buildBucketIndex48Real(sb.freeDigits, NY, K, c.Pc, c.Lc, yCount, genS, sortS, rssBudgetKB);
+        totalGen += genS; totalSort += sortS;
+
+        u128 Bexp = powmod_u128((u128)B48, (u128)(c.Pc + NY), c.Lc);
+        BucketStats48 stats;
+        auto tsearch0 = clock::now();
+        forEachPermutation(sb.freeDigits, NX, [&](const std::vector<int> &xdigits) {
+            u128 x_val = 0, Bpow_local = 1;
+            for (int i = 0; i < NX; i++) { x_val += (u128)xdigits[i] * Bpow_local; Bpow_local *= (u128)B48; }
+            u128 term = mulmod_u128(Bexp, x_val % c.Lc, c.Lc);
+            u128 c_x = (sb.T_target + c.Lc - (term % c.Lc)) % c.Lc;
+            uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
+
+            bucketSearchX48(idx, c_x, c.Lc, c.lifts, c.Pc, xmask, Amask, K, stats, Bpow,
+                [&](const BucketRecord48 &r, u128 leaf, uint64_t decodedMask) {
+                    // Reconstruct: leaf (Pc digits, LSD-first) + x (NX digits) +
+                    // y (NY digits, recovered from r.u via modular inverse) +
+                    // suffix + candidate + prefix, direct-verify mod ORIGINAL L.
+                    std::vector<int> leafDigits(c.Pc);
+                    u128 lv = leaf;
+                    for (int i = 0; i < c.Pc; i++) { leafDigits[i] = (int)(lv % (u128)B48); lv /= (u128)B48; }
+                    u128 BPcModLc = powmod_u128((u128)B48, (u128)c.Pc, c.Lc);
+                    u128 BPcInv = modinv_u128(BPcModLc, c.Lc);
+                    u128 y_val = mulmod_u128(r.u, BPcInv, c.Lc);
+                    std::vector<int> ydigits(NY);
+                    u128 yv = y_val;
+                    for (int i = 0; i < NY; i++) { ydigits[i] = (int)(yv % (u128)B48); yv /= (u128)B48; }
+
+                    // freeDigitsMSBfirst = [x MSD..LSD][y MSD..LSD][leaf MSD..LSD]
+                    std::vector<int> freeMSB;
+                    for (int i = NX - 1; i >= 0; i--) freeMSB.push_back(xdigits[i]);
+                    for (int i = NY - 1; i >= 0; i--) freeMSB.push_back(ydigits[i]);
+                    for (int i = c.Pc - 1; i >= 0; i--) freeMSB.push_back(leafDigits[i]);
+
+                    bool ok = verifySurvivorDirect48(c, prefix, candidate, suffix, freeMSB);
+                    if (ok) verifiedOk++; else verifiedBad++;
+                    if (ok) {
+                        // The branch's own leading digits (fixed descending
+                        // prefix, same across every suffix triple) make every
+                        // valid completion the same decimal-digit LENGTH, so
+                        // plain string comparison is a safe/correct maximum.
+                        std::string dec = reconstructDecimal48(prefix, candidate, suffix, freeMSB);
+                        if (foundDecimal.empty() || dec.size() > foundDecimal.size() ||
+                            (dec.size() == foundDecimal.size() && dec > foundDecimal)) {
+                            foundDecimal = dec;
+                        }
+                    }
+                });
+        });
+        auto tsearch1 = clock::now();
+        totalSearch += std::chrono::duration<double>(tsearch1 - tsearch0).count();
+
+        totalSurvivors += stats.survivors;
+        totalRoots += stats.roots; totalRootsRejected += stats.rootsRejected;
+        totalLookups += stats.lookups; totalScans += stats.scans;
+
+        checkRssBudget(rssBudgetKB, "b48-per-suffix-triple");
+    }
+
+    auto tBranch1 = clock::now();
+    double branchWall = std::chrono::duration<double>(tBranch1 - tBranch0).count();
+
+    fprintf(stderr, "[b48branch] candidate=%d: %d suffix triples, total roots=%llu rejected=%llu (%.1f%%) "
+                    "lookups=%llu scans=%llu survivors=%llu\n",
+            candidate, nTriples, (unsigned long long)totalRoots, (unsigned long long)totalRootsRejected,
+            totalRoots ? 100.0 * totalRootsRejected / totalRoots : 0.0,
+            (unsigned long long)totalLookups, (unsigned long long)totalScans, (unsigned long long)totalSurvivors);
+    fprintf(stderr, "[b48branch] candidate=%d: gen=%.3fs sort=%.3fs search=%.3fs total wall=%.3fs peakRSS=%ldKB\n",
+            candidate, totalGen, totalSort, totalSearch, branchWall, peakRssKB());
+    fprintf(stderr, "[b48branch] candidate=%d: direct-arithmetic verification: %llu OK, %llu FAILED\n",
+            candidate, (unsigned long long)verifiedOk, (unsigned long long)verifiedBad);
+
+    if (candidate == 21) {
+        bool pass = (totalSurvivors == 0) && (verifiedBad == 0);
+        fprintf(stderr, "[b48branch] candidate=21 SOUNDNESS GATE (expect 0 survivors): %s\n", pass ? "PASS" : "FAIL");
+    } else {
+        // The branch can (and did) contain multiple independently-valid
+        // completions across its 35 suffix triples -- every one of them is a
+        // real solution to the peeled congruence, direct-verified against the
+        // ORIGINAL L. The hard gate is that the MAXIMUM among them (a(48) is
+        // defined as the largest such number) matches the lead's stated known
+        // target exactly, not that the branch is uniquely single-valued.
+        bool foundExact = expectedDecimalOrNull && foundDecimal == expectedDecimalOrNull;
+        fprintf(stderr, "[b48branch] candidate=20: %llu total survivors across all suffix triples "
+                        "(all %llu direct-verified valid, i.e. genuine solutions of the peeled congruence)\n",
+                (unsigned long long)totalSurvivors, (unsigned long long)verifiedOk);
+        fprintf(stderr, "[b48branch] candidate=20: MAXIMUM reconstructed decimal (%zu digits): %s\n",
+                foundDecimal.size(), foundDecimal.empty() ? "(none found)" : foundDecimal.c_str());
+        bool pass = (totalSurvivors >= 1) && (verifiedBad == 0) && foundExact;
+        fprintf(stderr, "[b48branch] candidate=20 SOUNDNESS GATE (max survivor decimal == known target): %s\n",
+                pass ? "PASS" : "FAIL");
+    }
+}
+
+} // namespace b48
+
 int main(int argc, char **argv) {
     initBpow12();
     Constants c = deriveConstants();
@@ -1962,6 +2517,24 @@ int main(int argc, char **argv) {
         if (argc >= 7) rssBudgetKB = atol(argv[6]);
         fprintf(stderr, "[bucket] K=%d rssBudgetKB=%ld\n", K, rssBudgetKB);
         runBucketFull(c, cand, NX, NY, K, rssBudgetKB);
+    } else if (mode == "b48run") {
+        // b48run <cand:20|21> [NX] [NY] [K] [rssBudgetKB]
+        if (argc < 3) { fprintf(stderr, "b48run requires <cand:20|21>\n"); return 1; }
+        int cand = atoi(argv[2]);
+        int NX = 2, NY = 4, K = 3;
+        if (argc >= 5) { NX = atoi(argv[3]); NY = atoi(argv[4]); }
+        if (argc >= 6) K = atoi(argv[5]);
+        long rssBudgetKB = -1;
+        if (argc >= 7) rssBudgetKB = atol(argv[6]);
+        fprintf(stderr, "[b48] NX=%d NY=%d K=%d rssBudgetKB=%ld\n", NX, NY, K, rssBudgetKB);
+        // Reference-only cross-check target for candidate 20 (the lead's
+        // stated known-YES value); used ONLY post-hoc to compare the found
+        // survivor's reconstructed decimal string -- never fed into the
+        // search/arithmetic itself.
+        static const char *B48_KNOWN_20_DECIMAL =
+            "94237804886307950779486130179671488973571078333724597158459950718126090200";
+        b48::Constants48 bc = b48::deriveConstants48();
+        b48::runBranch(bc, cand, NX, NY, K, rssBudgetKB, cand == 20 ? B48_KNOWN_20_DECIMAL : nullptr);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 1;
