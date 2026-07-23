@@ -148,6 +148,35 @@ memory-feasible 3+6/K=4 plan and times out at 1800s instead of work-declining
 — no absolute work-vs-scan cap yet; the sweep's rc-based scan fallback
 covers it. Binary: carrytrie_cert.
 
+## b50 — FIRST VALUE EVER: STRONG CANDIDATE pending confirm (2026-07-23)
+
+certauto (planner-selected full-modulus on the forced 47-digit subset, then
+refute-and-descend) completed in 143.2s and direct-verified, at |D|=46:
+
+    a(50) ?= 1420493599187205702699457094700124947938358490376675977858654611838391983888320
+
+Self-verified: 46 distinct nonzero base-50 digits, missing {10,14,25},
+lcm = 619808900849199341280 (= the 47-subset's L; 10/14/24 are lcm-redundant),
+N ≡ 0 mod lcm, digit-sum ≡ 0 mod 49, MSB prefix 49,48,...,42 descending.
+Planner note: chose family=full-modulus over the 11,552-suffix peeled plan on
+the 47-digit subset exactly as doc #23 predicted (suffix-DP self-test = 11,552 ✓).
+
+**WHY THIS IS NOT CERTIFIED (audit 2026-07-23, this box):** the driver's
+"CERTIFICATION PASS" line overclaims for refute-and-descend runs. The
+maximality claim requires the 47-digit subset {1..49}\{24,25} to have NO
+completion, but the audit of the search code shows its refutation only covers
+(a) a hard-fixed 21-position window (candidate at absolute position 20; doc
+#23 §8's "widen and re-plan" is Phase C, NOT implemented), and (b) ONE
+feasibility-adjusted prefix (buildFeasiblePrefix commits to the first
+feasible release/promotion swap, maxReleases=3, and never revisits
+alternatives after refutation). The divergence-depth law (m*=21 for b50)
+says the window is probably wide enough — but the law is empirical ±2, and
+b50's T=5 is the deepest nilpotent suffix ever seen, the exact profile of
+the b40/b48 law-outlier cases. Also: this is the FIRST run ever to exercise
+the refute-and-descend path (every sweep base had subsetsScanned=1).
+Upgrade path: v4 independent scan arm (launched), and/or Phase C window
+widening on the 47-digit subset.
+
 ## b52 — FIRST VALUE EVER: STRONG CANDIDATE pending confirm (2026-07-23)
 
 The v15 ENGC_GUESS arm of the dual campaign emitted, after 7463.6s, labeled
