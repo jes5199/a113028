@@ -148,6 +148,33 @@ memory-feasible 3+6/K=4 plan and times out at 1800s instead of work-declining
 — no absolute work-vs-scan cap yet; the sweep's rc-based scan fallback
 covers it. Binary: carrytrie_cert.
 
+## b50 — CERTIFIED (2026-07-23 ~11:10, post-autopsy engine)
+
+a(50) = 71024679959360285134972854735006247396917902186058529912810323948019000719382560
+
+Canonical run (fixed engine, default width, b50_certified.log): 49.0s,
+subsetsScanned=1 (the forced 47-subset {1..49}\{24,25} is the first scanned),
+family=full-modulus NX=1/NY=6/K=4, candidate 21 refuted, candidate 20 wins,
+1 survivor direct-verified. Maximality argument: prefix = naive descending
+(the value agrees with it for 26 digits); any deeper-diverging arrangement is
+lex-smaller; the window search covers all shallower divergence with
+candidates descending. Concordant second path: the width-21 PEELED run
+(different family, unaffected by the FM bug) found the same maximum.
+v4 scan arbiter still running as an independent third signal.
+
+**The autopsy that made this possible:** the original width-20 run had
+actually FOUND this exact completion in its join — then lost it in
+verification: `BucketRecordFM::yDigitsPacked` was a uint32_t (30 usable bits
+= 5 packed digits), but the Phase-B planner legally selects NY=6; the 6th
+y-digit's bits truncated silently (digit 12 → 0), the strict direct verifier
+rejected the corrupted reconstruction (correctly — no wrong answer was ever
+emitted), and the candidate loop, having consumed its one success, silently
+descended to |D|=46. Fixed by widening to uint64_t (commit "FIX FM false
+negative"). The bug was invisible pre-Phase-B because fixed NX=2 kept NY≤5 —
+b49's certfm validation could not have caught it. Defense-in-depth verdict:
+the strict verifier prevented a wrong VALUE, the honesty labels prevented a
+wrong CERTIFIED, and the escalation protocol surfaced the discrepancy.
+
 ## b50 — SUPERSEDED: 47-digit completion FOUND at window 21 (2026-07-23 ~10:37)
 
 The Phase C escalation (CERTPOS=21) found, on the forced 47-digit subset

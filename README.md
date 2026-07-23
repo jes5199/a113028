@@ -112,6 +112,7 @@ in 47m 57s combined, 1 memory-declined base rescued by scan.
 | 47 | `λκιθηζεδγβαZYXWVUTSRQPOMLKHGF7D46JI1ACE958B23` | **3m 10.5s** · bucket ✓ (record — was 4m 1.9s scan) | 20 | 9.7 |
 | 48 | `μκιθηζεδγβαZYXVUTSRQPNMKL1J92B3HI8C675DEAF4O` | 10.35s (hand-tuned bucket best) · bucket ✓ 18.3s | 20 | 9.7 |
 | 49 | `νμλκιθηζεδγβαZYXWVUTSRQPNMK9CJ23BFAE6GI81DHL547` | ~4.4s (hand-tuned bucket best) · bucket ✓ 16.3s | 21 | 9.9 |
+| 50 | `א‎νμλκιθηζεδγβαZYXWVUTSRQNMKDC6I897L4HBJEG2F531A` | 49.0s · certauto certified (see RESULTS: autopsy story) | 21 | 9.9 |
 
 
 ### Correction to the published a(46)
