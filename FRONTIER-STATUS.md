@@ -74,9 +74,9 @@ B−1 is prime or nearly-prime should behave like b54; smooth B−1 like b52
 | 51 | 180145958793036691752603389680297418249529280174180771266050386968626019795153600 | **CERTIFIED ×2 methods** | 50s | certauto + v4 scan complete |
 | 52 | 448735208793063714451606009674691709006633117645639135533102744646118644150575200 | **CERTIFIED ×2 methods** | 21s | certauto + v15 candidate concordant |
 | 53 | 8667796530759171030732652761285454124185037606953473954566810515107048776076588809114400 | **STRONG** (single exhaustive; v15 2nd method in flight) | 279s | prime base, drop {26} |
-| 54 | 416421702506789485219242774659857217353557918404448765237845114648269563412650818364000 | **WEAK candidate** (CERTPOS=21 probe in flight) | 725s | HARDNESS ONSET; 10 window-bounded refutations |
+| 54 | 416421702506789485219242774659857217353557918404448765237845114648269563412650818364000 | **WEAK candidate — needs >+1** | 725s | HARDNESS ONSET; 10 window-bounded refutations. ⚠️ The W=21 probe stayed window-bounded AND found a *smaller* completion than the fast pass (non-monotone across widths — different subsets survive prefix-feasibility at different widths). The fast-pass value stands as the best-known lower bound. Deep-ladder base. |
 | 55 | 18950593883712953094852355579302043793829907380935165052003989360731470319629320169600 | **STRONG** (single exhaustive) | 7.1s | smooth B−1=54=2·3³ → strong filtering (drop 5: {11,22,25,33,44}); prediction confirmed |
-| 56 | 14611462141240529114186149252246406046501939700099449176466457839715539043277294100 | **WEAK candidate** | 2132s | B−1=55=5·11; refute-descend to \|D\|=47 (drop 8: {8,16,23,24,29,32,40,48}) — window-bounded refutations above, auto-widen queued |
+| 56 | 818241795167031571216125942108524047248252714836991418093245122512858064867506776900 | **CERTIFIED (clean at W=21)** — SUPERSEDED the fast-pass weak value | 2132s fast + 677s @W21 | +1 probe found a strictly larger \|D\|=48 completion (drop 7: {8,16,24,32,40,48,52}) with clean exit-0 — the fast pass's drop-8 weak value was submaximal, b50-style |
 | 57 | 1151406937346438856563169238699639272012360683309171137238477150432093884638244390036253366400 | **STRONG** (single exhaustive) | 46s | B−1=56=2³·7; \|D\|=53 drop {19,27,38}, candidate 15, 6 wrong turns |
 | 58–64 | *(fast-mode climb in progress)* | | | |
 
