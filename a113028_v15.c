@@ -1294,16 +1294,25 @@ int solve_base(int base,int verbose){
                 // v14: when CANDIDATE mode (ENGC_GUESS) is active, dispatch to
                 // the forced-prefix/widening counterparts instead; every path
                 // through them is CANDIDATE-UNPROVEN, never a certified solve.
-                int pr, got;
+                // v15: peeled_solve_candidate() re-paid a full W-tail search
+                // once per per-suffix witness (dozens to hundreds) for every
+                // W in the widening loop — a severe performance bug. Go
+                // straight to engineC_candidate() unconditionally instead;
+                // it is a single global search per W with all the same
+                // pruning (CRT DPs, cyclotomic layers, D1 bookkeeping, v12
+                // witness-liveness prune) applied inside engineC_rec().
+                // peeled_solve_candidate() itself is left defined but is now
+                // dead code from this dispatch site.
+                int got;
                 if(g_guess_mode){
                     if(getenv("ENGC_GUESS_DEBUG")){
                         fprintf(stderr,"DBG subset attempt: base=%d k=%d S=[",B,k);
                         for(int di=0;di<k;di++) fprintf(stderr,"%d ",S[di]);
                         fprintf(stderr,"]\n"); fflush(stderr);
                     }
-                    pr = peeled_solve_candidate(nd);
-                    got = (pr==-1) ? engineC_candidate(nd) : pr;
+                    got = engineC_candidate(nd);
                 } else {
+                    int pr;
                     pr = peeled_solve(nd);
                     got = (pr==-1) ? engineC(nd) : pr;
                 }
