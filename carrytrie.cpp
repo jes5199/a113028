@@ -34,6 +34,10 @@ using i128 = __int128;
 
 static const int B = 49;
 
+// fwd decls (defined later, near runPatFull): Phase-C memory-discipline guards.
+static long peakRssKB();
+static void checkRssBudget(long maxRssKB, const char *where);
+
 // ---------- u128 printing ----------
 static std::string u128_to_string(u128 v) {
     if (v == 0) return "0";
@@ -958,12 +962,13 @@ static int32_t patBuild(PatriciaTrie &pt, std::vector<PatRecord> &recs, int lo, 
 
 static PatriciaTrie buildPatriciaTrie(const Branch &br, const Constants &c, int NY, u64 &yCount,
                                        u64 &branchNodes, u64 &terminalNodes, double &buildSortSeconds,
-                                       double &genSeconds) {
+                                       double &genSeconds, long rssBudgetKB = -1) {
     using clock = std::chrono::steady_clock;
     auto tg0 = clock::now();
     u128 Lc = c.L_c;
     u128 B12modLc = powmod_u128((u128)B, 12, Lc);
     std::vector<PatRecord> recs;
+    u64 genCounter = 0;
     forEachPermutation(br.A19, NY, [&](const std::vector<int> &ydigits) {
         u128 y_val = 0, Bpow = 1;
         for (int i = 0; i < NY; i++) { y_val += (u128)ydigits[i] * Bpow; Bpow *= (u128)B; }
@@ -975,12 +980,23 @@ static PatriciaTrie buildPatriciaTrie(const Branch &br, const Constants &c, int 
         rec.ny = (uint8_t)NY;
         for (int i = 0; i < NY; i++) rec.ydigits[i] = (uint8_t)ydigits[i];
         recs.push_back(rec);
+        // Lightweight mid-generation guard (Phase C hard memory constraint):
+        // record generation is the dominant linear-growth phase before the
+        // structural build even starts, so check periodically rather than
+        // only at the end. A full streaming/batched generator was judged
+        // over-engineering given the ~0.6GB transient buffer size and 7GB+
+        // headroom on this box; this periodic check is the cheap middle path.
+        if (rssBudgetKB > 0 && (++genCounter % 2000000 == 0)) {
+            checkRssBudget(rssBudgetKB, "mid-generation");
+        }
     });
     yCount = recs.size();
     auto tg1 = clock::now();
     genSeconds = std::chrono::duration<double>(tg1 - tg0).count();
+    checkRssBudget(rssBudgetKB, "post-generation");
 
     std::sort(recs.begin(), recs.end(), [](const PatRecord &a, const PatRecord &b) { return a.digs < b.digs; });
+    checkRssBudget(rssBudgetKB, "post-sort");
 
     PatriciaTrie pt;
     pt.nodes.reserve(2 * recs.size() + 2);
@@ -992,6 +1008,7 @@ static PatriciaTrie buildPatriciaTrie(const Branch &br, const Constants &c, int 
 
     auto tg2 = clock::now();
     buildSortSeconds = std::chrono::duration<double>(tg2 - tg1).count();
+    checkRssBudget(rssBudgetKB, "post-build");
     return pt;
 }
 
@@ -1119,7 +1136,22 @@ static void patWalkOne(const PatriciaTrie &pt, u128 W, uint64_t allowedMinusX, u
     }
 }
 
-static void runPatFull(const Constants &c, int candidate, int NX, int NY) {
+static long peakRssKB(); // fwd decl; defined below
+
+// If maxRssKB > 0, abort cleanly (not a crash) once VmHWM crosses it. Used by
+// Phase C's hard memory-discipline gate: NEVER let this process approach the
+// live-trading BEAM's headroom.
+static void checkRssBudget(long maxRssKB, const char *where) {
+    if (maxRssKB <= 0) return;
+    long kb = peakRssKB();
+    if (kb >= 0 && kb > maxRssKB) {
+        fprintf(stderr, "[ABORT] peak RSS %ldKB exceeded budget %ldKB at %s -- stopping cleanly (memory discipline is a hard constraint).\n",
+                kb, maxRssKB, where);
+        exit(2);
+    }
+}
+
+static void runPatFull(const Constants &c, int candidate, int NX, int NY, long rssBudgetKB = -1) {
     if (candidate == 21) {
         if (!fileExists("/home/jes/a113028/alpha_go")) {
             fprintf(stderr, "[HOLD] alpha_go not present; candidate-21 patricia full run (NX=%d,NY=%d) withheld.\n", NX, NY);
@@ -1135,7 +1167,7 @@ static void runPatFull(const Constants &c, int candidate, int NX, int NY) {
     u128 Lc = c.L_c;
     u64 yCount = 0, branchNodes = 0, terminalNodes = 0;
     double buildSortSeconds = 0, genSeconds = 0;
-    PatriciaTrie pt = buildPatriciaTrie(br, c, NY, yCount, branchNodes, terminalNodes, buildSortSeconds, genSeconds);
+    PatriciaTrie pt = buildPatriciaTrie(br, c, NY, yCount, branchNodes, terminalNodes, buildSortSeconds, genSeconds, rssBudgetKB);
     u64 totalNodes = pt.nodes.size();
     fprintf(stderr, "[patricia] NY=%d: %llu y-arrangements, %llu compact nodes (branch=%llu terminal=%llu), "
                     "gen=%.3fs sort+build=%.3fs sizeof(PatNode)=%zu bytes childPool=%zu entries (%zu bytes)\n",
@@ -1143,6 +1175,8 @@ static void runPatFull(const Constants &c, int candidate, int NX, int NY) {
             (unsigned long long)branchNodes, (unsigned long long)terminalNodes,
             genSeconds, buildSortSeconds, sizeof(PatNode), pt.childPool.size(),
             pt.childPool.size() * sizeof(std::pair<uint8_t,int32_t>));
+    fprintf(stderr, "[patfull] peakRSS at build-end = %ldKB\n", peakRssKB());
+    checkRssBudget(rssBudgetKB, "build-end");
 
     uint64_t A19mask = 0; for (int d : br.A19) A19mask |= bit(d);
     u128 Bexp = powmod_u128((u128)B, (u128)(12 + NY), Lc);
@@ -1178,11 +1212,27 @@ static void runPatFull(const Constants &c, int candidate, int NX, int NY) {
             candidate, NX, NY, (unsigned long long)xCounted, (unsigned long long)yCount,
             (unsigned long long)totalVisits, meanVisitsPerX, (unsigned long long)totalSurvivors, wall,
             genSeconds, buildSortSeconds, wall - genSeconds - buildSortSeconds);
+    fprintf(stderr, "[patfull] peakRSS at walk-end = %ldKB\n", peakRssKB());
+    checkRssBudget(rssBudgetKB, "walk-end");
 }
 
-static void runPatGate(const Constants &c) {
+// Peak RSS of THIS process so far, in KB (Linux /proc self status VmHWM).
+static long peakRssKB() {
+    FILE *f = fopen("/proc/self/status", "r");
+    if (!f) return -1;
+    char line[256];
+    long kb = -1;
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "VmHWM:", 6) == 0) { sscanf(line + 6, "%ld", &kb); break; }
+    }
+    fclose(f);
+    return kb;
+}
+
+static void runPatGate(const Constants &c, int NX, int NY, long rssBudgetKB = -1) {
+    if (NX + NY != 7) { fprintf(stderr, "FATAL: pgate requires NX+NY==7 (got %d+%d)\n", NX, NY); exit(1); }
     Branch br = buildBranch(c, 20);
-    fprintf(stderr, "[pgate] candidate=20 (known YES), split 3+4 (NX=3,NY=4), FULL run, PATRICIA builder\n");
+    fprintf(stderr, "[pgate] candidate=20 (known YES), split %d+%d (NX=%d,NY=%d), FULL run, PATRICIA builder\n", NX, NY, NX, NY);
 
     std::vector<int> rel(19);
     for (int i = 0; i < 19; i++) rel[i] = KNOWN_FREE_POS19_TO_1[18 - i];
@@ -1192,9 +1242,11 @@ static void runPatGate(const Constants &c) {
         fprintf(stderr, "[pgate] FATAL: known completion does not satisfy N mod L == 0; aborting gate.\n");
         exit(1);
     }
+    // rel[0..11]=positions1..12 (leaf, fixed at P=12 regardless of split);
+    // rel[12..12+NY-1]=y-block; rel[12+NY..18]=x-block (size NX=7-NY).
     std::vector<int> knownLeaf(rel.begin(), rel.begin() + 12);
-    std::vector<int> knownY(rel.begin() + 12, rel.begin() + 16);
-    std::vector<int> knownX(rel.begin() + 16, rel.begin() + 19);
+    std::vector<int> knownY(rel.begin() + 12, rel.begin() + 12 + NY);
+    std::vector<int> knownX(rel.begin() + 12 + NY, rel.begin() + 19);
     uint64_t knownYmask = 0; for (int d : knownY) knownYmask |= bit(d);
     uint64_t knownXmask = 0; for (int d : knownX) knownXmask |= bit(d);
     uint64_t knownLeafmask = 0; for (int d : knownLeaf) knownLeafmask |= bit(d);
@@ -1202,29 +1254,32 @@ static void runPatGate(const Constants &c) {
     u128 Lc = c.L_c;
     u64 yCount = 0, branchNodes = 0, terminalNodes = 0;
     double buildSortSeconds = 0, genSeconds = 0;
-    PatriciaTrie pt = buildPatriciaTrie(br, c, 4, yCount, branchNodes, terminalNodes, buildSortSeconds, genSeconds);
+    PatriciaTrie pt = buildPatriciaTrie(br, c, NY, yCount, branchNodes, terminalNodes, buildSortSeconds, genSeconds, rssBudgetKB);
     u64 totalNodes = pt.nodes.size();
+    checkRssBudget(rssBudgetKB, "pgate-build-end");
     fprintf(stderr, "[pgate] patricia trie built: %llu y-arrangements, %llu compact nodes (branch=%llu terminal=%llu), "
-                    "gen=%.3fs sort+build=%.3fs\n",
+                    "gen=%.3fs sort+build=%.3fs peakRSS=%ldKB\n",
             (unsigned long long)yCount, (unsigned long long)totalNodes,
-            (unsigned long long)branchNodes, (unsigned long long)terminalNodes, genSeconds, buildSortSeconds);
+            (unsigned long long)branchNodes, (unsigned long long)terminalNodes, genSeconds, buildSortSeconds,
+            peakRssKB());
 
     uint64_t A19mask = 0; for (int d : br.A19) A19mask |= bit(d);
-    u128 Bexp = powmod_u128((u128)B, 16, Lc);
+    u128 Bexp = powmod_u128((u128)B, (u128)(12 + NY), Lc);
 
     u64 totalVisits = 0, totalSurvivors = 0, verifiedOk = 0, verifiedBad = 0;
     bool foundKnown = false;
     u64 xCounted = 0;
 
-    forEachPermutation(br.A19, 3, [&](const std::vector<int> &xdigits) {
+    forEachPermutation(br.A19, NX, [&](const std::vector<int> &xdigits) {
         xCounted++;
         u128 x_val = 0, Bpow = 1;
-        for (int i = 0; i < 3; i++) { x_val += (u128)xdigits[i] * Bpow; Bpow *= (u128)B; }
+        for (int i = 0; i < NX; i++) { x_val += (u128)xdigits[i] * Bpow; Bpow *= (u128)B; }
         u128 term = mulmod_u128(Bexp, x_val % Lc, Lc);
         u128 c_x = (br.T_target + Lc - (term % Lc)) % Lc;
         uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
         uint64_t allowedMinusX = A19mask & ~xmask;
-        bool thisIsKnownX = (xdigits[0]==knownX[0] && xdigits[1]==knownX[1] && xdigits[2]==knownX[2]);
+        bool thisIsKnownX = true;
+        for (int i = 0; i < NX; i++) if (xdigits[i] != knownX[i]) { thisIsKnownX = false; break; }
         int32_t xP1 = 0; int64_t xP2 = 0;
         for (int d : xdigits) { xP1 += d; xP2 += (int64_t)d * d; }
 
@@ -1236,7 +1291,7 @@ static void runPatGate(const Constants &c) {
                     std::vector<int> freePos1to19(19);
                     for (int i = 0; i < 12; i++) freePos1to19[i] = leaf[i];
                     for (int i = 0; i < node.termNY; i++) freePos1to19[12 + i] = node.termYdigits[i];
-                    for (int i = 0; i < 3; i++) freePos1to19[16 + i] = xdigits[i];
+                    for (int i = 0; i < NX; i++) freePos1to19[12 + NY + i] = xdigits[i];
                     bool ok = verifySurvivorDirect(c, br, c.prefix, 20, freePos1to19);
                     if (ok) verifiedOk++; else verifiedBad++;
                     if (node.termYmask == knownYmask && xmask == knownXmask &&
@@ -1249,14 +1304,15 @@ static void runPatGate(const Constants &c) {
         }
     });
 
-    fprintf(stderr, "[pgate] x permutations=%llu, |Y|=%llu, total visits=%llu, survivors=%llu\n",
+    fprintf(stderr, "[pgate] x permutations=%llu, |Y|=%llu, total visits=%llu, survivors=%llu peakRSS=%ldKB\n",
             (unsigned long long)xCounted, (unsigned long long)yCount,
-            (unsigned long long)totalVisits, (unsigned long long)totalSurvivors);
+            (unsigned long long)totalVisits, (unsigned long long)totalSurvivors, peakRssKB());
     fprintf(stderr, "[pgate] direct-arithmetic verification of survivors: %llu OK, %llu FAILED\n",
             (unsigned long long)verifiedOk, (unsigned long long)verifiedBad);
     fprintf(stderr, "[pgate] known completion found among survivors: %s\n", foundKnown ? "YES" : "NO");
-    bool pass = foundKnown && (verifiedBad == 0) && (totalSurvivors == verifiedOk);
+    bool pass = foundKnown && (verifiedBad == 0) && (totalSurvivors == verifiedOk) && (totalSurvivors == 1);
     fprintf(stderr, "[pgate] SOUNDNESS GATE: %s\n", pass ? "PASS" : "FAIL");
+    checkRssBudget(rssBudgetKB, "pgate-walk-end");
 }
 
 static bool fileExists(const char *path) {
@@ -1311,17 +1367,25 @@ int main(int argc, char **argv) {
         fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
         runFull(c, cand, NX, NY);
     } else if (mode == "pgate") {
-        if (argc >= 3) PRUNE_LEVEL = atoi(argv[2]);
-        fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
-        runPatGate(c);
+        // pgate [NX] [NY] [pruneLevel] [rssBudgetKB]   (default 3 4, for Phase-A back-compat)
+        int NX = 3, NY = 4;
+        if (argc >= 4) { NX = atoi(argv[2]); NY = atoi(argv[3]); }
+        if (argc >= 5) PRUNE_LEVEL = atoi(argv[4]);
+        long rssBudgetKB = -1;
+        if (argc >= 6) rssBudgetKB = atol(argv[5]);
+        fprintf(stderr, "[prune] level=%d rssBudgetKB=%ld\n", PRUNE_LEVEL, rssBudgetKB);
+        runPatGate(c, NX, NY, rssBudgetKB);
     } else if (mode == "pfull") {
+        // pfull <cand> <NX> <NY> [pruneLevel] [rssBudgetKB]
         if (argc < 5) { fprintf(stderr, "pfull requires <cand> <NX> <NY>\n"); return 1; }
         int cand = atoi(argv[2]);
         int NX = atoi(argv[3]);
         int NY = atoi(argv[4]);
         if (argc >= 6) PRUNE_LEVEL = atoi(argv[5]);
-        fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
-        runPatFull(c, cand, NX, NY);
+        long rssBudgetKB = -1;
+        if (argc >= 7) rssBudgetKB = atol(argv[6]);
+        fprintf(stderr, "[prune] level=%d rssBudgetKB=%ld\n", PRUNE_LEVEL, rssBudgetKB);
+        runPatFull(c, cand, NX, NY, rssBudgetKB);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 1;
