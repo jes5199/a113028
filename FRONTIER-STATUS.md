@@ -79,7 +79,8 @@ B−1 is prime or nearly-prime should behave like b54; smooth B−1 like b52
 | 56 | 818241795167031571216125942108524047248252714836991418093245122512858064867506776900 | **CERTIFIED (clean at W=21)** — SUPERSEDED the fast-pass weak value | 2132s fast + 677s @W21 | +1 probe found a strictly larger \|D\|=48 completion (drop 7: {8,16,24,32,40,48,52}) with clean exit-0 — the fast pass's drop-8 weak value was submaximal, b50-style |
 | 57 | 1151406937346438856563169238699639272012360683309171137238477150432093884638244390036253366400 | **STRONG** (single exhaustive) | 46s | B−1=56=2³·7; \|D\|=53 drop {19,27,38}, candidate 15, 6 wrong turns |
 | 58 | 167871882897310500814068661907619503869825719878641276708644669521363141346593658833809533756000 | **WEAK candidate** (+1 probe in flight) | 1588s | B−1=57=3·19; refute-descend to \|D\|=54 (drop {11,17,29}), candidate 13, 9 wrong turns |
-| 59–64 | *(fast-mode climb in progress)* | | | |
+| 59 | 1470901301179362895265301075558085439900910190543650259570292879379225165811602867150679858663560000 | **WEAK candidate** (+1 probe in flight) | 1372s | B−1=58=2·29; refute-descend to \|D\|=56 (drop {43,44}), candidate 4 (deep), 17 wrong turns; first 100-digit value of the sequence |
+| 60–64 | *(fast-mode climb in progress)* | | | |
 
 ## Deferred option: deep window escalation
 
