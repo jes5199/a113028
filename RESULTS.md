@@ -136,6 +136,20 @@ BUCKET-only times — no scan fallback. Sequential sweep, nice 19, per-base
 | 48 | **bucket CERTIFIED PASS** (autonomous apples-to-apples number; hand-tuned branch best remains 10.35s, labeled separately). \|D\|=44 drop-3, candidate 20, 1 wrong turn refuted, 5 survivors verified, peak RSS ~13MB, 15,800 subsets churned | **18.3s** | **MATCH** |
 | 49 | **bucket CERTIFIED PASS** (autonomous; hand-tuned branch best ~4.4s labeled separately). \|D\|=47 drop-1, candidate 20, 1 wrong turn refuted, exactly 1 survivor = jes's laptop-week value, peak RSS ~126MB | **16.3s** | **MATCH** |
 
+## b52 — FIRST VALUE EVER: STRONG CANDIDATE pending confirm (2026-07-23)
+
+The v15 ENGC_GUESS arm of the dual campaign emitted, after 7463.6s, labeled
+CANDIDATE-UNPROVEN (prefix-guess W=23) — **NOT a certified solve**:
+
+    a(52) ?= 448735208793063714451606009674691709006633117645639135533102744646118644150575200
+
+Independent self-consistency verification (Python, this box): 47 digits in
+base 52, all distinct and nonzero, digit set exactly the forced subset
+{1..51}\{13,24,26,39}, divisible by digit-lcm 238388038788153592800, 52∤lcm,
+digit-sum ≡ N (mod 51) holds, descending prefix 51,50,...,44. Status upgrades
+to certified only if the v4 full-scan arm (still running) or an exhaustive
+cert reproduces it.
+
 **SWEEP COMPLETE (07:51 UTC): 9/9 bases solved and verified against known
 answers. 8/9 bucket-certified by the autonomous driver (b42–b49, 47m 57s
 combined bucket wall); 4 new wall-clock records (b43 831.5s, b44 120.4s
