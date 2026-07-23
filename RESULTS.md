@@ -148,7 +148,36 @@ memory-feasible 3+6/K=4 plan and times out at 1800s instead of work-declining
 — no absolute work-vs-scan cap yet; the sweep's rc-based scan fallback
 covers it. Binary: carrytrie_cert.
 
-## b50 — FIRST VALUE EVER: STRONG CANDIDATE pending confirm (2026-07-23)
+## b50 — SUPERSEDED: 47-digit completion FOUND at window 21 (2026-07-23 ~10:37)
+
+The Phase C escalation (CERTPOS=21) found, on the forced 47-digit subset
+{1..49}\{24,25}, in 321.5s (peeled family, NX=1 NY=4 K=2, candidate 22,
+3 survivors verified):
+
+    a(50) ?= 71024679959360285134972854735006247396917902186058529912810323948019000719382560
+
+Self-verified: 47 distinct nonzero digits missing exactly {24,25}, lcm =
+619808900849199341280 divides N, digit-sum ≡ 0 mod 49, agrees with the naive
+descending arrangement for 26 digits, diverges only in the last 21 positions.
+STRICTLY LARGER than (and superseding) the 46-digit candidate below.
+
+**Status: STRONG CANDIDATE — certification withheld a second time, now for an
+engine-soundness reason.** The value's structure proves the width-20 run's
+refutation contained a FALSE NEGATIVE: the completion has candidate digit 20
+at position 20 with all remaining divergence in positions 0..19 — squarely
+inside the width-20 full-modulus search of candidate 20 (which reported zero
+survivors, roots=840 = candidates 21 and 20). So at least one engine path
+(full-modulus at b50/width-20, or the candidate-iteration logic above it) can
+MISS completions. Also unexplained: only 2 of ~21 pool candidates were tried
+at width 20 before the subset was abandoned. Until that false negative is
+root-caused, no refutation-dependent claim from these paths is trustworthy —
+including this value's own maximality (which additionally rests on the
+width-21 peeled search being complete for candidate 22's window; the
+maximality argument is otherwise sound: candidate 22 is the naive digit, no
+larger candidate exists at that position, deeper divergence ⇒ lex-smaller).
+Arbiters: v4 scan (running) + width-20 false-negative autopsy (next).
+
+## b50 — SUPERSEDED 46-digit candidate (kept for the record)
 
 certauto (planner-selected full-modulus on the forced 47-digit subset, then
 refute-and-descend) completed in 143.2s and direct-verified, at |D|=46:

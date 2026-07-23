@@ -1,0 +1,4 @@
+=== b50 CERTPOS escalation started 2026-07-23T10:31:26Z ===
+W=21 rc=0 wall=323s FOUND with |D|=47 maximum value (80 digits): 71024679959360285134972854735006247396917902186058529912810323948019000719382560
+W=21: *** 47-DIGIT COMPLETION FOUND — SUPERSEDES the 46-digit candidate; stopping escalation ***
+=== escalation finished 2026-07-23T10:36:49Z ===
