@@ -3020,21 +3020,32 @@ static void bucketSearchXGen(const BucketIndexGen &idx, u128 c_x, u128 Lc, int l
 // residue/mask) sidesteps this trap: every permutation gets its own record.
 // ============================================================================
 
-// NY <= 5 digits, each < 64, packed 6 bits/digit LSD-first into a uint32_t
-// (30 bits used of 32). Digit 0 is never a valid selected digit here (all
-// digits are 1..B-1), so 0 is safe as a non-conflicting pad value, but we
-// never rely on that -- unpack always uses the caller-supplied NY count.
-static inline uint32_t packDigitsLSD(const std::vector<int> &digits) {
-    uint32_t packed = 0;
-    for (size_t i = 0; i < digits.size(); i++) packed |= (uint32_t)(digits[i] & 0x3F) << (6 * i);
+// NY <= 10 digits, each < 64, packed 6 bits/digit LSD-first into a uint64_t
+// (up to 60 bits used of 64). Digit 0 is never a valid selected digit here
+// (all digits are 1..B-1), so 0 is safe as a non-conflicting pad value, but
+// we never rely on that -- unpack always uses the caller-supplied NY count.
+//
+// SOUNDNESS FIX (b50 width-20 false-negative autopsy, 2026-07-23): this was
+// a uint32_t (30 bits = 5 digits max) despite the planner legally choosing
+// NY up to 6+ for the full-modulus family. With NY=6, the 6th (most
+// significant) digit's 6-bit field landed at bit offset 30, so only its
+// low 2 bits survived a 32-bit shift and its high bits were silently
+// dropped -- corrupting the reconstructed y digit (e.g. 12 -> 0) and
+// causing a genuine completion to fail verifySurvivorDirectGen's
+// distinctness/range check as a false negative, even though the bucket
+// join itself had correctly found it. Widening to uint64_t removes the
+// truncation for any NY this driver's planner can select.
+static inline uint64_t packDigitsLSD(const std::vector<int> &digits) {
+    uint64_t packed = 0;
+    for (size_t i = 0; i < digits.size(); i++) packed |= (uint64_t)(digits[i] & 0x3F) << (6 * i);
     return packed;
 }
-static inline void unpackDigitsLSD(uint32_t packed, int count, std::vector<int> &out) {
+static inline void unpackDigitsLSD(uint64_t packed, int count, std::vector<int> &out) {
     out.resize(count);
     for (int i = 0; i < count; i++) out[i] = (int)((packed >> (6 * i)) & 0x3F);
 }
 
-struct BucketRecordFM { u128 u; uint64_t yMask; uint32_t yDigitsPacked; };
+struct BucketRecordFM { u128 u; uint64_t yMask; uint64_t yDigitsPacked; };
 struct BucketIndexFM {
     std::vector<uint32_t> offsets;
     std::vector<BucketRecordFM> records;
@@ -3063,7 +3074,7 @@ static BucketIndexFM buildBucketIndexFM(const std::vector<int> &A, int NY, int K
         for (int i = 0; i < NY; i++) { y_val += (u128)ydigits[i] * Bpow; Bpow *= (u128)B; }
         u128 u_y = mulmod_u128(BPmodM, y_val % M, M);
         uint64_t m = 0; for (int d : ydigits) m |= bit(d);
-        uint32_t packed = packDigitsLSD(ydigits);
+        uint64_t packed = packDigitsLSD(ydigits);
         raw.push_back({u_y, m, packed});
         uint32_t k = (uint32_t)(u_y % bucketMod);
         key.push_back(k);
