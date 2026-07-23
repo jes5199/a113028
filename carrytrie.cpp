@@ -3929,6 +3929,250 @@ static int SB_subset_filters() {
     return 1;
 }
 
+// ---------------------------------------------------------------------
+// B60-DISCOVERY-CHURN-FIX.md: ten-rule family-cover fast enumerator.
+//
+// FACT (ten-rule <=> family cover): for D subseteq {1..B-1} nonempty,
+//   B does NOT divide lcm(D)  <=>  D subseteq A_p for at least one prime
+//                                    p | B,
+// where, for p^beta || B (beta = v_p(B), the exact power of p dividing B),
+//   A_p := { d in 1..B-1 : p^beta does NOT divide d }.
+//
+// Proof.
+//   (<=) Suppose D subseteq A_p for some prime p | B with p^beta || B. Then
+//   every d in D has v_p(d) < beta, so v_p(lcm(D)) = max_{d in D} v_p(d) <
+//   beta. Since p^beta | B, if B | lcm(D) then v_p(lcm(D)) >= v_p(B) =
+//   beta, contradiction. So B does not divide lcm(D).
+//
+//   (=>) Suppose B does not divide lcm(D). Write B = prod_i p_i^{beta_i}
+//   (distinct primes p_i). If for EVERY i we had v_{p_i}(lcm(D)) >=
+//   beta_i, then since the p_i^{beta_i} are pairwise coprime, their
+//   product B would divide lcm(D) (CRT / standard divisibility-by-
+//   coprime-factors argument) -- contradicting B does not divide lcm(D).
+//   So there exists some i with v_{p_i}(lcm(D)) < beta_i, i.e. every d in D
+//   has v_{p_i}(d) < beta_i, i.e. D subseteq A_{p_i}. QED.
+//
+// Consequence: the ten-rule-feasible subsets of {1..B-1} are EXACTLY the
+// union, over the (<=3, for B<=64) primes p | B, of the subsets of A_p.
+// SB_build_pps's ten-rule check (SB_LCM % B == 0 => reject) is exactly
+// "reject iff D is in none of these A_p's" -- so an enumerator that only
+// ever emits subsets D with D subseteq A_p for some p is provably
+// ten-rule-feasible by construction, and never needs to visit the huge
+// interior of ten-rule-INFEASIBLE k-subsets that stalled b60 discovery.
+//
+// SubsetEnumerator below implements EXACTLY this, selectable via env
+// SUBSETENUM ("old" = today's raw C(n,k) descending-k / ascending-lex-comb
+// loop, byte-identical order; "new" = the family-restricted fast path).
+// Both modes are driven through this single class so the mode switch lives
+// in one place; runCert/runCertFM/runCertAuto all just call next(k).
+//
+// NEW-mode ordering: for k descending from n=B-1 to 1, each prime family p
+// (with |A_p| >= k) contributes its k-subsets of A_p in the SAME
+// ascending-lex-over-kept-index order the OLD loop uses (standard
+// next-combination over comb[], mapped to digits via S[i]=(B-1)-comb[i]);
+// restricting that global lex order to indices lying entirely within A_p
+// is exactly the lex order of k-subsets of A_p under the induced (rank-
+// preserving) relabeling -- a standard fact about lexicographic order
+// restricted to a subsequence that preserves relative order. The <=3
+// per-family streams are then merged by a straightforward pointer merge:
+// at each step, compare the families' CURRENT actual-index tuples
+// lexicographically ascending, emit the minimum, and advance every family
+// whose current tuple equals the emitted one (this is the dedup: a subset
+// eliminating more than one prime power, e.g. both 2^2 and 5 for b60, is
+// only emitted once, at its correct position in the merged order).
+class SubsetEnumerator {
+public:
+    explicit SubsetEnumerator(int B) : B_(B), n_(B - 1), useNew_(computeUseNew()) {}
+
+    // Fills SB_k/SB_S[0..k-1]/SB_setmask for the next candidate subset and
+    // returns true; returns false once enumeration is exhausted.
+    bool next(int &kOut) {
+        for (;;) {
+            if (!kActive_) {
+                if (!beginK()) return false;
+            }
+            bool got = useNew_ ? stepNew() : stepOld();
+            if (!got) { kActive_ = false; continue; }
+            kOut = k_;
+            return true;
+        }
+    }
+
+private:
+    static bool computeUseNew() {
+        const char *e = getenv("SUBSETENUM");
+        return e && std::string(e) == "new";
+    }
+
+    bool beginK() {
+        if (!started_) { k_ = n_; started_ = true; }
+        else { k_--; }
+        if (k_ < 1) return false;
+        SB_k = k_;
+        kActive_ = true;
+        if (useNew_) initNewFamilies(); else initOldComb();
+        return true;
+    }
+
+    // ---- OLD MODE: byte-identical to the historical loop. ----
+    std::vector<int> comb_;
+    bool oldPending_ = false;
+    void initOldComb() {
+        comb_.assign(k_, 0);
+        for (int i = 0; i < k_; i++) comb_[i] = i;
+        oldPending_ = true;
+    }
+    bool stepOld() {
+        if (!oldPending_) return false;
+        for (int i = 0; i < k_; i++) SB_S[i] = (B_ - 1) - comb_[i];
+        SB_setmask = 0;
+        for (int i = 0; i < k_; i++) SB_setmask |= 1ULL << SB_S[i];
+        int i = k_ - 1;
+        while (i >= 0 && comb_[i] == n_ - k_ + i) i--;
+        if (i < 0) oldPending_ = false;
+        else { comb_[i]++; for (int j = i + 1; j < k_; j++) comb_[j] = comb_[j - 1] + 1; }
+        return true;
+    }
+
+    // ---- NEW MODE: ten-rule family fast path. ----
+    struct FamStream {
+        std::vector<int> allowed; // ascending actual indices (0..n_-1) in A_p
+        std::vector<int> pos;     // combination in position-space, size k_
+        bool exhausted = true;
+    };
+    std::vector<FamStream> fams_;
+    std::vector<std::pair<int,int>> primeFactors_; // (p, beta), computed once
+    bool pfComputed_ = false;
+
+    void computePrimeFactorsOnce() {
+        if (pfComputed_) return;
+        pfComputed_ = true;
+        int m = B_;
+        for (int p = 2; p <= m; p++) {
+            if (m % p != 0) continue;
+            int beta = 0;
+            while (m % p == 0) { m /= p; beta++; }
+            primeFactors_.push_back({p, beta});
+        }
+    }
+
+    void initNewFamilies() {
+        computePrimeFactorsOnce();
+        fams_.clear();
+        for (auto &pb : primeFactors_) {
+            int p = pb.first, beta = pb.second;
+            long long pw = 1; for (int e = 0; e < beta; e++) pw *= p;
+            std::vector<int> allowed;
+            allowed.reserve(n_);
+            for (int i = 0; i < n_; i++) {
+                int d = (B_ - 1) - i;
+                if (d % pw != 0) allowed.push_back(i); // d NOT eliminated => in A_p
+            }
+            if ((int)allowed.size() < k_) continue; // no k-subset of A_p
+            FamStream fs;
+            fs.allowed = std::move(allowed);
+            fs.pos.resize(k_);
+            for (int i = 0; i < k_; i++) fs.pos[i] = i;
+            fs.exhausted = false;
+            fams_.push_back(std::move(fs));
+        }
+    }
+
+    static void curTuple(const FamStream &fs, int k, std::vector<int> &out) {
+        out.resize(k);
+        for (int i = 0; i < k; i++) out[i] = fs.allowed[fs.pos[i]];
+    }
+    void advanceFam(FamStream &fs) {
+        int m = (int)fs.allowed.size();
+        int i = k_ - 1;
+        while (i >= 0 && fs.pos[i] == m - k_ + i) i--;
+        if (i < 0) { fs.exhausted = true; return; }
+        fs.pos[i]++;
+        for (int j = i + 1; j < k_; j++) fs.pos[j] = fs.pos[j - 1] + 1;
+    }
+
+    bool stepNew() {
+        if (fams_.empty()) return false;
+        std::vector<int> tup, best;
+        int bestIdx = -1;
+        for (size_t f = 0; f < fams_.size(); f++) {
+            if (fams_[f].exhausted) continue;
+            curTuple(fams_[f], k_, tup);
+            if (bestIdx < 0 || tup < best) { best = tup; bestIdx = (int)f; }
+        }
+        if (bestIdx < 0) return false;
+        for (int i = 0; i < k_; i++) SB_S[i] = (B_ - 1) - best[i];
+        SB_setmask = 0;
+        for (int i = 0; i < k_; i++) SB_setmask |= 1ULL << SB_S[i];
+        // Dedup: advance every family currently AT the emitted tuple (a
+        // subset can eliminate more than one prime power at once).
+        for (auto &fs : fams_) {
+            if (fs.exhausted) continue;
+            curTuple(fs, k_, tup);
+            if (tup == best) advanceFam(fs);
+        }
+        return true;
+    }
+
+    int B_, n_;
+    bool useNew_;
+    bool started_ = false;
+    bool kActive_ = false;
+    int k_ = 0;
+};
+
+static long long SB_orderLogLines = 0;
+static bool SB_orderLogTruncated = false;
+
+static bool SB_debugOrderEnabled() {
+    static int v = -1;
+    if (v < 0) v = getenv("DEBUG_SUBSET_ORDER") ? 1 : 0;
+    return v != 0;
+}
+static bool SB_isNewEnumMode() {
+    static int v = -1;
+    if (v < 0) { const char *e = getenv("SUBSETENUM"); v = (e && std::string(e) == "new") ? 1 : 0; }
+    return v != 0;
+}
+
+// Shared wrapper around SB_build_pps(), called from the single gate site
+// that already exists identically in runCert/runCertFM/runCertAuto
+// (`if (subsetdisc::SB_build_pps() && subsetdisc::SB_subset_filters())`).
+// Adds:
+//  (a) DEBUG_SUBSET_ORDER logging of every subset that PASSES the ten-rule
+//      (one line: k + descending digit list), capped at 200000 lines then
+//      a single truncation marker; works identically in both SUBSETENUM
+//      modes since both route every candidate through this function.
+//  (b) in SUBSETENUM=new mode only: a loud abort if SB_build_pps ever
+//      rejects a subset the new enumerator emitted. By the family-cover
+//      fact proved above, that can never happen for a correct
+//      implementation -- a rejection here means the enumerator (not the
+//      subset) is buggy, so this aborts rather than silently skipping.
+static int SB_checkAndLogOrder(int k) {
+    int pass = SB_build_pps();
+    if (SB_debugOrderEnabled() && pass) {
+        if (SB_orderLogLines < 200000) {
+            fprintf(stderr, "[subsetorder] k=%d D=", k);
+            for (int i = 0; i < k; i++) fprintf(stderr, "%d%s", SB_S[i], (i + 1 < k) ? "," : "");
+            fprintf(stderr, "\n");
+            SB_orderLogLines++;
+        } else if (!SB_orderLogTruncated) {
+            fprintf(stderr, "[subsetorder] TRUNCATED at 200000 lines\n");
+            SB_orderLogTruncated = true;
+        }
+    }
+    if (!pass && SB_isNewEnumMode()) {
+        fprintf(stderr, "[subsetdisc] FATAL: SUBSETENUM=new emitted a subset that FAILS the ten-rule "
+                        "(k=%d) -- this violates the family-cover invariant the enumerator relies on; "
+                        "this is an enumerator bug, not a legitimately-infeasible subset. Aborting. D=", k);
+        for (int i = 0; i < k; i++) fprintf(stderr, "%d%s", SB_S[i], (i + 1 < k) ? "," : "");
+        fprintf(stderr, "\n");
+        fflush(stderr);
+        abort();
+    }
+    return pass;
+}
+
 } // namespace subsetdisc
 
 // Top-level: find a working (D, prefix, WY) hypothesis and run the
@@ -3978,18 +4222,17 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
     // over kept-digit subsets). First subset surviving the cheap filters
     // whose wrong-turn search yields a certified completion wins; k is
     // tried largest-first so the first success anywhere is the global max.
-    for (int k = n; k >= 1; k--) {
-        subsetdisc::SB_k = k;
-        std::vector<int> comb(k);
-        for (int i = 0; i < k; i++) comb[i] = i;
-        bool done = false;
-        while (!done) {
-            for (int i = 0; i < k; i++) subsetdisc::SB_S[i] = (B - 1) - comb[i];
-            subsetsChecked++;
-            subsetdisc::SB_setmask = 0;
-            for (int i = 0; i < k; i++) subsetdisc::SB_setmask |= 1ULL << subsetdisc::SB_S[i];
-
-            if (subsetdisc::SB_build_pps() && subsetdisc::SB_subset_filters()) {
+    // subsetsChecked semantics: in SUBSETENUM=old (default) this counts
+    // every raw combination visited (as before). In SUBSETENUM=new it
+    // counts only ten-rule-feasible candidates the fast enumerator emits
+    // (a much smaller, pre-filtered stream) -- documented relabeling per
+    // B60-DISCOVERY-CHURN-FIX.md risk #5, not a regression.
+    subsetdisc::SubsetEnumerator subsetEnum(B);
+    int k;
+    while (subsetEnum.next(k)) {
+        subsetsChecked++;
+        {
+            if (subsetdisc::SB_checkAndLogOrder(k) && subsetdisc::SB_subset_filters()) {
                 subsetsScanned++;
                 std::vector<int> D(subsetdisc::SB_S, subsetdisc::SB_S + k);
 
@@ -4091,13 +4334,6 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
                     }
                 }
             }
-
-            // Advance comb[] to the next k-combination (standard ascending-lex
-            // next-combination), matching solve_base's c[] update exactly.
-            int i = k - 1;
-            while (i >= 0 && comb[i] == n - k + i) i--;
-            if (i < 0) { done = true; }
-            else { comb[i]++; for (int j = i + 1; j < k; j++) comb[j] = comb[j - 1] + 1; }
         }
     }
     fprintf(stderr, "[cert] base=%d: FAILED to find a working (subset, prefix) hypothesis within bounded search "
@@ -4140,18 +4376,12 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
     subsetdisc::SB_B = B;
     long long subsetsChecked = 0, subsetsScanned = 0;
 
-    for (int k = n; k >= 1; k--) {
-        subsetdisc::SB_k = k;
-        std::vector<int> comb(k);
-        for (int i = 0; i < k; i++) comb[i] = i;
-        bool done = false;
-        while (!done) {
-            for (int i = 0; i < k; i++) subsetdisc::SB_S[i] = (B - 1) - comb[i];
-            subsetsChecked++;
-            subsetdisc::SB_setmask = 0;
-            for (int i = 0; i < k; i++) subsetdisc::SB_setmask |= 1ULL << subsetdisc::SB_S[i];
-
-            if (subsetdisc::SB_build_pps() && subsetdisc::SB_subset_filters()) {
+    subsetdisc::SubsetEnumerator subsetEnum(B);
+    int k;
+    while (subsetEnum.next(k)) {
+        subsetsChecked++;
+        {
+            if (subsetdisc::SB_checkAndLogOrder(k) && subsetdisc::SB_subset_filters()) {
                 subsetsScanned++;
                 std::vector<int> D(subsetdisc::SB_S, subsetdisc::SB_S + k);
 
@@ -4243,11 +4473,6 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
                     }
                 }
             }
-
-            int i = k - 1;
-            while (i >= 0 && comb[i] == n - k + i) i--;
-            if (i < 0) { done = true; }
-            else { comb[i]++; for (int j = i + 1; j < k; j++) comb[j] = comb[j - 1] + 1; }
         }
     }
     fprintf(stderr, "[certfm] base=%d: FAILED to find a working (subset, prefix) hypothesis within bounded search "
@@ -4286,18 +4511,12 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
     subsetdisc::SB_B = B;
     long long subsetsChecked = 0, subsetsScanned = 0;
 
-    for (int k = n; k >= 1; k--) {
-        subsetdisc::SB_k = k;
-        std::vector<int> comb(k);
-        for (int i = 0; i < k; i++) comb[i] = i;
-        bool done = false;
-        while (!done) {
-            for (int i = 0; i < k; i++) subsetdisc::SB_S[i] = (B - 1) - comb[i];
-            subsetsChecked++;
-            subsetdisc::SB_setmask = 0;
-            for (int i = 0; i < k; i++) subsetdisc::SB_setmask |= 1ULL << subsetdisc::SB_S[i];
-
-            if (subsetdisc::SB_build_pps() && subsetdisc::SB_subset_filters()) {
+    subsetdisc::SubsetEnumerator subsetEnum(B);
+    int k;
+    while (subsetEnum.next(k)) {
+        subsetsChecked++;
+        {
+            if (subsetdisc::SB_checkAndLogOrder(k) && subsetdisc::SB_subset_filters()) {
                 subsetsScanned++;
                 std::vector<int> D(subsetdisc::SB_S, subsetdisc::SB_S + k);
 
@@ -4310,7 +4529,7 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
                 }
 
                 ConstantsGen c = deriveConstantsGen(B, D);
-                if (!c.ok) goto nextComb;
+                if (!c.ok) continue;
 
                 {
                     int W_peeled = CANDIDATE_POS - c.T - c.Pc;
@@ -4318,13 +4537,13 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
                     int W_fm = CANDIDATE_POS - P_full;
                     bool feasPeeledShape = W_peeled >= 1;
                     bool feasFMShape = W_fm >= 1;
-                    if (!feasPeeledShape && !feasFMShape) goto nextComb;
+                    if (!feasPeeledShape && !feasFMShape) continue;
 
                     std::vector<int> prefixP, poolP, prefixF, poolF;
                     bool feasPeeled = feasPeeledShape && buildFeasiblePrefix(c, W_peeled, 3, prefixP, poolP);
                     ConstantsGen cFM = c; cFM.T = 0; cFM.Pc = P_full;
                     bool feasFM = feasFMShape && buildFeasiblePrefix(cFM, W_fm, 3, prefixF, poolF);
-                    if (!feasPeeled && !feasFM) goto nextComb;
+                    if (!feasPeeled && !feasFM) continue;
 
                     // Representative-candidate suffix multiplicity for the
                     // peeled family's cost estimate: mirror the ACTUAL
@@ -4438,12 +4657,6 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
                     }
                 }
             }
-
-            nextComb:;
-            int i = k - 1;
-            while (i >= 0 && comb[i] == n - k + i) i--;
-            if (i < 0) { done = true; }
-            else { comb[i]++; for (int j = i + 1; j < k; j++) comb[j] = comb[j - 1] + 1; }
         }
     }
     fprintf(stderr, "[certauto] base=%d: FAILED to find a working (subset, prefix) hypothesis within bounded search "
