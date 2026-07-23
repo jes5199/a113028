@@ -1,0 +1,4 @@
+=== certauto b51/b52 second-method runs started 2026-07-23T13:00:19Z ===
+b51: rc=0 CERTIFICATION (matches known target): PASS
+b52: rc=0 CERTIFICATION (matches known target): PASS
+=== finished 2026-07-23T13:01:32Z ===

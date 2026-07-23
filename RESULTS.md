@@ -148,6 +148,23 @@ memory-feasible 3+6/K=4 plan and times out at 1800s instead of work-declining
 — no absolute work-vs-scan cap yet; the sweep's rc-based scan fallback
 covers it. Binary: carrytrie_cert.
 
+## a(51) and a(52) — FIRST-EVER CERTIFIED, 2 METHODS EACH (2026-07-23 ~13:01)
+
+- **a(51) = 180145958793036691752603389680297418249529280174180771266050386968626019795153600**
+  certauto exhaustive cert in 50.1s (full-modulus NX=2/NY=6/K=4, forced
+  first-scanned subset drop {17,24,34}, candidate 22 refuted → 21 wins, 1
+  survivor verified) — matches the independent v4 Engine-S scan completion
+  (21080.9s) char-for-char.
+- **a(52) = 448735208793063714451606009674691709006633117645639135533102744646118644150575200**
+  certauto exhaustive cert in 21.5s (peeled NX=2/NY=4/K=3, drop
+  {13,24,26,39}, candidate 22 refuted → 21 wins, 2 survivors verified) —
+  matches the v15 prefix-guess candidate (7463.6s) char-for-char.
+
+The certauto engine (Sol docs #22+#23 + the b50 autopsy fix) certifies in
+under a minute what the scan/candidate arms needed hours for. Hardness
+computed per the README definitions: b51/b52 both m*=21, log₁₀W=11.0
+(P=12 — the W jump comes from the shallower leaf horizon, not m*).
+
 ## Dual-campaign cap scorecard (caps expired ~12:53 UTC 2026-07-23)
 
 - **b50 v4 arbiter: CONFIRMED a(50)** — Engine S completed in 8043.8s with
