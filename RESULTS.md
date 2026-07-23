@@ -136,6 +136,18 @@ BUCKET-only times — no scan fallback. Sequential sweep, nice 19, per-base
 | 48 | **bucket CERTIFIED PASS** (autonomous apples-to-apples number; hand-tuned branch best remains 10.35s, labeled separately). \|D\|=44 drop-3, candidate 20, 1 wrong turn refuted, 5 survivors verified, peak RSS ~13MB, 15,800 subsets churned | **18.3s** | **MATCH** |
 | 49 | **bucket CERTIFIED PASS** (autonomous; hand-tuned branch best ~4.4s labeled separately). \|D\|=47 drop-1, candidate 20, 1 wrong turn refuted, exactly 1 survivor = jes's laptop-week value, peak RSS ~126MB | **16.3s** | **MATCH** |
 
+## Engine: certauto planner (Sol docs #22+#23, Phase A+B) — VALIDATED 2026-07-23
+
+Plan-search (peeled ∥ full-modulus × NX/NY/K, exact suffix-family DP,
+legacy-default-unless-3×-better rule, preflight memory gate, Declined ≠
+Refuted). Gates: certauto 44/45/48/49 all CERTIFICATION PASS char-exact
+(44 had hard-declined under Phase A's fixed NX=2 — the split search solved
+it); regressions cert 48 = 10.3s PASS (matches the 10.35s record), certfm 49
+= 27.8s PASS. Known limitation (Phase C TODO): certauto 41 admits the
+memory-feasible 3+6/K=4 plan and times out at 1800s instead of work-declining
+— no absolute work-vs-scan cap yet; the sweep's rc-based scan fallback
+covers it. Binary: carrytrie_cert.
+
 ## b52 — FIRST VALUE EVER: STRONG CANDIDATE pending confirm (2026-07-23)
 
 The v15 ENGC_GUESS arm of the dual campaign emitted, after 7463.6s, labeled
