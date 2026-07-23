@@ -12,3 +12,4 @@ b60: [VOID — rc=143 was operator SIGTERM during the W=20→W=21 width switch, 
 === climb resumed b60->b64 at CERTPOS=21 (width decision, see FRONTIER-STATUS) 2026-07-23T15:44:59Z ===
 b60: NO-VALUE (timeout >5400s @W21)
 b61: WEAK@W21(refute-descend) 1504s FOUND with |D|=58 (dropped 2 digit(s)) family=peeled NX=2 NY=5 K=3 winningCandidate=22 wrongTurnsRefuted=0 survivors=1 (verified 1 OK / 0 FAILED) wall=372.115s peakRSS~192368KB  maximum value (104 digits): 35400531009451661938977999331213310176526542300021623090439321414194700171315894915223503137438256132800
+b62: WEAK@W21(refute-descend) 4122s FOUND with |D|=58 (dropped 3 digit(s)) family=full-modulus NX=3 NY=5 K=3 winningCandidate=11 wrongTurnsRefuted=11 survivors=1 (verified 1 OK / 0 FAILED) wall=227.717s peakRSS~193804KB  maximum value (104 digits): 90907435844214195686349330991958807391545410997397217149380812995505328431077789672450548846308497831600
