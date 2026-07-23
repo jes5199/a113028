@@ -82,6 +82,18 @@ B−1 is prime or nearly-prime should behave like b54; smooth B−1 like b52
 | 59 | 1470901301179362895265301075558085439900910190543650259570292879379225165811602867150679858663560000 | **WEAK candidate** (+1 probe in flight) | 1372s | B−1=58=2·29; refute-descend to \|D\|=56 (drop {43,44}), candidate 4 (deep), 17 wrong turns; first 100-digit value of the sequence |
 | 60–64 | *(fast-mode climb in progress)* | | | |
 
+## Structural finding: the W=20 window undershoots past the onset
+
+Every rough-B−1 base past b54 that the W=20 fast pass labeled WEAK turned
+out, under its +1 probe, to be understating the answer: b56 and b58 both
+yielded **strictly larger certified values at W=21** (drop-8→drop-7 and
+drop-3→drop-2 respectively), and b54's probe exposed **non-monotonicity**
+(different subsets survive prefix-feasibility at different widths, so
+refute-descend outcomes aren't even comparable across widths). Conclusion
+adopted 2026-07-23 ~15:45: **W=21 is the fast-pass width from b60 up**
+(climb3.sh); the W=20 attempts of 60–64 were abandoned mid-b60. The W=20
+data through b59 stands as the uniform onset-discovery series.
+
 ## Deferred option: deep window escalation
 
 The CERTPOS knob widens the divergence window (validated: width 21
