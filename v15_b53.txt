@@ -1,0 +1,1 @@
+CANDIDATE-UNPROVEN mode ACTIVE (ENGC_GUESS=1) — all results below are unproven prefix-guess candidates, not certified solves.

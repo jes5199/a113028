@@ -1,0 +1,2 @@
+CANDIDATE-UNPROVEN mode ACTIVE (ENGC_GUESS=1) — all results below are unproven prefix-guess candidates, not certified solves.
+CANDIDATE-UNPROVEN (prefix-guess W=24): base 56 k=48 plain-engineC path found no completion, widening

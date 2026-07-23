@@ -84,7 +84,18 @@ B−1 is prime or nearly-prime should behave like b54; smooth B−1 like b52
 | 61 | 35400531009451661938977999331213310176526542300021623090439321414194700171315894915223503137438256132800 | **WEAK candidate @W21 — needs >W21** | 1504s | **Churn prediction CONFIRMED**: discovery instant (61 prime, planner traces at log top); all cost was search-side band depth (refute-descend). Refinement: smooth B−1 ≠ automatically easy — Pc=14 keeps the band deep. \|D\|=58 drop {43,47}; 104-digit value. Deep-ladder queue. |
 | 62 | 90907435844214195686349330991958807391545410997397217149380812995505328431077789672450548846308497831600 | **WEAK candidate @W21 — needs >W21** | 4122s | B−1=61 prime → band-deep as predicted; refute-descend to \|D\|=58 (drop {31,32,59} — 31 kills the ten-rule's 31-factor), candidate 11, 11 wrong turns. Deep-ladder queue. |
 | 63 | *(none — no value known)* | **NO-VALUE @W21 — mode = BAND DEPTH (genuine)** | >5400s | Unlike b60's churn timeout, discovery worked (plans + subset scans throughout the log, ~40s each): the refute-descend ladder simply never reached a completing subset in 90 min. First base with no lower bound at all from pure search depth. Prime-heavy structure (B−1=62=2·31). Top of the deep-ladder queue. |
-| 64 | *(fast-mode climb in progress @W21)* | | | |
+| 64 | 2347950861286613819164892670209135837212469936650502927594341338211603354685587057891666543095590619828487200 | **WEAK candidate @W21 — needs >W21** | 3139s | Mask ceiling reached. \|D\|=60 drop {37,43,46}; 109-digit value — the campaign's largest. Discovery instant (2⁶ needs no drops, as predicted) but refute-descend on the band axis. Deep-ladder queue. |
+
+**CLIMB COMPLETE (21:11 UTC 2026-07-23), b53→b64, the engine's digit-mask
+ceiling.** Final tallies: 2 clean-certified on the climb engine (b56, b58 via
++1 probes; plus b60 post-churn-fix), 3 STRONG single-exhaustive (b53, b55,
+b57), 5 WEAK lower bounds needing the deep ladder (b54, b59, b61, b62, b64),
+1 genuine no-value (b63, band depth). Second-method arms: a(53) and a(56)
+v15 arms both capped with no candidate — their single-method statuses stand
+honestly. The deep-ladder / band-depth class (b54, b59, b61, b62, b63, b64)
+is the campaign's open problem: discovery is instant everywhere post-churn-fix,
+but divergence deeper than the affordable window defeats certification at
+~9×/width brute cost — an algorithmic gap, not a compute gap.
 
 ## Structural finding: the W=20 window undershoots past the onset
 
