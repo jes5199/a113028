@@ -126,5 +126,5 @@ BUCKET-only times — no scan fallback. Sequential sweep, nice 19, per-base
 
 | base | bucket outcome | wall | self-check |
 |------|----------------|------|------------|
-| 41 | **FAILED — memory**: auto-configured bucket build ballooned to 8.9GB peak RSS (>3GB budget) at `certdrv-bucket-post-generation`, clean self-abort. Prime base, no nilpotent peel — expected hard case, honest failure. | 197.9s (to abort) | n/a |
-| 42–49 | in flight | | |
+| 41 | **bucket FAILED — memory** (auto-configured build ballooned to 8.9GB peak RSS >3GB budget at `certdrv-bucket-post-generation`, clean self-abort at 197.9s; prime base, no nilpotent peel — expected hard case). **Solved by scan fallback (v4, eng=S): 44.1s** | bucket: abort @197.9s · scan: 44.1s | **MATCH** |
+| 42–49 | in flight (bucket-first, scan fallback on bucket failure) | | |

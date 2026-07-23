@@ -1,3 +1,5 @@
 === bucket sweep started 2026-07-23T06:53:02Z engine=carrytrie_cert (cert mode) ===
 b41: NO-CERT rc=2 wall=197.87s last: [cert] base=41, n=40, autonomous subset+divergence discovery starting (subsetdisc: solve_base-style descending-lex enumeration) [ABORT] peak RSS 8932744KB exceeded budget 3000000KB at certdrv-bucket-post-generation -- stopping cleanly (memory discipline is a hard constraint). 
 === bucket sweep (re)started 2026-07-23T06:57:47Z engine=carrytrie_cert (cert mode) ulimit-v=6GB backstop ===
+=== sweep v2 (bucket-first + scan-fallback) started 2026-07-23T07:02:39Z ===
+b41: scan fallback 44.1s MATCH (bucket OOM'd, recorded earlier)
