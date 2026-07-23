@@ -148,6 +148,14 @@ memory-feasible 3+6/K=4 plan and times out at 1800s instead of work-declining
 — no absolute work-vs-scan cap yet; the sweep's rc-based scan fallback
 covers it. Binary: carrytrie_cert.
 
+## Frontier climb b53→ (jes mandate: find where it gets hard; started 13:32 UTC)
+
+| base | verdict | wall | notes |
+|-----:|---------|-----:|-------|
+| 53 | **PASS (single-method exhaustive) — strong, pending 2nd method** | 279s | prime; \|D\|=51 drop {26}; first strain signal: 13 wrong turns refuted, winning candidate 8 (deep descent vs ~21 on b50–52); value self-verified (lcm=3099044504245996706400 divides N, mod-52 rule holds) |
+
+a(53) ?= 8667796530759171030732652761285454124185037606953473954566810515107048776076588809114400
+
 ## a(51) and a(52) — FIRST-EVER CERTIFIED, 2 METHODS EACH (2026-07-23 ~13:01)
 
 - **a(51) = 180145958793036691752603389680297418249529280174180771266050386968626019795153600**
