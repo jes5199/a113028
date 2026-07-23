@@ -56,8 +56,11 @@ the predicted size of the irreducible search band.
 Rows for bases 41–49 also carry the verdict of the 2026-07-23 autonomous
 bucket-cert sweep (carrytrie `cert` mode — subset discovery + shallow-bucket
 join + direct verification, self-checked against the known value): *bucket ✓
-time* = certified by the bucket engine in that wall-clock; *bucket ✗* =
-honest bucket failure (reason + scan-fallback time in RESULTS.md).
+time* = certified by the autonomous driver in that wall-clock — one uniform
+measurement basis across 41–49 (hand-tuned per-branch bests, where they
+exist, are labeled separately); *bucket ✗* = honest bucket failure (reason +
+scan-fallback time in RESULTS.md). Sweep total: 8/9 bases bucket-certified
+in 47m 57s combined, 1 memory-declined base rescued by scan.
 
 | base | value (alphabet) | wall-clock | m\* | log₁₀ W |
 |-----:|------------------|-----------:|----:|--------:|
@@ -107,8 +110,8 @@ honest bucket failure (reason + scan-fallback time in RESULTS.md).
 | 45 | `ιθηζεδγβZYXWVUTSQPONLM1D4GCH287EBAJ563F` | **1m 10.3s** · bucket ✓ (record — was 5m 43.8s scan; 4.9×) | 19 | 9.5 |
 | 46 | `κιθηζεδγβαZYXWVUTSRQPOLKJ628BID1G45F3CAH79E` **(corrected — see note)** | 6m 28.2s · bucket ✓ 21m 11.4s (independently re-certifies the corrected value) | 19 | 9.5 |
 | 47 | `λκιθηζεδγβαZYXWVUTSRQPOMLKHGF7D46JI1ACE958B23` | **3m 10.5s** · bucket ✓ (record — was 4m 1.9s scan) | 20 | 9.7 |
-| 48 | `μκιθηζεδγβαZYXVUTSRQPNMKL1J92B3HI8C675DEAF4O` | 10.35s · certified, bucket join | 20 | 9.7 |
-| 49 | `νμλκιθηζεδγβαZYXWVUTSRQPNMK9CJ23BFAE6GI81DHL547` | ~4.4s · certified, bucket join | 21 | 9.9 |
+| 48 | `μκιθηζεδγβαZYXVUTSRQPNMKL1J92B3HI8C675DEAF4O` | 10.35s (hand-tuned bucket best) · bucket ✓ 18.3s | 20 | 9.7 |
+| 49 | `νμλκιθηζεδγβαZYXWVUTSRQPNMK9CJ23BFAE6GI81DHL547` | ~4.4s (hand-tuned bucket best) · bucket ✓ 16.3s | 21 | 9.9 |
 
 
 ### Correction to the published a(46)

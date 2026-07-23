@@ -133,4 +133,14 @@ BUCKET-only times — no scan fallback. Sequential sweep, nice 19, per-base
 | 45 | **bucket CERTIFIED PASS — NEW RECORD, 4.9×** (old best 343.8s scan; \|D\|=39 drop-5, candidate 24, 67 survivors all verified, peak RSS ~892MB, 490,682 subsets churned) | **70.3s** | **MATCH** |
 | 46 | **bucket CERTIFIED PASS** — independently re-certifies the CORRECTED a(46) (strictly larger than the published OEIS value); \|D\|=43 drop-2, candidate 21, 253 survivors all verified, peak RSS ~9.7MB. Slower than the 388.2s scan record — honest datum | 1271.4s | **MATCH (corrected value)** |
 | 47 | **bucket CERTIFIED PASS — NEW RECORD** (prime; old best 241.9s scan; admission gate ADMIT at Y=1,395,360 / projected 0.11GiB — first in-sweep Phase A trace; \|D\|=45 drop-1, candidate 21, 17 survivors verified, peak RSS ~125MB) | **190.5s** | **MATCH** |
-| 48–49 | in flight (bucket-first, scan fallback on bucket failure) | | |
+| 48 | **bucket CERTIFIED PASS** (autonomous apples-to-apples number; hand-tuned branch best remains 10.35s, labeled separately). \|D\|=44 drop-3, candidate 20, 1 wrong turn refuted, 5 survivors verified, peak RSS ~13MB, 15,800 subsets churned | **18.3s** | **MATCH** |
+| 49 | **bucket CERTIFIED PASS** (autonomous; hand-tuned branch best ~4.4s labeled separately). \|D\|=47 drop-1, candidate 20, 1 wrong turn refuted, exactly 1 survivor = jes's laptop-week value, peak RSS ~126MB | **16.3s** | **MATCH** |
+
+**SWEEP COMPLETE (07:51 UTC): 9/9 bases solved and verified against known
+answers. 8/9 bucket-certified by the autonomous driver (b42–b49, 47m 57s
+combined bucket wall); 4 new wall-clock records (b43 831.5s, b44 120.4s
+10.3×, b45 70.3s 4.9×, b47 190.5s); b41 = the one honest bucket memory
+failure (Y=19P7=254M records), rescued by v4 scan fallback in 44.1s. Every
+row labeled by the method that actually produced it. Admission-control
+Phase A (Sol doc #22) landed mid-sweep: b41-class configs now decline in
+0.18s/4.5MB instead of ballooning.**
