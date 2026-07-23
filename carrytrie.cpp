@@ -846,6 +846,419 @@ static void runGate(const Constants &c) {
     fprintf(stderr, "[gate] SOUNDNESS GATE: %s\n", pass ? "PASS" : "FAIL");
 }
 
+static bool fileExists(const char *path); // fwd decl; defined below, used by runPatFull's HOLD gate
+
+// ================= Patricia (path-compressed) trie — PATRICIA-CARRY-TRIE.md Phase A =================
+//
+// Flat (radix_key, y_mask) records (§4.1) are generated directly (no ordinary
+// pointer trie is ever materialized), sorted lexicographically by their
+// 14-digit LSD-first radix key (§4.2), and folded into a compact LCP-based
+// trie (§4.3). Compressed edges are walked digit-by-digit with the full
+// subtraction/borrow/membership/distinctness logic (§4.4) — compression
+// removes node dispatch and stack-frame overhead along unary chains, it does
+// not skip any semantic check. The classic pointer-trie path above is left
+// completely untouched for A/B comparison.
+
+struct PatRecord {
+    std::array<uint8_t, DEPTH> digs;
+    uint64_t ymask = 0;
+    std::array<uint8_t, 6> ydigits{}; // actual ordered y digits, kept only so the
+                                       // soundness gate can reconstruct the exact
+                                       // 47-digit assignment for direct u128
+                                       // re-verification (the search itself only
+                                       // ever needs ymask, per doc §4.1).
+    uint8_t ny = 0;
+};
+
+struct PatNode {
+    uint8_t edgeLen = 0;
+    std::array<uint8_t, DEPTH> edge{};
+    bool isTerminal = false;
+    uint64_t termYmask = 0;
+    std::array<uint8_t, 6> termYdigits{};
+    uint8_t termNY = 0;
+    int32_t childrenStart = -1;
+    uint8_t childCount = 0;
+    // Same rung-1/rung-2 subtree summaries as TrieNode, aggregated over this
+    // compact node's descendant terminals.
+    uint64_t andMask = ~0ULL, orMask = 0;
+    int32_t minP1 = INT32_MAX, maxP1 = INT32_MIN;
+    int64_t minP2 = INT64_MAX, maxP2 = INT64_MIN;
+};
+
+struct PatriciaTrie {
+    std::vector<PatNode> nodes;
+    std::vector<std::pair<uint8_t, int32_t>> childPool;
+};
+
+// Recursive LCP-based compact-trie builder over a sorted [lo,hi) range of
+// records, starting at depth `depth`. Returns the new node's index. Since
+// distinct ordered y-arrangements give distinct u_y (gcd(49,L_c)=1, doc §4.1),
+// every record's 14-digit key is globally unique, so hi-lo==1 unambiguously
+// means "this range is exactly one terminal" (never a key collision).
+static int32_t patBuild(PatriciaTrie &pt, std::vector<PatRecord> &recs, int lo, int hi, int depth) {
+    int32_t idx = (int32_t)pt.nodes.size();
+    pt.nodes.emplace_back();
+
+    if (hi - lo == 1) {
+        PatNode nd;
+        nd.edgeLen = (uint8_t)(DEPTH - depth);
+        for (int i = 0; i < nd.edgeLen; i++) nd.edge[i] = recs[lo].digs[depth + i];
+        nd.isTerminal = true;
+        nd.termYmask = recs[lo].ymask;
+        nd.termYdigits = recs[lo].ydigits;
+        nd.termNY = recs[lo].ny;
+        int32_t p1 = 0; int64_t p2 = 0;
+        for (int i = 0; i < nd.termNY; i++) { p1 += nd.termYdigits[i]; p2 += (int64_t)nd.termYdigits[i] * nd.termYdigits[i]; }
+        nd.andMask = nd.termYmask;
+        nd.orMask  = nd.termYmask;
+        nd.minP1 = nd.maxP1 = p1;
+        nd.minP2 = nd.maxP2 = p2;
+        pt.nodes[idx] = nd;
+        return idx;
+    }
+
+    // Sorted range => LCP of the whole range equals LCP of its first and last
+    // element; O(DEPTH) instead of O(range) per node.
+    int cp = depth;
+    while (cp < DEPTH && recs[lo].digs[cp] == recs[hi - 1].digs[cp]) cp++;
+
+    std::vector<std::pair<uint8_t, int32_t>> kids;
+    int i = lo;
+    while (i < hi) {
+        uint8_t bd = recs[i].digs[cp];
+        int j = i + 1;
+        while (j < hi && recs[j].digs[cp] == bd) j++;
+        int32_t childIdx = patBuild(pt, recs, i, j, cp + 1);
+        kids.push_back({bd, childIdx});
+        i = j;
+    }
+
+    int32_t childrenStart = (int32_t)pt.childPool.size();
+    for (auto &kv : kids) pt.childPool.push_back(kv);
+
+    PatNode nd;
+    nd.edgeLen = (uint8_t)(cp - depth);
+    for (int k = 0; k < nd.edgeLen; k++) nd.edge[k] = recs[lo].digs[depth + k];
+    nd.isTerminal = false;
+    nd.childrenStart = childrenStart;
+    nd.childCount = (uint8_t)kids.size();
+    for (auto &kv : kids) {
+        const PatNode &ch = pt.nodes[kv.second];
+        nd.andMask &= ch.andMask;
+        nd.orMask  |= ch.orMask;
+        nd.minP1 = std::min(nd.minP1, ch.minP1);
+        nd.maxP1 = std::max(nd.maxP1, ch.maxP1);
+        nd.minP2 = std::min(nd.minP2, ch.minP2);
+        nd.maxP2 = std::max(nd.maxP2, ch.maxP2);
+    }
+    pt.nodes[idx] = nd;
+    return idx;
+}
+
+static PatriciaTrie buildPatriciaTrie(const Branch &br, const Constants &c, int NY, u64 &yCount,
+                                       u64 &branchNodes, u64 &terminalNodes, double &buildSortSeconds,
+                                       double &genSeconds) {
+    using clock = std::chrono::steady_clock;
+    auto tg0 = clock::now();
+    u128 Lc = c.L_c;
+    u128 B12modLc = powmod_u128((u128)B, 12, Lc);
+    std::vector<PatRecord> recs;
+    forEachPermutation(br.A19, NY, [&](const std::vector<int> &ydigits) {
+        u128 y_val = 0, Bpow = 1;
+        for (int i = 0; i < NY; i++) { y_val += (u128)ydigits[i] * Bpow; Bpow *= (u128)B; }
+        u128 u_y = mulmod_u128(B12modLc, y_val % Lc, Lc);
+        PatRecord rec;
+        rec.digs = digitsLSDof(u_y);
+        uint64_t m = 0; for (int d : ydigits) m |= bit(d);
+        rec.ymask = m;
+        rec.ny = (uint8_t)NY;
+        for (int i = 0; i < NY; i++) rec.ydigits[i] = (uint8_t)ydigits[i];
+        recs.push_back(rec);
+    });
+    yCount = recs.size();
+    auto tg1 = clock::now();
+    genSeconds = std::chrono::duration<double>(tg1 - tg0).count();
+
+    std::sort(recs.begin(), recs.end(), [](const PatRecord &a, const PatRecord &b) { return a.digs < b.digs; });
+
+    PatriciaTrie pt;
+    pt.nodes.reserve(2 * recs.size() + 2);
+    pt.childPool.reserve(2 * recs.size() + 2);
+    patBuild(pt, recs, 0, (int)recs.size(), 0);
+
+    branchNodes = 0; terminalNodes = 0;
+    for (auto &n : pt.nodes) { if (n.isTerminal) terminalNodes++; else branchNodes++; }
+
+    auto tg2 = clock::now();
+    buildSortSeconds = std::chrono::duration<double>(tg2 - tg1).count();
+    return pt;
+}
+
+struct PStackFrame {
+    int32_t node;
+    int depth;
+    int borrow;
+    uint64_t used;
+    int32_t sumP1;
+    int64_t sumP2;
+    std::array<int, 12> leaf;
+};
+
+// Walk the compact trie for one (x, lift j) pair. Mirrors walkOne()'s pruning
+// ladder exactly, but a node's compressed edge digits are consumed in a tight
+// inline loop (no stack push, no node dispatch) before the ladder is
+// evaluated at the node's true branch/terminal point. onSurvivor(leaf,node,
+// xdigits) is invoked for every accepted terminal (used by the gate to
+// reconstruct and directly re-verify).
+template <typename OnSurvivor>
+static void patWalkOne(const PatriciaTrie &pt, u128 W, uint64_t allowedMinusX, uint64_t xmask,
+                        uint64_t A19mask, WalkStats &stats, const Branch &br, int32_t xP1, int64_t xP2,
+                        OnSurvivor onSurvivor) {
+    auto Wdig = digitsLSDof(W);
+    std::vector<PStackFrame> stack;
+    stack.reserve(64);
+    stack.push_back({0, 0, 0, 0, 0, 0, {}});
+    while (!stack.empty()) {
+        PStackFrame f = stack.back();
+        stack.pop_back();
+        stats.visits++;
+        const PatNode &node = pt.nodes[f.node];
+
+        int depth = f.depth;
+        int borrow = f.borrow;
+        uint64_t used = f.used;
+        int32_t sumP1 = f.sumP1;
+        int64_t sumP2 = f.sumP2;
+        std::array<int, 12> leaf = f.leaf;
+        bool dead = false;
+        for (int k = 0; k < node.edgeLen; k++) {
+            uint8_t dig = node.edge[k];
+            int wd = (int)Wdig[depth] - (int)dig - borrow;
+            int nb = 0;
+            if (wd < 0) { wd += B; nb = 1; }
+            if (depth < 12) {
+                if (wd == 0) { dead = true; break; }
+                uint64_t wdbit = bit(wd);
+                if (!(allowedMinusX & wdbit)) { dead = true; break; }
+                if (used & wdbit) { dead = true; break; }
+                used |= wdbit;
+                leaf[depth] = wd;
+                sumP1 += wd;
+                sumP2 += (int64_t)wd * wd;
+            } else {
+                if (wd != 0) { dead = true; break; }
+            }
+            borrow = nb;
+            depth++;
+        }
+        if (dead) continue;
+
+        if (PRUNE_LEVEL >= 1) {
+            uint64_t forbidden = xmask | used;
+            if (node.andMask & forbidden) continue;
+        }
+        int R = (depth <= 12) ? (12 - depth) : 0;
+        if (PRUNE_LEVEL >= 1 && depth >= 12) {
+            uint64_t Rexact = A19mask & ~xmask & ~used;
+            if (Rexact & ~node.orMask) continue;
+        }
+        uint64_t avail = A19mask & ~xmask & ~used;
+        if (PRUNE_LEVEL >= 2) {
+            int32_t loRemain = sumSmallestK(avail, R);
+            int32_t hiRemain = sumLargestK(avail, R);
+            int32_t loY1 = br.S_A19 - xP1 - sumP1 - hiRemain;
+            int32_t hiY1 = br.S_A19 - xP1 - sumP1 - loRemain;
+            if (node.maxP1 < loY1 || node.minP1 > hiY1) continue;
+        }
+        if (PRUNE_LEVEL >= 3) {
+            int64_t loRemain2 = 0, hiRemain2 = 0;
+            {
+                uint64_t m1 = avail; for (int i = 0; i < R && m1; i++) { int p = __builtin_ctzll(m1); loRemain2 += (int64_t)p*p; m1 &= m1-1; }
+                uint64_t m2 = avail; for (int i = 0; i < R && m2; i++) { int p = 63-__builtin_clzll(m2); hiRemain2 += (int64_t)p*p; m2 &= ~((uint64_t)1<<p); }
+            }
+            int64_t loY2 = br.S2_A19 - xP2 - sumP2 - hiRemain2;
+            int64_t hiY2 = br.S2_A19 - xP2 - sumP2 - loRemain2;
+            if (node.maxP2 < loY2 || node.minP2 > hiY2) continue;
+        }
+
+        if (node.isTerminal) {
+            if (borrow == 0) {
+                uint64_t ymask = node.termYmask;
+                if (!(ymask & xmask) && used == (A19mask & ~ymask & ~xmask)) {
+                    stats.survivors++;
+                    onSurvivor(leaf, node, used);
+                }
+            }
+            continue;
+        }
+        for (int ci = 0; ci < node.childCount; ci++) {
+            auto &kv = pt.childPool[node.childrenStart + ci];
+            uint8_t dig = kv.first; int32_t child = kv.second;
+            int wd = (int)Wdig[depth] - (int)dig - borrow;
+            int nb = 0;
+            if (wd < 0) { wd += B; nb = 1; }
+            if (depth < 12) {
+                if (wd == 0) continue;
+                uint64_t wdbit = bit(wd);
+                if (!(allowedMinusX & wdbit)) continue;
+                if (used & wdbit) continue;
+                PStackFrame nf;
+                nf.node = child; nf.depth = depth + 1; nf.borrow = nb;
+                nf.used = used | wdbit; nf.sumP1 = sumP1 + wd; nf.sumP2 = sumP2 + (int64_t)wd * wd;
+                nf.leaf = leaf; nf.leaf[depth] = wd;
+                stack.push_back(nf);
+            } else {
+                if (wd != 0) continue;
+                PStackFrame nf;
+                nf.node = child; nf.depth = depth + 1; nf.borrow = nb;
+                nf.used = used; nf.sumP1 = sumP1; nf.sumP2 = sumP2; nf.leaf = leaf;
+                stack.push_back(nf);
+            }
+        }
+    }
+}
+
+static void runPatFull(const Constants &c, int candidate, int NX, int NY) {
+    if (candidate == 21) {
+        if (!fileExists("/home/jes/a113028/alpha_go")) {
+            fprintf(stderr, "[HOLD] alpha_go not present; candidate-21 patricia full run (NX=%d,NY=%d) withheld.\n", NX, NY);
+            fprintf(stderr, "[HOLD] Reporting readiness and stopping per task spec.\n");
+            return;
+        }
+        fprintf(stderr, "[full] alpha_go present; proceeding with candidate-21 patricia NX=%d,NY=%d\n", NX, NY);
+    }
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+
+    Branch br = buildBranch(c, candidate);
+    u128 Lc = c.L_c;
+    u64 yCount = 0, branchNodes = 0, terminalNodes = 0;
+    double buildSortSeconds = 0, genSeconds = 0;
+    PatriciaTrie pt = buildPatriciaTrie(br, c, NY, yCount, branchNodes, terminalNodes, buildSortSeconds, genSeconds);
+    u64 totalNodes = pt.nodes.size();
+    fprintf(stderr, "[patricia] NY=%d: %llu y-arrangements, %llu compact nodes (branch=%llu terminal=%llu), "
+                    "gen=%.3fs sort+build=%.3fs sizeof(PatNode)=%zu bytes childPool=%zu entries (%zu bytes)\n",
+            NY, (unsigned long long)yCount, (unsigned long long)totalNodes,
+            (unsigned long long)branchNodes, (unsigned long long)terminalNodes,
+            genSeconds, buildSortSeconds, sizeof(PatNode), pt.childPool.size(),
+            pt.childPool.size() * sizeof(std::pair<uint8_t,int32_t>));
+
+    uint64_t A19mask = 0; for (int d : br.A19) A19mask |= bit(d);
+    u128 Bexp = powmod_u128((u128)B, (u128)(12 + NY), Lc);
+
+    u64 totalVisits = 0, totalSurvivors = 0;
+    u64 xCounted = 0;
+    forEachPermutation(br.A19, NX, [&](const std::vector<int> &xdigits) {
+        xCounted++;
+        u128 x_val = 0, Bpow = 1;
+        for (int i = 0; i < NX; i++) { x_val += (u128)xdigits[i] * Bpow; Bpow *= (u128)B; }
+        u128 term = mulmod_u128(Bexp, x_val % Lc, Lc);
+        u128 c_x = (br.T_target + Lc - (term % Lc)) % Lc;
+        uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
+        uint64_t allowedMinusX = A19mask & ~xmask;
+        int32_t xP1 = 0; int64_t xP2 = 0;
+        for (int d : xdigits) { xP1 += d; xP2 += (int64_t)d * d; }
+
+        WalkStats stats;
+        for (int j = 0; j < c.lifts; j++) {
+            u128 W = c_x + (u128)j * Lc;
+            patWalkOne(pt, W, allowedMinusX, xmask, A19mask, stats, br, xP1, xP2,
+                       [](const std::array<int,12>&, const PatNode&, uint64_t){});
+        }
+        totalVisits += stats.visits;
+        totalSurvivors += stats.survivors;
+    });
+
+    auto t1 = clock::now();
+    double wall = std::chrono::duration<double>(t1 - t0).count();
+    double meanVisitsPerX = xCounted ? (double)totalVisits / xCounted : 0.0;
+    fprintf(stderr, "[patfull] candidate=%d NX=%d NY=%d: |X|=%llu |Y|=%llu total_visits=%llu mean_visits/x=%.2f "
+                    "survivors=%llu wall=%.3fs (gen=%.3fs build=%.3fs search=%.3fs)\n",
+            candidate, NX, NY, (unsigned long long)xCounted, (unsigned long long)yCount,
+            (unsigned long long)totalVisits, meanVisitsPerX, (unsigned long long)totalSurvivors, wall,
+            genSeconds, buildSortSeconds, wall - genSeconds - buildSortSeconds);
+}
+
+static void runPatGate(const Constants &c) {
+    Branch br = buildBranch(c, 20);
+    fprintf(stderr, "[pgate] candidate=20 (known YES), split 3+4 (NX=3,NY=4), FULL run, PATRICIA builder\n");
+
+    std::vector<int> rel(19);
+    for (int i = 0; i < 19; i++) rel[i] = KNOWN_FREE_POS19_TO_1[18 - i];
+    bool knownOk = verifySurvivorDirect(c, br, c.prefix, 20, rel);
+    fprintf(stderr, "[pgate] known completion direct verification (N mod L == 0): %s\n", knownOk ? "PASS" : "FAIL");
+    if (!knownOk) {
+        fprintf(stderr, "[pgate] FATAL: known completion does not satisfy N mod L == 0; aborting gate.\n");
+        exit(1);
+    }
+    std::vector<int> knownLeaf(rel.begin(), rel.begin() + 12);
+    std::vector<int> knownY(rel.begin() + 12, rel.begin() + 16);
+    std::vector<int> knownX(rel.begin() + 16, rel.begin() + 19);
+    uint64_t knownYmask = 0; for (int d : knownY) knownYmask |= bit(d);
+    uint64_t knownXmask = 0; for (int d : knownX) knownXmask |= bit(d);
+    uint64_t knownLeafmask = 0; for (int d : knownLeaf) knownLeafmask |= bit(d);
+
+    u128 Lc = c.L_c;
+    u64 yCount = 0, branchNodes = 0, terminalNodes = 0;
+    double buildSortSeconds = 0, genSeconds = 0;
+    PatriciaTrie pt = buildPatriciaTrie(br, c, 4, yCount, branchNodes, terminalNodes, buildSortSeconds, genSeconds);
+    u64 totalNodes = pt.nodes.size();
+    fprintf(stderr, "[pgate] patricia trie built: %llu y-arrangements, %llu compact nodes (branch=%llu terminal=%llu), "
+                    "gen=%.3fs sort+build=%.3fs\n",
+            (unsigned long long)yCount, (unsigned long long)totalNodes,
+            (unsigned long long)branchNodes, (unsigned long long)terminalNodes, genSeconds, buildSortSeconds);
+
+    uint64_t A19mask = 0; for (int d : br.A19) A19mask |= bit(d);
+    u128 Bexp = powmod_u128((u128)B, 16, Lc);
+
+    u64 totalVisits = 0, totalSurvivors = 0, verifiedOk = 0, verifiedBad = 0;
+    bool foundKnown = false;
+    u64 xCounted = 0;
+
+    forEachPermutation(br.A19, 3, [&](const std::vector<int> &xdigits) {
+        xCounted++;
+        u128 x_val = 0, Bpow = 1;
+        for (int i = 0; i < 3; i++) { x_val += (u128)xdigits[i] * Bpow; Bpow *= (u128)B; }
+        u128 term = mulmod_u128(Bexp, x_val % Lc, Lc);
+        u128 c_x = (br.T_target + Lc - (term % Lc)) % Lc;
+        uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
+        uint64_t allowedMinusX = A19mask & ~xmask;
+        bool thisIsKnownX = (xdigits[0]==knownX[0] && xdigits[1]==knownX[1] && xdigits[2]==knownX[2]);
+        int32_t xP1 = 0; int64_t xP2 = 0;
+        for (int d : xdigits) { xP1 += d; xP2 += (int64_t)d * d; }
+
+        for (int j = 0; j < c.lifts; j++) {
+            u128 W = c_x + (u128)j * Lc;
+            WalkStats stats;
+            patWalkOne(pt, W, allowedMinusX, xmask, A19mask, stats, br, xP1, xP2,
+                [&](const std::array<int,12> &leaf, const PatNode &node, uint64_t used) {
+                    std::vector<int> freePos1to19(19);
+                    for (int i = 0; i < 12; i++) freePos1to19[i] = leaf[i];
+                    for (int i = 0; i < node.termNY; i++) freePos1to19[12 + i] = node.termYdigits[i];
+                    for (int i = 0; i < 3; i++) freePos1to19[16 + i] = xdigits[i];
+                    bool ok = verifySurvivorDirect(c, br, c.prefix, 20, freePos1to19);
+                    if (ok) verifiedOk++; else verifiedBad++;
+                    if (node.termYmask == knownYmask && xmask == knownXmask &&
+                        used == knownLeafmask && thisIsKnownX) {
+                        foundKnown = true;
+                    }
+                });
+            totalVisits += stats.visits;
+            totalSurvivors += stats.survivors;
+        }
+    });
+
+    fprintf(stderr, "[pgate] x permutations=%llu, |Y|=%llu, total visits=%llu, survivors=%llu\n",
+            (unsigned long long)xCounted, (unsigned long long)yCount,
+            (unsigned long long)totalVisits, (unsigned long long)totalSurvivors);
+    fprintf(stderr, "[pgate] direct-arithmetic verification of survivors: %llu OK, %llu FAILED\n",
+            (unsigned long long)verifiedOk, (unsigned long long)verifiedBad);
+    fprintf(stderr, "[pgate] known completion found among survivors: %s\n", foundKnown ? "YES" : "NO");
+    bool pass = foundKnown && (verifiedBad == 0) && (totalSurvivors == verifiedOk);
+    fprintf(stderr, "[pgate] SOUNDNESS GATE: %s\n", pass ? "PASS" : "FAIL");
+}
+
 static bool fileExists(const char *path) {
     struct stat st;
     return stat(path, &st) == 0;
@@ -875,7 +1288,8 @@ int main(int argc, char **argv) {
     printGuardSummary(c);
 
     if (argc < 2) {
-        fprintf(stderr, "usage: %s smoke|gate|full <cand> <NX> <NY> [pruneLevel]\n", argv[0]);
+        fprintf(stderr, "usage: %s smoke|gate|full|pgate|pfull <cand> <NX> <NY> [pruneLevel]\n", argv[0]);
+        fprintf(stderr, "  pgate/pfull: PATRICIA-CARRY-TRIE.md Phase A path-compressed builder/walker\n");
         fprintf(stderr, "  pruneLevel: 0=none 1=rung1(mask-union) 2=+rung2a(p1) 3=+rung2b(p2) [default 3]\n");
         return 1;
     }
@@ -896,6 +1310,18 @@ int main(int argc, char **argv) {
         if (argc >= 6) PRUNE_LEVEL = atoi(argv[5]);
         fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
         runFull(c, cand, NX, NY);
+    } else if (mode == "pgate") {
+        if (argc >= 3) PRUNE_LEVEL = atoi(argv[2]);
+        fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
+        runPatGate(c);
+    } else if (mode == "pfull") {
+        if (argc < 5) { fprintf(stderr, "pfull requires <cand> <NX> <NY>\n"); return 1; }
+        int cand = atoi(argv[2]);
+        int NX = atoi(argv[3]);
+        int NY = atoi(argv[4]);
+        if (argc >= 6) PRUNE_LEVEL = atoi(argv[5]);
+        fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
+        runPatFull(c, cand, NX, NY);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 1;
