@@ -80,7 +80,8 @@ B−1 is prime or nearly-prime should behave like b54; smooth B−1 like b52
 | 57 | 1151406937346438856563169238699639272012360683309171137238477150432093884638244390036253366400 | **STRONG** (single exhaustive) | 46s | B−1=56=2³·7; \|D\|=53 drop {19,27,38}, candidate 15, 6 wrong turns |
 | 58 | 9736569208044009047215982390641931224449891752961186859894784030413187509184301962164357195502400 | **CERTIFIED (clean at W=21)** — SUPERSEDED the fast-pass weak value | 1588s fast + 2394s @W21 | +1 probe found a strictly larger \|D\|=55 completion (drop {28,29}) with clean exit-0 — third instance of weak=submaximal |
 | 59 | 1470901301179362895265301083750020315277766231253346714280007293140176130090413579681261985958564000 | **WEAK candidate — superseded at W=21, still window-bounded, needs >+1** | 1372s fast + 927s @W21 | B−1=58=2·29. The +1 probe found a strictly larger \|D\|=56 completion (drop {14,15} vs fast's {43,44} — different subset!) but 1 earlier subset stayed window-bounded. Fourth weak=understated instance. Deep-ladder base alongside b54. |
-| 60–64 | *(fast-mode climb in progress)* | | | |
+| 60 | *(none)* | **NO-VALUE — timeout, mode = DISCOVERY CHURN** | >5400s @W21 | A third hardness mode, distinct from band depth: 60=2²·3·5 is highly composite, so the ten-rule forces eliminating an entire prime power from the lcm (cheapest: drop all 11 multiples of 5 → first feasible \|D\|≈48), and the descending-k subset enumerator must churn ~C(59,10)≈6×10¹⁰ infeasible subsets to get there. The log confirms: 90 min, zero subsets scanned, zero plans. This is an enumeration-order engine limitation (fixable analytically by enumerating only ten-rule-feasible subsets), not search hardness. Predicts: b61 easy (prime), b62/63 moderate, b64 easy (2⁶ exceeds any digit's 2-power — no drops needed). |
+| 61–64 | *(fast-mode climb in progress @W21)* | | | |
 
 ## Structural finding: the W=20 window undershoots past the onset
 
