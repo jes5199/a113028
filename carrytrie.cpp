@@ -2666,7 +2666,8 @@ static std::string formatGiB(u128 bytes) {
 // terminates the process immediately (exit 3 = BUCKET_DECLINED) with a
 // reproducible trace, rather than returning a value the caller (or the
 // wrong-turn search above it) could interpret as "no survivors."
-static void bucketAdmissionGate(int a, int NY, int K, int B, long rssBudgetKB) {
+static void bucketAdmissionGate(int a, int NY, int K, int B, long rssBudgetKB,
+                                 size_t recBytes = sizeof(BucketRecordGen)) {
     if (rssBudgetKB <= 0) return;
 
     auto yOpt = checkedFallingFactorial(a, NY);
@@ -2693,11 +2694,11 @@ static void bucketAdmissionGate(int a, int NY, int K, int B, long rssBudgetKB) {
         else {
             auto cOpt = nextPow2U128(Y);
             u128 C = cOpt ? *cOpt : Y;
-            u128 recBytes = (u128)sizeof(BucketRecordGen);
+            u128 recBytesU = (u128)recBytes;
             u128 idxBytes = (u128)sizeof(uint32_t);
             // doc Sec 3: C(R+4) + YR + 12(Q+1), using real sizeof rather than
             // the copied constants in the doc's worked example.
-            projected = C * (recBytes + idxBytes) + Y * recBytes + (u128)3 * (Q + 1) * idxBytes;
+            projected = C * (recBytesU + idxBytes) + Y * recBytesU + (u128)3 * (Q + 1) * idxBytes;
             haveProjected = true;
             u128 need = projected + (projected * 15) / 100; // 1.15x projected
             if (need > available) { declined = true; reason = "insufficient_budget"; }
@@ -2813,6 +2814,136 @@ static void bucketSearchXGen(const BucketIndexGen &idx, u128 c_x, u128 Lc, int l
                     if (leaf >= Bpow[Pc]) continue;
                     uint64_t decodedMask;
                     if (!decodeDistinctLeafGen(leaf, allowed, B, Pc, decodedMask)) continue;
+                    uint64_t required = Amask & ~xmask & ~r.yMask;
+                    if (decodedMask != required) continue;
+                    stats.survivors++;
+                    onSurvivor(r, leaf, decodedMask);
+                }
+            });
+    }
+}
+
+// ============================================================================
+// Full-modulus bucket engine (BASE-50-FULL-MODULUS-BUCKET.md Sec 4/9 Phase A).
+//
+// Same shallow-radix join machinery as the peeled path above, but run
+// directly modulo the original L instead of modulo L_c after nilpotent
+// suffix-peeling: M=L, leaf width P=P_full=ceil(log_B L), no suffix
+// enumeration (T plays no role -- the nilpotent condition is absorbed by
+// working mod the full L). Records additionally carry PACKED ORDERED y
+// digits so no modular inverse of B mod L is needed to recover y from u_y
+// (doc Sec 4 "No inverse of 50 modulo L is needed", Sec 9 "Remove the
+// modular-inverse reconstruction requirement").
+//
+// doc Sec 7 CRITICAL warning: never deduplicate records sharing (u, mask) --
+// different digit orders of the same y multiset are distinct records with
+// distinct reconstructions. Packing the exact digit order (not just the
+// residue/mask) sidesteps this trap: every permutation gets its own record.
+// ============================================================================
+
+// NY <= 5 digits, each < 64, packed 6 bits/digit LSD-first into a uint32_t
+// (30 bits used of 32). Digit 0 is never a valid selected digit here (all
+// digits are 1..B-1), so 0 is safe as a non-conflicting pad value, but we
+// never rely on that -- unpack always uses the caller-supplied NY count.
+static inline uint32_t packDigitsLSD(const std::vector<int> &digits) {
+    uint32_t packed = 0;
+    for (size_t i = 0; i < digits.size(); i++) packed |= (uint32_t)(digits[i] & 0x3F) << (6 * i);
+    return packed;
+}
+static inline void unpackDigitsLSD(uint32_t packed, int count, std::vector<int> &out) {
+    out.resize(count);
+    for (int i = 0; i < count; i++) out[i] = (int)((packed >> (6 * i)) & 0x3F);
+}
+
+struct BucketRecordFM { u128 u; uint64_t yMask; uint32_t yDigitsPacked; };
+struct BucketIndexFM {
+    std::vector<uint32_t> offsets;
+    std::vector<BucketRecordFM> records;
+    int K = 3;
+    u64 bucketCount = 0;
+};
+
+// Mirrors buildBucketIndexGen exactly, parameterized by the general modulus
+// M and leaf width P instead of the peeled path's fixed L_c/Pc, and storing
+// packed y digits in each record. Reuses the SAME admission gate
+// (bucketAdmissionGate), passing the FM record's larger sizeof so the memory
+// projection stays accurate for this record shape.
+static BucketIndexFM buildBucketIndexFM(const std::vector<int> &A, int NY, int K, int B, int P, u128 M,
+                                         u64 &yCount, long rssBudgetKB = -1) {
+    bucketAdmissionGate((int)A.size(), NY, K, B, rssBudgetKB, sizeof(BucketRecordFM));
+    u128 BPmodM = powmod_u128((u128)B, (u128)P, M);
+    u64 bucketCount = 1;
+    for (int i = 0; i < K; i++) bucketCount *= (u64)B;
+    u128 bucketMod = (u128)bucketCount;
+
+    std::vector<BucketRecordFM> raw;
+    std::vector<uint32_t> key;
+    std::vector<uint32_t> counts(bucketCount + 1, 0);
+    forEachPermutation(A, NY, [&](const std::vector<int> &ydigits) {
+        u128 y_val = 0, Bpow = 1;
+        for (int i = 0; i < NY; i++) { y_val += (u128)ydigits[i] * Bpow; Bpow *= (u128)B; }
+        u128 u_y = mulmod_u128(BPmodM, y_val % M, M);
+        uint64_t m = 0; for (int d : ydigits) m |= bit(d);
+        uint32_t packed = packDigitsLSD(ydigits);
+        raw.push_back({u_y, m, packed});
+        uint32_t k = (uint32_t)(u_y % bucketMod);
+        key.push_back(k);
+        counts[k + 1]++;
+    });
+    yCount = raw.size();
+    checkRssBudget(rssBudgetKB, "certdrv-fm-bucket-post-generation");
+
+    for (u64 i = 0; i < bucketCount; i++) counts[i + 1] += counts[i];
+    BucketIndexFM idx;
+    idx.K = K; idx.bucketCount = bucketCount;
+    idx.offsets = counts;
+    idx.records.resize(raw.size());
+    std::vector<uint32_t> cursor(idx.offsets.begin(), idx.offsets.end());
+    for (size_t i = 0; i < raw.size(); i++) { uint32_t k = key[i]; idx.records[cursor[k]++] = raw[i]; }
+    checkRssBudget(rssBudgetKB, "certdrv-fm-bucket-post-build");
+    return idx;
+}
+
+// Mirrors bucketSearchXGen, but takes an explicit `liftsFull` (the caller
+// computes the CONSERVATIVE-INCLUSIVE lift bound per doc Sec 4 "Lift
+// enumeration": j = 0 .. ceil(B^P / M) inclusive -- NOT the peeled path's
+// ceil(B^Pc / Lc) convention without the +1) and searches BucketRecordFM
+// records instead of BucketRecordGen. The per-record acceptance tests
+// (mask disjointness, W >= u, leaf < B^P, exact decoded-mask match) are
+// IDENTICAL to the peeled path and constitute the doc Sec 8 correctness
+// argument steps 4-6; W >= r.u / leaf < Bpow[P] here is exactly the
+// "retain a pair only when W_j >= u_y AND W_j - u_y < B^P" condition from
+// doc Sec 4, applied per-record across all lifts rather than assuming a
+// fixed count.
+template <typename OnSurvivor>
+static void bucketSearchXFM(const BucketIndexFM &idx, u128 c_x, u128 M, int liftsFull, int B, int P,
+                             uint64_t xmask, uint64_t Amask, int K, BucketStatsGen &stats,
+                             const std::vector<u128> &Bpow, OnSurvivor &&onSurvivor) {
+    uint64_t allowed = Amask & ~xmask;
+    LeafEnvelopeGen env{};
+    if (SIEVE_LEVEL & 1) env = leafEnvelopeGen(allowed, B, P);
+    for (int j = 0; j < liftsFull; j++) {
+        u128 W = c_x + (u128)j * M;
+        if (SIEVE_LEVEL & 1) {
+            stats.roots++;
+            if (W < env.lo) { stats.rootsRejected++; continue; }
+            u128 minReq = (W > env.hi) ? (W - env.hi) : (u128)0;
+            if (minReq >= M) { stats.rootsRejected++; continue; }
+        } else stats.roots++;
+        auto Wdig = digitsLSDofGen(W, B, K > P ? K : P);
+        enumLeafPrefixGen(0, K, B, 0, 0, 0, 1, Wdig, allowed,
+            [&](uint64_t key, uint64_t lowLeafMask) {
+                stats.lookups++;
+                uint32_t lo = idx.offsets[key], hi = idx.offsets[key + 1];
+                for (uint32_t p = lo; p < hi; p++) {
+                    stats.scans++;
+                    const BucketRecordFM &r = idx.records[p];
+                    if (r.yMask & (xmask | lowLeafMask)) continue;
+                    if (W < r.u) continue;
+                    u128 leaf = W - r.u;
+                    if (leaf >= Bpow[P]) continue;
+                    uint64_t decodedMask;
+                    if (!decodeDistinctLeafGen(leaf, allowed, B, P, decodedMask)) continue;
                     uint64_t required = Amask & ~xmask & ~r.yMask;
                     if (decodedMask != required) continue;
                     stats.survivors++;
@@ -2956,6 +3087,128 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
             checkRssBudget(rssBudgetKB, "certdrv-per-suffix-tuple");
             long kb = peakRssKB(); if (kb > res.peakRssKBSeen) res.peakRssKBSeen = kb;
         }
+
+        if (totalSurvivors == 0) {
+            res.wrongTurnsRefuted++;
+            continue; // refuted: this digit can never occupy the window-top position
+        }
+
+        // Survivors found: this candidate wins. Take the max, verify, done.
+        res.success = true;
+        res.totalSurvivors = totalSurvivors;
+        res.verifiedOk = verifiedOk; res.verifiedBad = verifiedBad;
+        res.maxDecimal = bestDecimal;
+        res.winningCandidate = candidate;
+        break;
+    }
+
+    auto t1 = clock::now();
+    res.wallSeconds = std::chrono::duration<double>(t1 - t0).count();
+    return res;
+}
+
+// Full-modulus analogue of runWrongTurnSearch (BASE-50-FULL-MODULUS-BUCKET.md
+// Sec 4/8/9 Phase A): replaces the per-suffix peeled join (modulus L_c, T
+// suffix digits consumed first, one bucket search per admissible ordered
+// suffix) with ONE join directly modulo the original L. There is no suffix
+// loop at all -- T plays no role in this decomposition -- so `pool` minus
+// the tried candidate IS the free window directly (size P+NX+NY), unlike
+// the peeled path where restPool still had to be split into a suffix tuple
+// plus SuffixBranchGen's freeDigits. The CANDIDATE_POS=20 invariant becomes
+// P + NY + NX == 20 (asserted below rather than assumed).
+static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vector<int> &prefix,
+                                           const std::vector<int> &pool, int P, int NX, int NY, int K,
+                                           long rssBudgetKB) {
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+    AttemptResult res;
+
+    if (P + NX + NY != 20) {
+        fprintf(stderr, "[certfm] FATAL: CANDIDATE_POS invariant violated: P=%d NX=%d NY=%d (sum=%d != 20)\n",
+                P, NX, NY, P + NX + NY);
+        exit(1);
+    }
+
+    std::vector<int> candidates = pool; // try largest-first
+    std::sort(candidates.begin(), candidates.end(), std::greater<int>());
+
+    std::vector<u128> Bpow(P + 1, 1);
+    for (int i = 1; i <= P; i++) Bpow[i] = Bpow[i-1] * (u128)c.B;
+
+    // Conservative-inclusive lift count (doc Sec 4 "Lift enumeration"):
+    // j = 0 .. ceil(B^P / L) inclusive -- NOT the peeled path's fixed-count
+    // convention. This is what covers the u_y > c_x wrap case soundly.
+    u128 jmax = (Bpow[P] + c.L - 1) / c.L;
+    int liftsFull = (int)jmax + 1;
+
+    const std::vector<int> emptySuffix; // no suffix in the full-modulus join
+
+    for (int candidate : candidates) {
+        std::vector<int> restPool;
+        for (int d : pool) if (d != candidate) restPool.push_back(d);
+        if ((int)restPool.size() != P + NX + NY) continue; // shouldn't happen; defensive
+
+        uint64_t Amask = 0; for (int d : restPool) Amask |= bit(d);
+
+        // C: contribution of the fixed prefix and this candidate mod L
+        // (mirrors buildSuffixBranchGen's C computation, but with NO suffix
+        // term and NO B^{-T} shift -- there is no suffix to fold in here).
+        // N == C + leaf + B^P y + B^(P+NY) x (mod L), so
+        // leaf + B^P y + B^(P+NY) x == target := -C (mod L).
+        u128 C = 0;
+        int pos = 20 + (int)prefix.size();
+        for (int dd : prefix) {
+            u128 term = mulmod_u128((u128)dd, powmod_u128((u128)c.B, (u128)pos, c.L), c.L);
+            C = (C + term) % c.L;
+            pos--;
+        }
+        C = (C + mulmod_u128((u128)candidate, powmod_u128((u128)c.B, 20, c.L), c.L)) % c.L;
+        u128 target = (c.L - (C % c.L)) % c.L;
+
+        u64 yCount = 0;
+        BucketIndexFM idx = buildBucketIndexFM(restPool, NY, K, c.B, P, c.L, yCount, rssBudgetKB);
+        u128 Bexp = powmod_u128((u128)c.B, (u128)(P + NY), c.L);
+        BucketStatsGen stats;
+        u64 totalSurvivors = 0, verifiedOk = 0, verifiedBad = 0;
+        std::string bestDecimal;
+
+        forEachPermutation(restPool, NX, [&](const std::vector<int> &xdigits) {
+            u128 x_val = 0, Bp = 1;
+            for (int i = 0; i < NX; i++) { x_val += (u128)xdigits[i] * Bp; Bp *= (u128)c.B; }
+            u128 term = mulmod_u128(Bexp, x_val % c.L, c.L);
+            u128 c_x = (target + c.L - (term % c.L)) % c.L;
+            uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
+            bucketSearchXFM(idx, c_x, c.L, liftsFull, c.B, P, xmask, Amask, K, stats, Bpow,
+                [&](const BucketRecordFM &r, u128 leaf, uint64_t decodedMask) {
+                    std::vector<int> leafDigits(P);
+                    u128 lv = leaf;
+                    for (int i = 0; i < P; i++) { leafDigits[i] = (int)(lv % (u128)c.B); lv /= (u128)c.B; }
+                    // Packed ordered y digits recovered directly -- NO
+                    // modular inverse of B mod L (doc Sec 4/9).
+                    std::vector<int> ydigits;
+                    unpackDigitsLSD(r.yDigitsPacked, NY, ydigits);
+
+                    std::vector<int> freeMSB;
+                    for (int i = NX - 1; i >= 0; i--) freeMSB.push_back(xdigits[i]);
+                    for (int i = NY - 1; i >= 0; i--) freeMSB.push_back(ydigits[i]);
+                    for (int i = P - 1; i >= 0; i--) freeMSB.push_back(leafDigits[i]);
+
+                    // doc Sec 4 step 9 / Sec 8 step 7: direct reconstruction
+                    // and reduction mod the ORIGINAL L, independent of the
+                    // join arithmetic above.
+                    bool ok = verifySurvivorDirectGen(c, prefix, candidate, emptySuffix, freeMSB);
+                    if (ok) verifiedOk++; else verifiedBad++;
+                    if (ok) {
+                        std::string dec = reconstructDecimalGen(c.B, prefix, candidate, emptySuffix, freeMSB);
+                        if (bestDecimal.empty() || dec.size() > bestDecimal.size() ||
+                            (dec.size() == bestDecimal.size() && dec > bestDecimal))
+                            bestDecimal = dec;
+                    }
+                });
+        });
+        totalSurvivors += stats.survivors;
+        checkRssBudget(rssBudgetKB, "certdrv-fm-per-candidate");
+        long kb = peakRssKB(); if (kb > res.peakRssKBSeen) res.peakRssKBSeen = kb;
 
         if (totalSurvivors == 0) {
             res.wrongTurnsRefuted++;
@@ -3399,6 +3652,146 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
                     "[subsetsChecked=%lld subsetsScanned=%lld]\n", B, subsetsChecked, subsetsScanned);
 }
 
+// Full-modulus driver (BASE-50-FULL-MODULUS-BUCKET.md Sec 9 Phase A): exact
+// same subset-discovery loop, prefix-construction, and CERTIFIED/Declined-
+// vs-Refuted soundness discipline as runCert, but replaces the per-suffix
+// peeled join with runWrongTurnSearchFM (ONE join directly modulo the
+// original L, no suffix enumeration). Selected via a separate CLI mode
+// (`certfm`) so the default `cert` path stays bit-identical -- this is
+// purely additive.
+static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB, double capSeconds1800, double capSeconds5400) {
+    using clock = std::chrono::steady_clock;
+    auto tAll0 = clock::now();
+    int n = B - 1;
+    fprintf(stderr, "[certfm] base=%d, n=%d, autonomous subset+divergence discovery starting "
+                     "(full-modulus bucket join, subsetdisc: solve_base-style descending-lex enumeration)\n", B, n);
+
+    // Same ABSOLUTE digit-position convention as runCert's chooseWY/
+    // buildSuffixBranchGen (candidate fixed at position 20), but with T
+    // replaced by 0 (no suffix in the full-modulus decomposition) and Pc
+    // replaced by P_full = ceil(log_B L): P + NY + NX == CANDIDATE_POS,
+    // always. NY is derived from the invariant directly, with NX shrunk
+    // first if P alone already leaves little room -- mirrors chooseWY
+    // exactly, just with (0, P_full) standing in for (T, Pc).
+    const int CANDIDATE_POS = 20;
+    auto chooseWYFM = [&](const ConstantsGen &c, int &outP) -> std::pair<int,int> {
+        u128 v = 1; int P = 0;
+        while (v < c.L) { v *= (u128)c.B; P++; }
+        outP = P;
+        int NX = 2;
+        int NY = CANDIDATE_POS - P - NX;
+        if (NY < 1) { NX = 1; NY = CANDIDATE_POS - P - NX; }
+        if (NY < 1) { NX = 0; NY = CANDIDATE_POS - P - NX; }
+        return std::make_pair(NX, NY);
+    };
+
+    subsetdisc::SB_B = B;
+    long long subsetsChecked = 0, subsetsScanned = 0;
+
+    for (int k = n; k >= 1; k--) {
+        subsetdisc::SB_k = k;
+        std::vector<int> comb(k);
+        for (int i = 0; i < k; i++) comb[i] = i;
+        bool done = false;
+        while (!done) {
+            for (int i = 0; i < k; i++) subsetdisc::SB_S[i] = (B - 1) - comb[i];
+            subsetsChecked++;
+            subsetdisc::SB_setmask = 0;
+            for (int i = 0; i < k; i++) subsetdisc::SB_setmask |= 1ULL << subsetdisc::SB_S[i];
+
+            if (subsetdisc::SB_build_pps() && subsetdisc::SB_subset_filters()) {
+                subsetsScanned++;
+                std::vector<int> D(subsetdisc::SB_S, subsetdisc::SB_S + k);
+
+                if (getenv("DEBUG_SUBSETDISC")) {
+                    std::vector<bool> present(B, false);
+                    for (int d : D) present[d] = true;
+                    fprintf(stderr, "[dbg-fm] k=%d dropped=", k);
+                    for (int d = 1; d < B; d++) if (!present[d]) fprintf(stderr, "%d,", d);
+                    fprintf(stderr, "\n");
+                }
+
+                ConstantsGen c = deriveConstantsGen(B, D);
+                if (c.ok) {
+                    int P = 0;
+                    auto [NX, NY] = chooseWYFM(c, P);
+                    if (P < CANDIDATE_POS) {
+                        // buildFeasiblePrefix only consults c.T/c.Pc/c.Lnil (via
+                        // countAdmissibleSuffixTuplesGen, which with T=0
+                        // trivially always admits the empty tuple -- exactly
+                        // right for "no suffix" here); reuse it unmodified via
+                        // a T=0/Pc=P_full view of this subset's constants.
+                        ConstantsGen cFM = c;
+                        cFM.T = 0; cFM.Pc = P;
+                        std::vector<int> prefix, pool;
+                        bool feas = buildFeasiblePrefix(cFM, NX + NY, 3, prefix, pool);
+                        if (getenv("DEBUG_SUBSETDISC") && !feas) fprintf(stderr, "[dbg-fm]   buildFeasiblePrefix FAILED (P=%d NX=%d NY=%d)\n", P, NX, NY);
+                        if (feas) {
+                            AttemptResult ar = runWrongTurnSearchFM(c, prefix, pool, P, NX, NY, 3, rssBudgetKB);
+                            if (getenv("DEBUG_SUBSETDISC")) fprintf(stderr, "[dbg-fm]   success=%d winCand=%d refuted=%d survivors=%llu verifiedOk=%llu verifiedBad=%llu prefixLen=%zu poolLen=%zu P=%d NX=%d NY=%d\n",
+                                ar.success, ar.winningCandidate, ar.wrongTurnsRefuted, (unsigned long long)ar.totalSurvivors,
+                                (unsigned long long)ar.verifiedOk, (unsigned long long)ar.verifiedBad, prefix.size(), pool.size(), P, NX, NY);
+
+                            double elapsed = std::chrono::duration<double>(clock::now() - tAll0).count();
+                            if (elapsed > capSeconds1800 && elapsed < capSeconds1800 + 5) {
+                                fprintf(stderr, "[certfm] checkpoint at %.0fs: still searching (k=%d, subsetsChecked=%lld, "
+                                                "subsetsScanned=%lld)\n", elapsed, k, subsetsChecked, subsetsScanned);
+                            }
+                            if (elapsed > capSeconds5400) {
+                                fprintf(stderr, "[certfm] FATAL: exceeded %.0fs cap, aborting search\n", capSeconds5400);
+                                return;
+                            }
+
+                            // Same Declined-vs-Refuted-safe "certified completion"
+                            // discipline as runCert (RADIX-BUCKET-ADMISSION-CONTROL.md
+                            // Sec 9): success alone is not sufficient.
+                            bool certified = ar.success && ar.verifiedOk >= 1 && ar.verifiedBad == 0;
+                            if (ar.success && !certified && getenv("DEBUG_SUBSETDISC")) {
+                                fprintf(stderr, "[certfm] base=%d: subset |D|=%d had %llu survivor(s) but NONE "
+                                                "direct-verified true (verified %llu OK / %llu FAILED) -- not a "
+                                                "certified completion, continuing\n",
+                                        B, k, (unsigned long long)ar.totalSurvivors,
+                                        (unsigned long long)ar.verifiedOk, (unsigned long long)ar.verifiedBad);
+                            }
+                            if (certified) {
+                                fprintf(stderr, "[certfm] base=%d: FOUND with |D|=%d (dropped %d digit(s)) prefixLen=%zu "
+                                                "poolSize=%zu winningCandidate=%d wrongTurnsRefuted=%d survivors=%llu "
+                                                "(verified %llu OK / %llu FAILED) wall=%.3fs peakRSS~%ldKB "
+                                                "[subsetsChecked=%lld subsetsScanned=%lld]\n",
+                                        B, k, n - k, prefix.size(), pool.size(), ar.winningCandidate,
+                                        ar.wrongTurnsRefuted, (unsigned long long)ar.totalSurvivors,
+                                        (unsigned long long)ar.verifiedOk, (unsigned long long)ar.verifiedBad,
+                                        ar.wallSeconds, ar.peakRssKBSeen, subsetsChecked, subsetsScanned);
+                                fprintf(stderr, "[certfm] base=%d: maximum value (%zu digits): %s\n",
+                                        B, ar.maxDecimal.size(), ar.maxDecimal.c_str());
+
+                                bool exact = expectedDecimalOrNull && ar.maxDecimal == expectedDecimalOrNull;
+                                if (expectedDecimalOrNull) {
+                                    fprintf(stderr, "[certfm] base=%d CERTIFICATION (matches known target): %s\n",
+                                            B, exact ? "PASS" : "FAIL");
+                                } else {
+                                    fprintf(stderr, "[certfm] base=%d CERTIFICATION (direct-verified, no external target "
+                                                    "to compare): PASS\n", B);
+                                }
+                                double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
+                                fprintf(stderr, "[certfm] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+
+            int i = k - 1;
+            while (i >= 0 && comb[i] == n - k + i) i--;
+            if (i < 0) { done = true; }
+            else { comb[i]++; for (int j = i + 1; j < k; j++) comb[j] = comb[j - 1] + 1; }
+        }
+    }
+    fprintf(stderr, "[certfm] base=%d: FAILED to find a working (subset, prefix) hypothesis within bounded search "
+                    "[subsetsChecked=%lld subsetsScanned=%lld]\n", B, subsetsChecked, subsetsScanned);
+}
+
 } // namespace certdrv
 
 int main(int argc, char **argv) {
@@ -3509,6 +3902,18 @@ int main(int argc, char **argv) {
         if (argc >= 5) rssBudgetKB = atol(argv[4]);
         fprintf(stderr, "[cert] base=%d rssBudgetKB=%ld expected=%s\n", base, rssBudgetKB, expected ? expected : "(none)");
         certdrv::runCert(base, expected, rssBudgetKB, 1800.0, 5400.0);
+    } else if (mode == "certfm") {
+        // certfm <base> [expectedDecimal] [rssBudgetKB]
+        // BASE-50-FULL-MODULUS-BUCKET.md Sec 9 Phase A: full-modulus shallow
+        // bucket join (modulus L, no nilpotent suffix peeling), same CLI
+        // argument conventions as `cert`.
+        if (argc < 3) { fprintf(stderr, "certfm requires <base>\n"); return 1; }
+        int base = atoi(argv[2]);
+        const char *expected = (argc >= 4 && std::string(argv[3]) != "-") ? argv[3] : nullptr;
+        long rssBudgetKB = -1;
+        if (argc >= 5) rssBudgetKB = atol(argv[4]);
+        fprintf(stderr, "[certfm] base=%d rssBudgetKB=%ld expected=%s\n", base, rssBudgetKB, expected ? expected : "(none)");
+        certdrv::runCertFM(base, expected, rssBudgetKB, 1800.0, 5400.0);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 1;
