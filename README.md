@@ -53,6 +53,12 @@ in the *Method* section — m\* is the divergence depth (how many trailing
 positions differ from the plain descending arrangement) and W ≈ m\*!/P! is
 the predicted size of the irreducible search band.
 
+Rows for bases 41–49 also carry the verdict of the 2026-07-23 autonomous
+bucket-cert sweep (carrytrie `cert` mode — subset discovery + shallow-bucket
+join + direct verification, self-checked against the known value): *bucket ✓
+time* = certified by the bucket engine in that wall-clock; *bucket ✗* =
+honest bucket failure (reason + scan-fallback time in RESULTS.md).
+
 | base | value (alphabet) | wall-clock | m\* | log₁₀ W |
 |-----:|------------------|-----------:|----:|--------:|
 | 2 | `1` | 0.000s | 1 | 0.0 |
@@ -94,8 +100,8 @@ the predicted size of the irreducible search band.
 | 38 | `βαZYXWVUTSRQPONMLKGFDE2986BH3C4157A` | 11.3s | 16 | 6.8 |
 | 39 | `γβαZYXWVUTSRPONMLKJ54H31E72B9FAC8G6` | 46.4s | 16 | 6.8 |
 | 40 | `δγαZYXVUTSRQPNMLJIFEC6AB13D9254H7K` | 5.81s | 15 | 6.6 |
-| 41 | `εδγβαZYXWVUTSRQPONMLJIFGC8574AED6H1932B` | 24.9s | 17 | 8.0 |
-| 42 | `ζεδγβαYXWVUTRQPONM6KDF8JA239G5HB14C` | 1m 12.6s | 18 | 8.2 |
+| 41 | `εδγβαZYXWVUTSRQPONMLJIFGC8574AED6H1932B` | 24.9s · bucket ✗ (mem), scan 44.1s | 17 | 8.0 |
+| 42 | `ζεδγβαYXWVUTRQPONM6KDF8JA239G5HB14C` | 1m 12.6s · bucket ✓ 5m 58.3s | 18 | 8.2 |
 | 43 | `ηζεδγβαZYXWVUTSRQPONMKIAD5BCHFE78369421GJ` | 16m 8s | 18 | 8.2 |
 | 44 | `θηζεδγβαZYWVUTSRQPONGJ5H198CD2I76FE3AL4` | 20m 40.7s | 19 | 9.5 |
 | 45 | `ιθηζεδγβZYXWVUTSQPONLM1D4GCH287EBAJ563F` | 5m 43.8s | 19 | 9.5 |
