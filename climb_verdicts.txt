@@ -11,3 +11,4 @@ b59: WEAK(refute-descend, window-bounded) 1372s FOUND with |D|=56 (dropped 2 dig
 b60: [VOID — rc=143 was operator SIGTERM during the W=20→W=21 width switch, not an engine verdict; b60 rerun at W=21 below]
 === climb resumed b60->b64 at CERTPOS=21 (width decision, see FRONTIER-STATUS) 2026-07-23T15:44:59Z ===
 b60: NO-VALUE (timeout >5400s @W21)
+b61: WEAK@W21(refute-descend) 1504s FOUND with |D|=58 (dropped 2 digit(s)) family=peeled NX=2 NY=5 K=3 winningCandidate=22 wrongTurnsRefuted=0 survivors=1 (verified 1 OK / 0 FAILED) wall=372.115s peakRSS~192368KB  maximum value (104 digits): 35400531009451661938977999331213310176526542300021623090439321414194700171315894915223503137438256132800
