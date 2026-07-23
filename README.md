@@ -102,7 +102,7 @@ honest bucket failure (reason + scan-fallback time in RESULTS.md).
 | 40 | `δγαZYXVUTSRQPNMLJIFEC6AB13D9254H7K` | 5.81s | 15 | 6.6 |
 | 41 | `εδγβαZYXWVUTSRQPONMLJIFGC8574AED6H1932B` | 24.9s · bucket ✗ (mem), scan 44.1s | 17 | 8.0 |
 | 42 | `ζεδγβαYXWVUTRQPONM6KDF8JA239G5HB14C` | 1m 12.6s · bucket ✓ 5m 58.3s | 18 | 8.2 |
-| 43 | `ηζεδγβαZYXWVUTSRQPONMKIAD5BCHFE78369421GJ` | 16m 8s | 18 | 8.2 |
+| 43 | `ηζεδγβαZYXWVUTSRQPONMKIAD5BCHFE78369421GJ` | **13m 51.5s** · bucket ✓ (record — beat the 16m 8s scan even under concurrent load) | 18 | 8.2 |
 | 44 | `θηζεδγβαZYWVUTSRQPONGJ5H198CD2I76FE3AL4` | 20m 40.7s | 19 | 9.5 |
 | 45 | `ιθηζεδγβZYXWVUTSQPONLM1D4GCH287EBAJ563F` | 5m 43.8s | 19 | 9.5 |
 | 46 | `κιθηζεδγβαZYXWVUTSRQPOLKJ628BID1G45F3CAH79E` **(corrected — see note)** | 6m 28.2s | 19 | 9.5 |
