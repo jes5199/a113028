@@ -130,4 +130,5 @@ BUCKET-only times — no scan fallback. Sequential sweep, nice 19, per-base
 | 42 | **bucket CERTIFIED PASS** — autonomous subset discovery churned 2,293,434 subsets to find \|D\|=35 (dropped 6), winningCandidate=25, 3095 survivors all direct-verified, peak RSS ~7MB | 358.3s | **MATCH** |
 | 43 | **bucket CERTIFIED PASS — NEW RECORD** (prime base, no peel: bucket still fit, peak RSS ~1.27GB; \|D\|=41 drop-1, candidate 22, 1351 survivors all verified; beat the 968s quiet-box scan record despite 4 concurrent nice-19 dual-campaign processes) | **831.5s** | **MATCH** |
 | 44 | **bucket CERTIFIED PASS — NEW RECORD, 10.3×** (old best 1240.7s scan; \|D\|=39 drop-4, candidate 24, 71 survivors all verified, peak RSS ~61MB, 50,760 subsets churned) | **120.4s** | **MATCH** |
-| 45–49 | in flight (bucket-first, scan fallback on bucket failure) | | |
+| 45 | **bucket CERTIFIED PASS — NEW RECORD, 4.9×** (old best 343.8s scan; \|D\|=39 drop-5, candidate 24, 67 survivors all verified, peak RSS ~892MB, 490,682 subsets churned) | **70.3s** | **MATCH** |
+| 46–49 | in flight (bucket-first, scan fallback on bucket failure) | | |
