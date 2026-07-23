@@ -101,8 +101,8 @@ the predicted size of the irreducible search band.
 | 45 | `ιθηζεδγβZYXWVUTSQPONLM1D4GCH287EBAJ563F` | 5m 43.8s | 19 | 9.5 |
 | 46 | `κιθηζεδγβαZYXWVUTSRQPOLKJ628BID1G45F3CAH79E` **(corrected — see note)** | 6m 28.2s | 19 | 9.5 |
 | 47 | `λκιθηζεδγβαZYXWVUTSRQPOMLKHGF7D46JI1ACE958B23` | 4m 1.9s | 20 | 9.7 |
-| 48 | `μκιθηζεδγβαZYXVUTSRQPNMKL1J92B3HI8C675DEAF4O` | certified (peeling) | 20 | 9.7 |
-| 49 | `νμλκιθηζεδγβαZYXWVUTSRQPNMK9CJ23BFAE6GI81DHL547` | certified (peeling) | 21 | 9.9 |
+| 48 | `μκιθηζεδγβαZYXVUTSRQPNMKL1J92B3HI8C675DEAF4O` | 10.35s CERTIFIED (shallow-bucket join, auto-configured) | 20 | 9.7 |
+| 49 | `νμλκιθηζεδγβαZYXWVUTSRQPNMK9CJ23BFAE6GI81DHL547` | ~4.4s certified structure (shallow-bucket join) | 21 | 9.9 |
 
 
 ### Correction to the published a(46)
