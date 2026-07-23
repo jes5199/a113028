@@ -28,6 +28,7 @@
 #include <functional>
 #include <set>
 #include <unordered_map>
+#include <optional>
 #include <sys/stat.h>
 
 using u64 = uint64_t;
@@ -2606,8 +2607,120 @@ struct BucketIndexGen {
     u64 bucketCount = 0;
 };
 
+// ---------- Checked u128 arithmetic (RADIX-BUCKET-ADMISSION-CONTROL.md Sec 3) ----------
+// Overflow is a policy signal here ("this configuration cannot be sized"),
+// never a silently-wrapped number. All return std::nullopt on overflow.
+static std::optional<u128> checkedMulU128(u128 a, u128 b) {
+    if (a == 0 || b == 0) return (u128)0;
+    static const u128 kU128Max = ~(u128)0;
+    if (a > kU128Max / b) return std::nullopt;
+    return a * b;
+}
+// a P n  (falling factorial: a * (a-1) * ... * (a-n+1)), the exact y-arrangement count.
+static std::optional<u128> checkedFallingFactorial(int a, int n) {
+    if (a < 0 || n < 0 || n > a) return std::nullopt;
+    u128 r = 1;
+    for (int i = 0; i < n; i++) {
+        auto next = checkedMulU128(r, (u128)(a - i));
+        if (!next) return std::nullopt;
+        r = *next;
+    }
+    return r;
+}
+// B^K, the directory bucket count.
+static std::optional<u128> checkedPower(u128 base, int exp) {
+    if (exp < 0) return std::nullopt;
+    u128 r = 1;
+    for (int i = 0; i < exp; i++) {
+        auto next = checkedMulU128(r, base);
+        if (!next) return std::nullopt;
+        r = *next;
+    }
+    return r;
+}
+// Smallest power of two >= n (vector growth capacity bound). nullopt only if
+// that power would exceed 2^127, which cannot happen once n has already
+// passed the Y <= UINT32_MAX gate below.
+static std::optional<u128> nextPow2U128(u128 n) {
+    if (n <= 1) return (u128)1;
+    u128 p = 1;
+    while (p < n) {
+        u128 next = p << 1;
+        if (next <= p) return std::nullopt; // overflowed 128 bits
+        p = next;
+    }
+    return p;
+}
+static std::string formatGiB(u128 bytes) {
+    long double gib = (long double)bytes / (1024.0L * 1024.0L * 1024.0L);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%.2LfGiB", gib);
+    return std::string(buf);
+}
+
+// Preflight admission gate for the current grow-and-scatter builder below
+// (RADIX-BUCKET-ADMISSION-CONTROL.md Sec 2/3, Sec 12 Phase A). Active only
+// when rssBudgetKB > 0; manual/debug call sites that pass -1 keep exactly
+// their current behavior. A decline here is resource POLICY, not
+// mathematics (Sec 9): it must never be mistaken for a refutation, so it
+// terminates the process immediately (exit 3 = BUCKET_DECLINED) with a
+// reproducible trace, rather than returning a value the caller (or the
+// wrong-turn search above it) could interpret as "no survivors."
+static void bucketAdmissionGate(int a, int NY, int K, int B, long rssBudgetKB) {
+    if (rssBudgetKB <= 0) return;
+
+    auto yOpt = checkedFallingFactorial(a, NY);
+    auto qOpt = checkedPower((u128)B, K);
+
+    long currentRssKB = peakRssKB();
+    u128 currentRssBytes = currentRssKB > 0 ? (u128)currentRssKB * 1024 : (u128)0;
+    const u128 kReserveBytes = (u128)256 * 1024 * 1024;
+    u128 budgetBytes = (u128)rssBudgetKB * 1024;
+    u128 available = (budgetBytes > currentRssBytes + kReserveBytes)
+                          ? (budgetBytes - currentRssBytes - kReserveBytes)
+                          : (u128)0;
+
+    bool declined = false;
+    bool haveProjected = false;
+    const char *reason = "";
+    u128 Y = 0, Q = 0, projected = 0;
+
+    if (!yOpt) { declined = true; reason = "Y_overflow"; }
+    else if (!qOpt) { declined = true; reason = "Q_overflow"; }
+    else {
+        Y = *yOpt; Q = *qOpt;
+        if (Y > (u128)UINT32_MAX) { declined = true; reason = "Y_exceeds_uint32"; }
+        else {
+            auto cOpt = nextPow2U128(Y);
+            u128 C = cOpt ? *cOpt : Y;
+            u128 recBytes = (u128)sizeof(BucketRecordGen);
+            u128 idxBytes = (u128)sizeof(uint32_t);
+            // doc Sec 3: C(R+4) + YR + 12(Q+1), using real sizeof rather than
+            // the copied constants in the doc's worked example.
+            projected = C * (recBytes + idxBytes) + Y * recBytes + (u128)3 * (Q + 1) * idxBytes;
+            haveProjected = true;
+            u128 need = projected + (projected * 15) / 100; // 1.15x projected
+            if (need > available) { declined = true; reason = "insufficient_budget"; }
+        }
+    }
+
+    std::string yStr = yOpt ? u128_to_string(Y) : std::string("OVERFLOW");
+    std::string qStr = qOpt ? u128_to_string(Q) : std::string("OVERFLOW");
+    std::string projStr = haveProjected ? formatGiB(projected) : std::string("n/a");
+    fprintf(stderr, "[bucket-plan] B=%d a=%d NY=%d K=%d Y=%s Q=%s projectedPeak=%s availableForIndex=%s\n",
+            B, a, NY, K, yStr.c_str(), qStr.c_str(), projStr.c_str(), formatGiB(available).c_str());
+
+    if (declined) {
+        fprintf(stderr, "[bucket-plan] decision=DECLINE_MEMORY reason=%s fallback=scan (exit 3 = BUCKET_DECLINED)\n", reason);
+        exit(3);
+    }
+
+    fprintf(stderr, "[bucket-plan] decision=ADMIT\n");
+}
+
 static BucketIndexGen buildBucketIndexGen(const std::vector<int> &A, int NY, int K, int B, int Pc, u128 Lc,
                                            u64 &yCount, long rssBudgetKB = -1) {
+    bucketAdmissionGate((int)A.size(), NY, K, B, rssBudgetKB);
     u128 BPcModLc = powmod_u128((u128)B, (u128)Pc, Lc);
     u64 bucketCount = 1;
     for (int i = 0; i < K; i++) bucketCount *= (u64)B;
