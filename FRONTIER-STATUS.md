@@ -95,6 +95,18 @@ adopted 2026-07-23 ~15:45: **W=21 is the fast-pass width from b60 up**
 (climb3.sh); the W=20 attempts of 60–64 were abandoned mid-b60. The W=20
 data through b59 stands as the uniform onset-discovery series.
 
+## Deferred engine fixes (distinct remedies for distinct modes)
+
+- **Band/window depth (b54, b59):** the CERTPOS widen ladder (autowiden.sh),
+  ~9× per width step. This is the only mode the ladder addresses.
+- **Discovery churn (b60):** a *different* fix — generate only
+  ten-rule-feasible subsets (enumerate which prime power to eliminate, then
+  descend over the surviving alphabet) instead of filtering the full
+  descending-k stream. Widening does nothing here; the time is lost before
+  any search begins.
+- **Memory (b41-class):** already fixed in production by the admission
+  planner (decline-before-allocate).
+
 ## Deferred option: deep window escalation
 
 The CERTPOS knob widens the divergence window (validated: width 21
