@@ -153,8 +153,10 @@ covers it. Binary: carrytrie_cert.
 | base | verdict | wall | notes |
 |-----:|---------|-----:|-------|
 | 53 | **PASS (single-method exhaustive) — strong, pending 2nd method** | 279s | prime; \|D\|=51 drop {26}; first strain signal: 13 wrong turns refuted, winning candidate 8 (deep descent vs ~21 on b50–52); value self-verified (lcm=3099044504245996706400 divides N, mod-52 rule holds) |
+| 54 | **STOP — HARDNESS ONSET, mode = refute-and-descend** | 725s | 11 subsets scanned, **10 refuted only within the fixed 21-position window** before a completion at \|D\|=50 (drop {4,22,27}), winning candidate 1 (!), 20 wrong turns. Value below is a valid, self-verified completion but maximality rests on 10 window-bounded refutations — the exact b50-lesson exposure, multiplied. CERTPOS=21 probe launched. |
 
 a(53) ?= 8667796530759171030732652761285454124185037606953473954566810515107048776076588809114400
+a(54) ?? = 416421702506789485219242774659857217353557918404448765237845114648269563412650818364000 (weak candidate — see row 54)
 
 ## a(51) and a(52) — FIRST-EVER CERTIFIED, 2 METHODS EACH (2026-07-23 ~13:01)
 

@@ -1,2 +1,4 @@
 === climb started 2026-07-23T13:32:24Z engine=carrytrie_cert (certauto) ===
 b53: PASS 279s FOUND with |D|=51 (dropped 1 digit(s)) family=full-modulus NX=1 NY=6 K=4 winningCandidate=8 wrongTurnsRefuted=13 survivors=1 (verified 1 OK / 0 FAILED) wall=278.434s peakRSS~1949748KB  maximum value (88 digits): 8667796530759171030732652761285454124185037606953473954566810515107048776076588809114400
+b54: STOP 725s STRONG-CANDIDATE exit (refute-and-descend engaged) — soundness-sensitive, needs review maximum value (87 digits): 416421702506789485219242774659857217353557918404448765237845114648269563412650818364000
+=== climb STOPPED at b54 2026-07-23T13:49:08Z ===
