@@ -132,4 +132,5 @@ BUCKET-only times — no scan fallback. Sequential sweep, nice 19, per-base
 | 44 | **bucket CERTIFIED PASS — NEW RECORD, 10.3×** (old best 1240.7s scan; \|D\|=39 drop-4, candidate 24, 71 survivors all verified, peak RSS ~61MB, 50,760 subsets churned) | **120.4s** | **MATCH** |
 | 45 | **bucket CERTIFIED PASS — NEW RECORD, 4.9×** (old best 343.8s scan; \|D\|=39 drop-5, candidate 24, 67 survivors all verified, peak RSS ~892MB, 490,682 subsets churned) | **70.3s** | **MATCH** |
 | 46 | **bucket CERTIFIED PASS** — independently re-certifies the CORRECTED a(46) (strictly larger than the published OEIS value); \|D\|=43 drop-2, candidate 21, 253 survivors all verified, peak RSS ~9.7MB. Slower than the 388.2s scan record — honest datum | 1271.4s | **MATCH (corrected value)** |
-| 47–49 | in flight (bucket-first, scan fallback on bucket failure) | | |
+| 47 | **bucket CERTIFIED PASS — NEW RECORD** (prime; old best 241.9s scan; admission gate ADMIT at Y=1,395,360 / projected 0.11GiB — first in-sweep Phase A trace; \|D\|=45 drop-1, candidate 21, 17 survivors verified, peak RSS ~125MB) | **190.5s** | **MATCH** |
+| 48–49 | in flight (bucket-first, scan fallback on bucket failure) | | |

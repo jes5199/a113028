@@ -8,3 +8,7 @@ b43: bucket 831.489s CERTIFIED PASS (script-wall 831.50s)
 b44: bucket 120.420s CERTIFIED PASS (script-wall 120.44s)
 b45: bucket 70.316s CERTIFIED PASS (script-wall 70.33s)
 b46: bucket 1271.429s CERTIFIED PASS (script-wall 1271.44s)
+b47: bucket 190.485s CERTIFIED PASS (script-wall 190.50s)
+b48: bucket 18.305s CERTIFIED PASS (script-wall 18.32s)
+b49: bucket 16.312s CERTIFIED PASS (script-wall 16.32s)
+=== sweep v2 finished 2026-07-23T07:51:21Z ===
