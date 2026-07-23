@@ -129,4 +129,5 @@ BUCKET-only times — no scan fallback. Sequential sweep, nice 19, per-base
 | 41 | **bucket FAILED — memory** (auto-configured build ballooned to 8.9GB peak RSS >3GB budget at `certdrv-bucket-post-generation`, clean self-abort at 197.9s; prime base, no nilpotent peel — expected hard case). **Solved by scan fallback (v4, eng=S): 44.1s** | bucket: abort @197.9s · scan: 44.1s | **MATCH** |
 | 42 | **bucket CERTIFIED PASS** — autonomous subset discovery churned 2,293,434 subsets to find \|D\|=35 (dropped 6), winningCandidate=25, 3095 survivors all direct-verified, peak RSS ~7MB | 358.3s | **MATCH** |
 | 43 | **bucket CERTIFIED PASS — NEW RECORD** (prime base, no peel: bucket still fit, peak RSS ~1.27GB; \|D\|=41 drop-1, candidate 22, 1351 survivors all verified; beat the 968s quiet-box scan record despite 4 concurrent nice-19 dual-campaign processes) | **831.5s** | **MATCH** |
-| 44–49 | in flight (bucket-first, scan fallback on bucket failure) | | |
+| 44 | **bucket CERTIFIED PASS — NEW RECORD, 10.3×** (old best 1240.7s scan; \|D\|=39 drop-4, candidate 24, 71 survivors all verified, peak RSS ~61MB, 50,760 subsets churned) | **120.4s** | **MATCH** |
+| 45–49 | in flight (bucket-first, scan fallback on bucket failure) | | |
