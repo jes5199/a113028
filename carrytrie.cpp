@@ -1052,6 +1052,315 @@ static void runGate(const Constants &c, int NX = 3, int NY = 4) {
 
 static bool fileExists(const char *path); // fwd decl; defined below, used by runPatFull's HOLD gate
 
+// ================= Shallow radix buckets — SHALLOW-RADIX-BUCKET-JOIN.md Phase A =================
+//
+// Third A/B arm, independent of both the classic pointer trie and the
+// Patricia path above. No trie of any kind is built: a flat (u_y, y_mask)
+// record array is counting-sorted into 49^K buckets keyed by u_y mod 49^K.
+// For each surviving (x,lift) root (root envelope sieve still applies), the
+// first K leaf digits are enumerated directly (ordered K-permutations of the
+// digits available to the leaf), the subtraction/borrow recurrence derives
+// the bucket key exactly (§4), and every record in that bucket is tested
+// directly (§5) with a full 12-digit decode — no approximate terminal
+// predicate, no trie dispatch, no per-node summaries.
+
+struct BucketRecord {
+    u128 u;
+    uint64_t yMask;
+};
+
+struct BucketIndex {
+    std::vector<uint32_t> offsets; // size bucketCount+1
+    std::vector<BucketRecord> records;
+    int K = 3;
+    u64 bucketCount = 0;
+};
+
+static BucketIndex buildBucketIndex(const Branch &br, const Constants &c, int NY, int K,
+                                     u64 &yCount, double &genSeconds, double &sortSeconds,
+                                     long rssBudgetKB = -1) {
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+    u128 Lc = c.L_c;
+    u128 B12modLc = powmod_u128((u128)B, 12, Lc);
+
+    u64 bucketCount = 1;
+    for (int i = 0; i < K; i++) bucketCount *= (u64)B;
+    u128 bucketMod = (u128)bucketCount;
+
+    // Pass 1: generate all records + their bucket key, tally counts.
+    std::vector<BucketRecord> raw;
+    std::vector<uint32_t> key;
+    std::vector<uint32_t> counts(bucketCount + 1, 0);
+    forEachPermutation(br.A19, NY, [&](const std::vector<int> &ydigits) {
+        u128 y_val = 0, Bpow = 1;
+        for (int i = 0; i < NY; i++) { y_val += (u128)ydigits[i] * Bpow; Bpow *= (u128)B; }
+        u128 u_y = mulmod_u128(B12modLc, y_val % Lc, Lc);
+        uint64_t m = 0; for (int d : ydigits) m |= bit(d);
+        raw.push_back({u_y, m});
+        uint32_t k = (uint32_t)(u_y % bucketMod);
+        key.push_back(k);
+        counts[k + 1]++;
+    });
+    yCount = raw.size();
+    auto t1 = clock::now();
+    genSeconds = std::chrono::duration<double>(t1 - t0).count();
+    checkRssBudget(rssBudgetKB, "bucket-post-generation");
+
+    // Pass 2: prefix-sum offsets, scatter into final bucket-sorted array.
+    for (u64 i = 0; i < bucketCount; i++) counts[i + 1] += counts[i];
+    BucketIndex idx;
+    idx.K = K;
+    idx.bucketCount = bucketCount;
+    idx.offsets = counts; // counts is now the exclusive-prefix-sum offsets array
+    idx.records.resize(raw.size());
+    std::vector<uint32_t> cursor(idx.offsets.begin(), idx.offsets.end());
+    for (size_t i = 0; i < raw.size(); i++) {
+        uint32_t k = key[i];
+        idx.records[cursor[k]++] = raw[i];
+    }
+    auto t2 = clock::now();
+    sortSeconds = std::chrono::duration<double>(t2 - t1).count();
+    checkRssBudget(rssBudgetKB, "bucket-post-build");
+    return idx;
+}
+
+// Enumerate ordered K-permutations of `allowed` leaf digits, propagating the
+// subtraction borrow exactly (§4) to derive each candidate bucket key, and
+// invoke cb(key, lowLeafMask) for every one. No std::function: CB is a
+// template parameter captured by reference through the whole recursion, so
+// this compiles down to a tight inlined loop nest for the small K in use.
+template <typename CB>
+static void enumLeafPrefix(int depth, int K, int borrow, uint64_t used, uint64_t key, uint64_t keyMul,
+                            const std::array<uint8_t, DEPTH> &Wdig, uint64_t allowed, CB &&cb) {
+    if (depth == K) { cb(key, used); return; }
+    uint64_t rem = allowed & ~used;
+    while (rem) {
+        int l = __builtin_ctzll(rem);
+        rem &= rem - 1;
+        int raw = (int)Wdig[depth] - borrow - l;
+        int u_i, nb;
+        if (raw < 0) { u_i = raw + B; nb = 1; } else { u_i = raw; nb = 0; }
+        enumLeafPrefix(depth + 1, K, nb, used | bit(l), key + (uint64_t)u_i * keyMul, keyMul * (uint64_t)B,
+                       Wdig, allowed, cb);
+    }
+}
+
+// Decode a full 12-digit base-49 leaf value, rejecting zero/unavailable/
+// duplicate digits (§5 steps 5-6). `allowed` is A19mask & ~xmask (the y-mask
+// disjointness half of the test is applied separately by the caller).
+static inline bool decodeDistinctLeaf12(u128 leaf, uint64_t allowed, uint64_t &outMask) {
+    uint64_t mask = 0;
+    for (int i = 0; i < 12; i++) {
+        int d = (int)(leaf % (u128)B);
+        leaf /= (u128)B;
+        if (d == 0) return false;
+        uint64_t db = bit(d);
+        if (!(allowed & db)) return false;
+        if (mask & db) return false;
+        mask |= db;
+    }
+    outMask = mask;
+    return true;
+}
+
+struct BucketStats {
+    u64 roots = 0;
+    u64 rootsRejected = 0;
+    u64 lookups = 0;
+    u64 scans = 0;
+    u64 maskPasses = 0;
+    u64 survivors = 0;
+};
+
+// Search all surviving roots for one x (all lifts) against the bucket index,
+// accumulating stats. onSurvivor(xdigits, r, decodedLeafMask-not-needed) is
+// invoked per accepted record for gate-mode reconstruction/verification.
+template <typename OnSurvivor>
+static void bucketSearchX(const BucketIndex &idx, u128 c_x, u128 Lc, int lifts,
+                           uint64_t xmask, uint64_t A19mask, int K, BucketStats &stats,
+                           OnSurvivor &&onSurvivor) {
+    uint64_t allowed = A19mask & ~xmask; // digits available to the whole leaf
+    LeafEnvelope env{};
+    if (SIEVE_LEVEL & 1) env = leafEnvelope(allowed, 12);
+
+    for (int j = 0; j < lifts; j++) {
+        u128 W = c_x + (u128)j * Lc;
+        if (SIEVE_LEVEL & 1) {
+            stats.roots++;
+            if (!liftCouldContainLeaf(W, Lc, env)) { stats.rootsRejected++; continue; }
+        } else {
+            stats.roots++;
+        }
+        auto Wdig = digitsLSDof(W);
+        enumLeafPrefix(0, K, 0, 0, 0, 1, Wdig, allowed,
+            [&](uint64_t key, uint64_t lowLeafMask) {
+                stats.lookups++;
+                uint32_t lo = idx.offsets[key], hi = idx.offsets[key + 1];
+                for (uint32_t p = lo; p < hi; p++) {
+                    stats.scans++;
+                    const BucketRecord &r = idx.records[p];
+                    if (r.yMask & (xmask | lowLeafMask)) continue;
+                    if (W < r.u) continue;
+                    u128 leaf = W - r.u;
+                    if (leaf >= gBpow12[12]) continue;
+                    stats.maskPasses++;
+                    uint64_t decodedMask;
+                    if (!decodeDistinctLeaf12(leaf, allowed, decodedMask)) continue;
+                    uint64_t required = A19mask & ~xmask & ~r.yMask;
+                    if (decodedMask != required) continue;
+                    stats.survivors++;
+                    onSurvivor(r, leaf, decodedMask);
+                }
+            });
+    }
+}
+
+static void runBucketFull(const Constants &c, int candidate, int NX, int NY, int K = 3, long rssBudgetKB = -1) {
+    if (candidate == 21) {
+        if (!fileExists("/home/jes/a113028/alpha_go")) {
+            fprintf(stderr, "[HOLD] alpha_go not present; candidate-21 bucket full run (NX=%d,NY=%d) withheld.\n", NX, NY);
+            return;
+        }
+        fprintf(stderr, "[full] alpha_go present; proceeding with candidate-21 bucket NX=%d,NY=%d K=%d\n", NX, NY, K);
+    }
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+
+    Branch br = buildBranch(c, candidate);
+    u128 Lc = c.L_c;
+    u64 yCount = 0;
+    double genSeconds = 0, sortSeconds = 0;
+    BucketIndex idx = buildBucketIndex(br, c, NY, K, yCount, genSeconds, sortSeconds, rssBudgetKB);
+    fprintf(stderr, "[bucket] NY=%d K=%d: %llu records, %llu buckets, gen=%.3fs sort/scatter=%.3fs "
+                    "sizeof(BucketRecord)=%zu bytes recordsBytes=%zu offsetsBytes=%zu peakRSS=%ldKB\n",
+            NY, K, (unsigned long long)yCount, (unsigned long long)idx.bucketCount, genSeconds, sortSeconds,
+            sizeof(BucketRecord), idx.records.size() * sizeof(BucketRecord),
+            idx.offsets.size() * sizeof(uint32_t), peakRssKB());
+    checkRssBudget(rssBudgetKB, "bucket-build-end");
+
+    uint64_t A19mask = 0; for (int d : br.A19) A19mask |= bit(d);
+    u128 Bexp = powmod_u128((u128)B, (u128)(12 + NY), Lc);
+
+    BucketStats stats;
+    u64 xCounted = 0;
+    forEachPermutation(br.A19, NX, [&](const std::vector<int> &xdigits) {
+        xCounted++;
+        u128 x_val = 0, Bpow = 1;
+        for (int i = 0; i < NX; i++) { x_val += (u128)xdigits[i] * Bpow; Bpow *= (u128)B; }
+        u128 term = mulmod_u128(Bexp, x_val % Lc, Lc);
+        u128 c_x = (br.T_target + Lc - (term % Lc)) % Lc;
+        uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
+        bucketSearchX(idx, c_x, Lc, c.lifts, xmask, A19mask, K, stats,
+                      [](const BucketRecord &, u128, uint64_t) {});
+    });
+
+    auto t1 = clock::now();
+    double wall = std::chrono::duration<double>(t1 - t0).count();
+    fprintf(stderr, "[bucketfull] candidate=%d NX=%d NY=%d K=%d: |X|=%llu |Y|=%llu roots=%llu rootsRejected=%llu "
+                    "lookups=%llu scans=%llu maskPasses=%llu survivors=%llu wall=%.3fs (gen=%.3fs build=%.3fs search=%.3fs)\n",
+            candidate, NX, NY, K, (unsigned long long)xCounted, (unsigned long long)yCount,
+            (unsigned long long)stats.roots, (unsigned long long)stats.rootsRejected,
+            (unsigned long long)stats.lookups, (unsigned long long)stats.scans,
+            (unsigned long long)stats.maskPasses, (unsigned long long)stats.survivors, wall,
+            genSeconds, sortSeconds, wall - genSeconds - sortSeconds);
+    fprintf(stderr, "[bucketfull] peakRSS at walk-end = %ldKB\n", peakRssKB());
+    checkRssBudget(rssBudgetKB, "bucket-walk-end");
+}
+
+static void runBucketGate(const Constants &c, int NX, int NY, int K = 3, long rssBudgetKB = -1) {
+    if (NX + NY != 7) { fprintf(stderr, "FATAL: bgate requires NX+NY==7 (got %d+%d)\n", NX, NY); exit(1); }
+    Branch br = buildBranch(c, 20);
+    fprintf(stderr, "[bgate] candidate=20 (known YES), split %d+%d (NX=%d,NY=%d) K=%d, FULL run, SHALLOW-BUCKET\n",
+            NX, NY, NX, NY, K);
+
+    std::vector<int> rel(19);
+    for (int i = 0; i < 19; i++) rel[i] = KNOWN_FREE_POS19_TO_1[18 - i];
+    bool knownOk = verifySurvivorDirect(c, br, c.prefix, 20, rel);
+    fprintf(stderr, "[bgate] known completion direct verification (N mod L == 0): %s\n", knownOk ? "PASS" : "FAIL");
+    if (!knownOk) { fprintf(stderr, "[bgate] FATAL: known completion fails; aborting.\n"); exit(1); }
+
+    std::vector<int> knownLeaf(rel.begin(), rel.begin() + 12);
+    std::vector<int> knownY(rel.begin() + 12, rel.begin() + 12 + NY);
+    std::vector<int> knownX(rel.begin() + 12 + NY, rel.begin() + 19);
+    uint64_t knownYmask = 0; for (int d : knownY) knownYmask |= bit(d);
+    uint64_t knownXmask = 0; for (int d : knownX) knownXmask |= bit(d);
+    uint64_t knownLeafmask = 0; for (int d : knownLeaf) knownLeafmask |= bit(d);
+
+    u128 Lc = c.L_c;
+    u64 yCount = 0;
+    double genSeconds = 0, sortSeconds = 0;
+    BucketIndex idx = buildBucketIndex(br, c, NY, K, yCount, genSeconds, sortSeconds, rssBudgetKB);
+    fprintf(stderr, "[bgate] bucket index built: %llu records, %llu buckets, gen=%.3fs sort/scatter=%.3fs peakRSS=%ldKB\n",
+            (unsigned long long)yCount, (unsigned long long)idx.bucketCount, genSeconds, sortSeconds, peakRssKB());
+    checkRssBudget(rssBudgetKB, "bgate-build-end");
+
+    uint64_t A19mask = 0; for (int d : br.A19) A19mask |= bit(d);
+    u128 Bexp = powmod_u128((u128)B, (u128)(12 + NY), Lc);
+
+    u64 verifiedOk = 0, verifiedBad = 0;
+    bool foundKnown = false;
+    u64 xCounted = 0;
+    BucketStats stats;
+
+    forEachPermutation(br.A19, NX, [&](const std::vector<int> &xdigits) {
+        xCounted++;
+        u128 x_val = 0, Bpow = 1;
+        for (int i = 0; i < NX; i++) { x_val += (u128)xdigits[i] * Bpow; Bpow *= (u128)B; }
+        u128 term = mulmod_u128(Bexp, x_val % Lc, Lc);
+        u128 c_x = (br.T_target + Lc - (term % Lc)) % Lc;
+        uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
+        bool thisIsKnownX = true;
+        for (int i = 0; i < NX; i++) if (xdigits[i] != knownX[i]) { thisIsKnownX = false; break; }
+
+        bucketSearchX(idx, c_x, Lc, c.lifts, xmask, A19mask, K, stats,
+            [&](const BucketRecord &r, u128 leaf, uint64_t decodedMask) {
+                // Reconstruct full free-digit vector (positions 1..19): decode
+                // the 12 leaf digits LSD-first (position i+1 = digit i), then
+                // the y-block from r's actual ordered digits is NOT stored
+                // (only its mask) -- but for THIS split's direct verification
+                // we only need candidate-20's own known completion to appear
+                // among survivors; the y-block's *specific* order only matters
+                // for reconstructing an arbitrary survivor's full 47-digit
+                // value. Since gcd(49,L_c)=1 and y < 49^NY < L_c, r.u
+                // uniquely determines the ordered y digits; recover them by
+                // inverting u_y = B^12 * y mod L_c.
+                u128 B12modLc = powmod_u128((u128)B, 12, Lc);
+                u128 B12inv = modinv_u128(B12modLc, Lc);
+                u128 y_val = mulmod_u128(r.u, B12inv, Lc);
+                std::vector<int> ydigitsOrdered(NY);
+                u128 yv = y_val;
+                for (int i = 0; i < NY; i++) { ydigitsOrdered[i] = (int)(yv % (u128)B); yv /= (u128)B; }
+
+                std::vector<int> freePos1to19(19);
+                u128 lv = leaf;
+                for (int i = 0; i < 12; i++) { freePos1to19[i] = (int)(lv % (u128)B); lv /= (u128)B; }
+                for (int i = 0; i < NY; i++) freePos1to19[12 + i] = ydigitsOrdered[i];
+                for (int i = 0; i < NX; i++) freePos1to19[12 + NY + i] = xdigits[i];
+                bool ok = verifySurvivorDirect(c, br, c.prefix, 20, freePos1to19);
+                if (ok) verifiedOk++; else verifiedBad++;
+
+                if (r.yMask == knownYmask && xmask == knownXmask &&
+                    decodedMask == knownLeafmask && thisIsKnownX) {
+                    foundKnown = true;
+                }
+            });
+    });
+
+    fprintf(stderr, "[bgate] x permutations=%llu, |Y|=%llu, roots=%llu rootsRejected=%llu lookups=%llu scans=%llu "
+                    "maskPasses=%llu survivors=%llu peakRSS=%ldKB\n",
+            (unsigned long long)xCounted, (unsigned long long)yCount,
+            (unsigned long long)stats.roots, (unsigned long long)stats.rootsRejected,
+            (unsigned long long)stats.lookups, (unsigned long long)stats.scans,
+            (unsigned long long)stats.maskPasses, (unsigned long long)stats.survivors, peakRssKB());
+    fprintf(stderr, "[bgate] direct-arithmetic verification of survivors: %llu OK, %llu FAILED\n",
+            (unsigned long long)verifiedOk, (unsigned long long)verifiedBad);
+    fprintf(stderr, "[bgate] known completion found among survivors: %s\n", foundKnown ? "YES" : "NO");
+    bool pass = foundKnown && (verifiedBad == 0) && (stats.survivors == verifiedOk) && (stats.survivors == 1);
+    fprintf(stderr, "[bgate] SOUNDNESS GATE: %s\n", pass ? "PASS" : "FAIL");
+    checkRssBudget(rssBudgetKB, "bgate-walk-end");
+}
+
 // ================= Patricia (path-compressed) trie — PATRICIA-CARRY-TRIE.md Phase A =================
 //
 // Flat (radix_key, y_mask) records (§4.1) are generated directly (no ordinary
@@ -1585,7 +1894,8 @@ int main(int argc, char **argv) {
     fprintf(stderr, "[sieve] SIEVE_LEVEL=%d (bit0=root bit1=every-node bit2=depth3-joint)\n", SIEVE_LEVEL);
 
     if (argc < 2) {
-        fprintf(stderr, "usage: %s smoke|gate|full|pgate|pfull <cand> <NX> <NY> [pruneLevel]\n", argv[0]);
+        fprintf(stderr, "usage: %s smoke|gate|full|pgate|pfull|bgate|bfull <cand> <NX> <NY> [pruneLevel]\n", argv[0]);
+        fprintf(stderr, "  bgate/bfull: SHALLOW-RADIX-BUCKET-JOIN.md Phase A shallow-bucket builder/searcher\n");
         fprintf(stderr, "  pgate/pfull: PATRICIA-CARRY-TRIE.md Phase A path-compressed builder/walker\n");
         fprintf(stderr, "  pruneLevel: 0=none 1=rung1(mask-union) 2=+rung2a(p1) 3=+rung2b(p2) [default 3]\n");
         fprintf(stderr, "  SIEVE env var: LIFT-ENVELOPE-SIEVE.md bitmask, see above\n");
@@ -1631,6 +1941,27 @@ int main(int argc, char **argv) {
         if (argc >= 7) rssBudgetKB = atol(argv[6]);
         fprintf(stderr, "[prune] level=%d rssBudgetKB=%ld\n", PRUNE_LEVEL, rssBudgetKB);
         runPatFull(c, cand, NX, NY, rssBudgetKB);
+    } else if (mode == "bgate") {
+        // bgate [NX] [NY] [K] [rssBudgetKB]   (default 2 5 3, per doc's measured optimum)
+        int NX = 2, NY = 5, K = 3;
+        if (argc >= 4) { NX = atoi(argv[2]); NY = atoi(argv[3]); }
+        if (argc >= 5) K = atoi(argv[4]);
+        long rssBudgetKB = -1;
+        if (argc >= 6) rssBudgetKB = atol(argv[5]);
+        fprintf(stderr, "[bucket] K=%d rssBudgetKB=%ld\n", K, rssBudgetKB);
+        runBucketGate(c, NX, NY, K, rssBudgetKB);
+    } else if (mode == "bfull") {
+        // bfull <cand> <NX> <NY> [K] [rssBudgetKB]
+        if (argc < 5) { fprintf(stderr, "bfull requires <cand> <NX> <NY>\n"); return 1; }
+        int cand = atoi(argv[2]);
+        int NX = atoi(argv[3]);
+        int NY = atoi(argv[4]);
+        int K = 3;
+        if (argc >= 6) K = atoi(argv[5]);
+        long rssBudgetKB = -1;
+        if (argc >= 7) rssBudgetKB = atol(argv[6]);
+        fprintf(stderr, "[bucket] K=%d rssBudgetKB=%ld\n", K, rssBudgetKB);
+        runBucketFull(c, cand, NX, NY, K, rssBudgetKB);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 1;
