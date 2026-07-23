@@ -26,6 +26,8 @@
 #include <string>
 #include <numeric>
 #include <functional>
+#include <set>
+#include <unordered_map>
 #include <sys/stat.h>
 
 using u64 = uint64_t;
@@ -308,12 +310,80 @@ static void forEachPermutation(const std::vector<int> &pool, int k, CB cb) {
 //   3 = + rung 2b: p2 (second-moment / digit-square-sum) subtree budgets
 static int PRUNE_LEVEL = 3; // set from CLI; see main()
 
+// ================= Lift-envelope sieve (LIFT-ENVELOPE-SIEVE.md) =================
+// SIEVE_LEVEL is a bitmask, set from CLI:
+//   bit0 (1) = root envelope sieve (§3/§4): reject an (x,lift) root before it
+//              ever enters the trie, using only the leaf's rearrangement
+//              envelope over the live 12-digit pool.
+//   bit1 (2) = every-node envelope (§6): the same test re-applied at every
+//              trie node using the node's aggregated u_y residue range.
+//   bit2 (4) = joint depth-3 mask-and-envelope certificate (§7): at depth==3
+//              nodes, ask the joint question over each distinct descendant
+//              y-mask instead of the coarse andMask/orMask summary.
+// These compose with PRUNE_LEVEL (CARRY-TRIE-JOIN.md's existing ladder); the
+// sieve is strictly additive pruning on top of it, never a replacement.
+static int SIEVE_LEVEL = 0; // set from CLI; see main()
+
+struct LeafEnvelope { u128 lo; u128 hi; };
+
+// Extremal rearrangement envelope (§2/§4): given a live digit pool and a slot
+// count, the minimum arrangement places the `count` smallest digits in
+// increasing order from most- to least-significant; the maximum places the
+// `count` largest digits in decreasing order. Sound over-approximation for
+// any subset/arrangement drawn from `available` (see doc's proof, §2).
+static LeafEnvelope leafEnvelope(uint64_t available, int count) {
+    // digits are naturally ascending: __builtin_ctzll walks low-to-high bits.
+    int digs[19]; int nd = 0;
+    uint64_t av = available;
+    while (av) { digs[nd++] = __builtin_ctzll(av); av &= av - 1; }
+    LeafEnvelope out{0, 0};
+    for (int i = 0; i < count; i++) out.lo = out.lo * (u128)B + (u128)digs[i];
+    for (int i = 0; i < count; i++) out.hi = out.hi * (u128)B + (u128)digs[nd - 1 - i];
+    return out;
+}
+
+// Generalized interval-intersection test (§3, generalized to an arbitrary
+// closed residue-domain [domLo,domHi] instead of just [0,L_c)): does some
+// u in [domLo,domHi] satisfy leaf_lo <= W-u <= leaf_hi? Equivalently, does
+// [W-leaf_hi, W-leaf_lo] intersect [domLo,domHi]? All unsigned-safe.
+static inline bool envelopeIntersects(u128 W, u128 leaf_lo, u128 leaf_hi, u128 domLo, u128 domHi) {
+    if (W < leaf_lo) return false; // required u = W-leaf_lo would be negative
+    u128 hiU = W - leaf_lo;
+    u128 loU = (W > leaf_hi) ? (W - leaf_hi) : (u128)0;
+    if (hiU < domLo) return false;
+    if (loU > domHi) return false;
+    return true;
+}
+
+// Root-level test (§3/§4): specializes envelopeIntersects to domain [0,L_c).
+static inline bool liftCouldContainLeaf(u128 W, u128 Lc, const LeafEnvelope &env) {
+    return envelopeIntersects(W, env.lo, env.hi, 0, Lc - 1);
+}
+
+// B^0..B^12 as exact (unreduced) u128 integers, used to place a remaining
+// leaf block (positions d..11) at its true weight B^d. 49^12 ~ 2^67, so this
+// fits comfortably in u128 with no overflow risk.
+static std::array<u128, 13> gBpow12;
+static void initBpow12() {
+    u128 p = 1;
+    for (int i = 0; i <= 12; i++) { gBpow12[i] = p; p *= (u128)B; }
+}
+
+// Root-level sieve bookkeeping, reset per run.
+struct SieveStats {
+    u64 rootsTotal = 0;
+    u64 rootsRejected = 0;
+};
+
 struct TrieNode {
     // children: (edge digit 0..48, child node index)
     std::vector<std::pair<uint8_t,int32_t>> children;
     // present only at depth==DEPTH nodes: ordered y-digit-lists (positions 12..12+NY-1,
     // i.e. index0 = relative position 12) that hash to this trie leaf.
     std::vector<std::vector<int>> terminalY;
+    // parallel to terminalY: each terminal's exact u_y residue (used by the
+    // every-node envelope sieve, SIEVE_LEVEL bit1).
+    std::vector<u128> terminalUY;
 
     // RUNG 1 (§4.1): OR/AND of every descendant terminal's y-digit-mask.
     //   andMask: bits set in EVERY descendant y-mask (empty subtree -> all-ones,
@@ -326,12 +396,22 @@ struct TrieNode {
     // digits) of the y-digit-set, taken over every descendant terminal.
     int32_t minP1 = INT32_MAX, maxP1 = INT32_MIN;
     int64_t minP2 = INT64_MAX, maxP2 = INT64_MIN;
+
+    // LIFT-ENVELOPE-SIEVE.md §6: min/max u_y residue over every descendant
+    // terminal, used for the every-node envelope test.
+    u128 minU = ~(u128)0;
+    u128 maxU = 0;
 };
 
 static const int DEPTH = 14;
 
 struct Trie {
     std::vector<TrieNode> nodes;
+    // §7 joint depth-3 mask-and-envelope certificate: node index (always at
+    // tree-level 3, since the classic trie is one digit per level) -> sorted
+    // unique y-masks among its descendant terminals. Built once, post-aggregate.
+    std::unordered_map<int32_t, std::vector<uint64_t>> depth3Masks;
+
     Trie() { nodes.emplace_back(); } // root = 0
 
     int32_t childOrCreate(int32_t node, uint8_t dig) {
@@ -342,10 +422,11 @@ struct Trie {
         return idx;
     }
 
-    void insert(const std::array<uint8_t, DEPTH> &digitsLSD, const std::vector<int> &ydigitsOrdered) {
+    void insert(const std::array<uint8_t, DEPTH> &digitsLSD, const std::vector<int> &ydigitsOrdered, u128 u_y) {
         int32_t cur = 0;
         for (int d = 0; d < DEPTH; d++) cur = childOrCreate(cur, digitsLSD[d]);
         nodes[cur].terminalY.push_back(ydigitsOrdered);
+        nodes[cur].terminalUY.push_back(u_y);
     }
 
     // Bottom-up (post-order) aggregation of the rung-1/rung-2 subtree summaries.
@@ -362,8 +443,11 @@ struct Trie {
             node.maxP1 = std::max(node.maxP1, child.maxP1);
             node.minP2 = std::min(node.minP2, child.minP2);
             node.maxP2 = std::max(node.maxP2, child.maxP2);
+            node.minU = std::min(node.minU, child.minU);
+            node.maxU = std::max(node.maxU, child.maxU);
         }
-        for (auto &ydigits : node.terminalY) {
+        for (size_t i = 0; i < node.terminalY.size(); i++) {
+            const auto &ydigits = node.terminalY[i];
             uint64_t m = 0;
             int32_t p1 = 0;
             int64_t p2 = 0;
@@ -374,7 +458,33 @@ struct Trie {
             node.maxP1 = std::max(node.maxP1, p1);
             node.minP2 = std::min(node.minP2, p2);
             node.maxP2 = std::max(node.maxP2, p2);
+            u128 uy = node.terminalUY[i];
+            node.minU = std::min(node.minU, uy);
+            node.maxU = std::max(node.maxU, uy);
         }
+    }
+
+    // §7: collect the set of unique descendant y-masks under `node`.
+    void collectMasks(int32_t node, std::set<uint64_t> &out) const {
+        const TrieNode &n = nodes[node];
+        for (auto &ydigits : n.terminalY) {
+            uint64_t m = 0; for (int d : ydigits) m |= ((uint64_t)1 << d);
+            out.insert(m);
+        }
+        for (auto &pr : n.children) collectMasks(pr.second, out);
+    }
+
+    // Populate depth3Masks by a single DFS from the root; every node at
+    // tree-level 3 gets its descendant-terminal mask set recorded.
+    void buildDepth3Masks(int32_t node, int depth) {
+        if (depth == 3) {
+            std::set<uint64_t> s;
+            collectMasks(node, s);
+            depth3Masks[node] = std::vector<uint64_t>(s.begin(), s.end());
+            return;
+        }
+        const TrieNode &n = nodes[node];
+        for (auto &pr : n.children) buildDepth3Masks(pr.second, depth + 1);
     }
 };
 
@@ -432,6 +542,9 @@ struct StackFrame {
     uint64_t used;
     int32_t sumP1;   // running sum of leaf digits chosen so far (depth<=12)
     int64_t sumP2;   // running sum of squares of leaf digits chosen so far
+    u128 leafVal;    // running ordinary integer value of leaf digits fixed so
+                      // far, at their TRUE weight (digit at position i * B^i);
+                      // used by the every-node/depth-3 lift-envelope sieve.
 };
 
 // Walk the trie for one (x, lift j) pair. allowedMinusX = A19mask & ~xmask.
@@ -442,7 +555,7 @@ static void walkOne(const Trie &trie, u128 W, uint64_t allowedMinusX, uint64_t x
     auto Wdig = digitsLSDof(W);
     std::vector<StackFrame> stack;
     stack.reserve(64);
-    stack.push_back({0, 0, 0, 0, 0, 0});
+    stack.push_back({0, 0, 0, 0, 0, 0, 0});
     while (!stack.empty()) {
         StackFrame f = stack.back();
         stack.pop_back();
@@ -504,6 +617,39 @@ static void walkOne(const Trie &trie, u128 W, uint64_t allowedMinusX, uint64_t x
             int64_t hiY2 = br.S2_A19 - xP2 - f.sumP2 - loRemain2;
             if (node.maxP2 < loY2 || node.minP2 > hiY2) continue;
         }
+        // ---- lift-envelope sieve (LIFT-ENVELOPE-SIEVE.md §6/§7), additive on
+        // top of the pruning ladder above ----
+        if ((SIEVE_LEVEL & 2) && f.depth <= 12) {
+            // Every-node envelope (§6): bound the completed leaf value using
+            // the R still-open positions' extremal rearrangement of `avail`,
+            // then test against this node's aggregated u_y residue range.
+            LeafEnvelope blockEnv = leafEnvelope(avail, R);
+            u128 leaf_lo = f.leafVal + blockEnv.lo * gBpow12[f.depth];
+            u128 leaf_hi = f.leafVal + blockEnv.hi * gBpow12[f.depth];
+            if (!envelopeIntersects(W, leaf_lo, leaf_hi, node.minU, node.maxU)) continue;
+        }
+        if ((SIEVE_LEVEL & 4) && f.depth == 3) {
+            // Joint depth-3 mask-and-envelope certificate (§7): ask, per
+            // distinct descendant y-mask compatible with digits used so far,
+            // whether ITS exact remaining-leaf envelope intersects the node's
+            // residue range. Retain only if at least one mask survives.
+            auto it = trie.depth3Masks.find(f.node);
+            bool anyOK = (it == trie.depth3Masks.end()); // no table entry (shouldn't
+                                                           // happen) -> don't prune
+            if (it != trie.depth3Masks.end()) {
+                uint64_t usedOrX = xmask | f.used;
+                for (uint64_t m : it->second) {
+                    if (m & usedOrX) continue;
+                    uint64_t remaining = A19mask & ~xmask & ~f.used & ~m;
+                    if (__builtin_popcountll(remaining) != R) continue; // exact-partition guard
+                    LeafEnvelope be = leafEnvelope(remaining, R);
+                    u128 leaf_lo = f.leafVal + be.lo * gBpow12[f.depth];
+                    u128 leaf_hi = f.leafVal + be.hi * gBpow12[f.depth];
+                    if (envelopeIntersects(W, leaf_lo, leaf_hi, node.minU, node.maxU)) { anyOK = true; break; }
+                }
+            }
+            if (!anyOK) continue;
+        }
         // ---- end pruning ladder ----
 
         if (f.depth == DEPTH) {
@@ -530,10 +676,11 @@ static void walkOne(const Trie &trie, u128 W, uint64_t allowedMinusX, uint64_t x
                 if (!(allowedMinusX & wdbit)) continue;
                 if (f.used & wdbit) continue;
                 stack.push_back({child, f.depth + 1, nb, f.used | wdbit,
-                                  f.sumP1 + wd, f.sumP2 + (int64_t)wd * wd});
+                                  f.sumP1 + wd, f.sumP2 + (int64_t)wd * wd,
+                                  f.leafVal + (u128)wd * gBpow12[f.depth]});
             } else {
                 if (wd != 0) continue;
-                stack.push_back({child, f.depth + 1, nb, f.used, f.sumP1, f.sumP2});
+                stack.push_back({child, f.depth + 1, nb, f.used, f.sumP1, f.sumP2, f.leafVal});
             }
         }
     }
@@ -554,10 +701,11 @@ static Trie buildTrie(const Branch &br, const Constants &c, int NX, int NY, u64 
         }
         u128 u_y = mulmod_u128(B12modLc, y_val % Lc, Lc);
         auto digs = digitsLSDof(u_y);
-        trie.insert(digs, ydigits);
+        trie.insert(digs, ydigits, u_y);
         yCount++;
     });
     trie.computeAggregates(0);
+    if (SIEVE_LEVEL & 4) trie.buildDepth3Masks(0, 0);
     return trie;
 }
 
@@ -568,6 +716,8 @@ struct RunResult {
     u64 xCount = 0;
     u64 yCount = 0;
     double wallSeconds = 0;
+    u64 rootsTotal = 0;
+    u64 rootsRejected = 0;
 };
 
 static RunResult runMeasurement(const Branch &br, const Constants &c, int NX, int NY,
@@ -606,9 +756,18 @@ static RunResult runMeasurement(const Branch &br, const Constants &c, int NX, in
         int32_t xP1 = 0; int64_t xP2 = 0;
         for (int d : xdigits) { xP1 += d; xP2 += (int64_t)d * d; }
 
+        // Root envelope sieve (LIFT-ENVELOPE-SIEVE.md §3/§4): computed once
+        // per x, outside the lift loop.
+        LeafEnvelope env{};
+        if (SIEVE_LEVEL & 1) env = leafEnvelope(allowedMinusX, 12);
+
         WalkStats stats;
         for (int j = 0; j < c.lifts; j++) {
             u128 W = c_x + (u128)j * Lc;
+            if (SIEVE_LEVEL & 1) {
+                rr.rootsTotal++;
+                if (!liftCouldContainLeaf(W, Lc, env)) { rr.rootsRejected++; continue; }
+            }
             walkOne(trie, W, allowedMinusX, xmask, A19mask, stats, br, xP1, xP2);
         }
         rr.totalVisits += stats.visits;
@@ -681,9 +840,10 @@ static const std::vector<int> KNOWN_FREE_POS19_TO_1 = {
     9,12,19,2,3,11,15,10,14,6,16,18,8,1,13,17,21,5,4
 };
 
-static void runGate(const Constants &c) {
+static void runGate(const Constants &c, int NX = 3, int NY = 4) {
+    if (NX + NY != 7) { fprintf(stderr, "FATAL: gate requires NX+NY==7 (got %d+%d)\n", NX, NY); exit(1); }
     Branch br = buildBranch(c, 20);
-    fprintf(stderr, "[gate] candidate=20 (known YES), split 3+4 (NX=3,NY=4), FULL run\n");
+    fprintf(stderr, "[gate] candidate=20 (known YES), split %d+%d (NX=%d,NY=%d), FULL run\n", NX, NY, NX, NY);
 
     // Derive known x/y/leaf split (relative positions) for reporting/matching.
     // KNOWN_FREE_POS19_TO_1 is listed MSB..LSB (index0 = abs pos19); rel[]
@@ -699,9 +859,10 @@ static void runGate(const Constants &c) {
         exit(1);
     }
 
+    // rel[0..11]=leaf (fixed, P=12); rel[12..12+NY-1]=y-block; rel[12+NY..18]=x-block.
     std::vector<int> knownLeaf(rel.begin(), rel.begin() + 12);
-    std::vector<int> knownY(rel.begin() + 12, rel.begin() + 16);
-    std::vector<int> knownX(rel.begin() + 16, rel.begin() + 19);
+    std::vector<int> knownY(rel.begin() + 12, rel.begin() + 12 + NY);
+    std::vector<int> knownX(rel.begin() + 12 + NY, rel.begin() + 19);
     uint64_t knownYmask = 0; for (int d : knownY) knownYmask |= bit(d);
     uint64_t knownXmask = 0; for (int d : knownX) knownXmask |= bit(d);
     uint64_t knownLeafmask = 0; for (int d : knownLeaf) knownLeafmask |= bit(d);
@@ -710,14 +871,15 @@ static void runGate(const Constants &c) {
     // survivor with knownYmask/knownLeafmask occurs.
     u128 Lc = c.L_c;
     u64 yCount = 0;
-    Trie trie = buildTrie(br, c, 3, 4, yCount);
+    Trie trie = buildTrie(br, c, NX, NY, yCount);
     fprintf(stderr, "[gate] trie built: %llu y-arrangements, %zu nodes\n",
             (unsigned long long)yCount, trie.nodes.size());
 
     uint64_t A19mask = 0; for (int d : br.A19) A19mask |= bit(d);
-    u128 Bexp = powmod_u128((u128)B, 16, Lc); // 12+NY=16 for 3+4 split
+    u128 Bexp = powmod_u128((u128)B, (u128)(12 + NY), Lc);
 
     u64 totalVisits = 0, totalSurvivors = 0, verifiedOk = 0, verifiedBad = 0;
+    u64 rootsTotal = 0, rootsRejected = 0;
     bool foundKnown = false;
     u64 xCounted = 0;
 
@@ -731,27 +893,36 @@ static void runGate(const Constants &c) {
         uint64_t used;
         int32_t sumP1;
         int64_t sumP2;
+        u128 leafVal;
         std::array<int,12> leaf; // leaf[0..depth-1] valid when depth<=12
     };
 
-    forEachPermutation(br.A19, 3, [&](const std::vector<int> &xdigits) {
+    forEachPermutation(br.A19, NX, [&](const std::vector<int> &xdigits) {
         xCounted++;
         u128 x_val = 0, Bpow = 1;
-        for (int i = 0; i < 3; i++) { x_val += (u128)xdigits[i] * Bpow; Bpow *= (u128)B; }
+        for (int i = 0; i < NX; i++) { x_val += (u128)xdigits[i] * Bpow; Bpow *= (u128)B; }
         u128 term = mulmod_u128(Bexp, x_val % Lc, Lc);
         u128 c_x = (br.T_target + Lc - (term % Lc)) % Lc;
 
         uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
         uint64_t allowedMinusX = A19mask & ~xmask;
-        bool thisIsKnownX = (xdigits[0]==knownX[0] && xdigits[1]==knownX[1] && xdigits[2]==knownX[2]);
+        bool thisIsKnownX = true;
+        for (int i = 0; i < NX; i++) if (xdigits[i] != knownX[i]) { thisIsKnownX = false; break; }
         int32_t xP1 = 0; int64_t xP2 = 0;
         for (int d : xdigits) { xP1 += d; xP2 += (int64_t)d * d; }
 
+        LeafEnvelope env{};
+        if (SIEVE_LEVEL & 1) env = leafEnvelope(allowedMinusX, 12);
+
         for (int j = 0; j < c.lifts; j++) {
             u128 W = c_x + (u128)j * Lc;
+            if (SIEVE_LEVEL & 1) {
+                rootsTotal++;
+                if (!liftCouldContainLeaf(W, Lc, env)) { rootsRejected++; continue; }
+            }
             auto Wdig = digitsLSDof(W);
             std::vector<DecodeFrame> stack;
-            stack.push_back({0,0,0,0,0,0,{}});
+            stack.push_back({0,0,0,0,0,0,0,{}});
             while (!stack.empty()) {
                 DecodeFrame f = stack.back(); stack.pop_back();
                 totalVisits++;
@@ -786,6 +957,29 @@ static void runGate(const Constants &c) {
                     int64_t hiY2 = br.S2_A19 - xP2 - f.sumP2 - loRemain2;
                     if (node.maxP2 < loY2 || node.minP2 > hiY2) continue;
                 }
+                if ((SIEVE_LEVEL & 2) && f.depth <= 12) {
+                    LeafEnvelope blockEnv = leafEnvelope(avail, R);
+                    u128 leaf_lo = f.leafVal + blockEnv.lo * gBpow12[f.depth];
+                    u128 leaf_hi = f.leafVal + blockEnv.hi * gBpow12[f.depth];
+                    if (!envelopeIntersects(W, leaf_lo, leaf_hi, node.minU, node.maxU)) continue;
+                }
+                if ((SIEVE_LEVEL & 4) && f.depth == 3) {
+                    auto it = trie.depth3Masks.find(f.node);
+                    bool anyOK = (it == trie.depth3Masks.end());
+                    if (it != trie.depth3Masks.end()) {
+                        uint64_t usedOrX = xmask | f.used;
+                        for (uint64_t m : it->second) {
+                            if (m & usedOrX) continue;
+                            uint64_t remaining = A19mask & ~xmask & ~f.used & ~m;
+                            if (__builtin_popcountll(remaining) != R) continue;
+                            LeafEnvelope be = leafEnvelope(remaining, R);
+                            u128 leaf_lo = f.leafVal + be.lo * gBpow12[f.depth];
+                            u128 leaf_hi = f.leafVal + be.hi * gBpow12[f.depth];
+                            if (envelopeIntersects(W, leaf_lo, leaf_hi, node.minU, node.maxU)) { anyOK = true; break; }
+                        }
+                    }
+                    if (!anyOK) continue;
+                }
 
                 if (f.depth == DEPTH) {
                     if (f.borrow == 0) {
@@ -799,8 +993,8 @@ static void runGate(const Constants &c) {
                             // verify N mod L == 0 directly, independent of trie logic.
                             std::vector<int> freePos1to19(19);
                             for (int i = 0; i < 12; i++) freePos1to19[i] = f.leaf[i];       // pos1..12
-                            for (int i = 0; i < 4; i++) freePos1to19[12+i] = ydigits[i];    // pos13..16
-                            for (int i = 0; i < 3; i++) freePos1to19[16+i] = xdigits[i];    // pos17..19
+                            for (int i = 0; i < NY; i++) freePos1to19[12+i] = ydigits[i];   // y-block
+                            for (int i = 0; i < NX; i++) freePos1to19[12+NY+i] = xdigits[i]; // x-block
                             bool ok = verifySurvivorDirect(c, br, c.prefix, 20, freePos1to19);
                             if (ok) verifiedOk++; else verifiedBad++;
 
@@ -828,6 +1022,7 @@ static void runGate(const Constants &c) {
                         nf.leaf[f.depth] = wd;
                         nf.sumP1 = f.sumP1 + wd;
                         nf.sumP2 = f.sumP2 + (int64_t)wd * wd;
+                        nf.leafVal = f.leafVal + (u128)wd * gBpow12[f.depth];
                         stack.push_back(nf);
                     } else {
                         if (wd != 0) continue;
@@ -843,10 +1038,15 @@ static void runGate(const Constants &c) {
     fprintf(stderr, "[gate] x permutations=%llu, |Y|=%llu, total visits=%llu, survivors=%llu\n",
             (unsigned long long)xCounted, (unsigned long long)yCount,
             (unsigned long long)totalVisits, (unsigned long long)totalSurvivors);
+    if (SIEVE_LEVEL & 1) {
+        double pct = rootsTotal ? 100.0 * (double)rootsRejected / (double)rootsTotal : 0.0;
+        fprintf(stderr, "[gate][sieve] roots total=%llu rejected=%llu (%.1f%%)\n",
+                (unsigned long long)rootsTotal, (unsigned long long)rootsRejected, pct);
+    }
     fprintf(stderr, "[gate] direct-arithmetic verification of survivors: %llu OK, %llu FAILED\n",
             (unsigned long long)verifiedOk, (unsigned long long)verifiedBad);
     fprintf(stderr, "[gate] known completion found among survivors: %s\n", foundKnown ? "YES" : "NO");
-    bool pass = foundKnown && (verifiedBad == 0) && (totalSurvivors == verifiedOk);
+    bool pass = foundKnown && (verifiedBad == 0) && (totalSurvivors == verifiedOk) && (totalSurvivors == 1);
     fprintf(stderr, "[gate] SOUNDNESS GATE: %s\n", pass ? "PASS" : "FAIL");
 }
 
@@ -1182,6 +1382,7 @@ static void runPatFull(const Constants &c, int candidate, int NX, int NY, long r
     u128 Bexp = powmod_u128((u128)B, (u128)(12 + NY), Lc);
 
     u64 totalVisits = 0, totalSurvivors = 0;
+    u64 rootsTotal = 0, rootsRejected = 0;
     u64 xCounted = 0;
     forEachPermutation(br.A19, NX, [&](const std::vector<int> &xdigits) {
         xCounted++;
@@ -1194,9 +1395,18 @@ static void runPatFull(const Constants &c, int candidate, int NX, int NY, long r
         int32_t xP1 = 0; int64_t xP2 = 0;
         for (int d : xdigits) { xP1 += d; xP2 += (int64_t)d * d; }
 
+        // Root envelope sieve (LIFT-ENVELOPE-SIEVE.md §3/§4), same test as the
+        // classic path, applied before ever entering the compact trie.
+        LeafEnvelope env{};
+        if (SIEVE_LEVEL & 1) env = leafEnvelope(allowedMinusX, 12);
+
         WalkStats stats;
         for (int j = 0; j < c.lifts; j++) {
             u128 W = c_x + (u128)j * Lc;
+            if (SIEVE_LEVEL & 1) {
+                rootsTotal++;
+                if (!liftCouldContainLeaf(W, Lc, env)) { rootsRejected++; continue; }
+            }
             patWalkOne(pt, W, allowedMinusX, xmask, A19mask, stats, br, xP1, xP2,
                        [](const std::array<int,12>&, const PatNode&, uint64_t){});
         }
@@ -1212,6 +1422,11 @@ static void runPatFull(const Constants &c, int candidate, int NX, int NY, long r
             candidate, NX, NY, (unsigned long long)xCounted, (unsigned long long)yCount,
             (unsigned long long)totalVisits, meanVisitsPerX, (unsigned long long)totalSurvivors, wall,
             genSeconds, buildSortSeconds, wall - genSeconds - buildSortSeconds);
+    if (SIEVE_LEVEL & 1) {
+        double pct = rootsTotal ? 100.0 * (double)rootsRejected / (double)rootsTotal : 0.0;
+        fprintf(stderr, "[patfull][sieve] roots total=%llu rejected=%llu (%.1f%%)\n",
+                (unsigned long long)rootsTotal, (unsigned long long)rootsRejected, pct);
+    }
     fprintf(stderr, "[patfull] peakRSS at walk-end = %ldKB\n", peakRssKB());
     checkRssBudget(rssBudgetKB, "walk-end");
 }
@@ -1267,6 +1482,7 @@ static void runPatGate(const Constants &c, int NX, int NY, long rssBudgetKB = -1
     u128 Bexp = powmod_u128((u128)B, (u128)(12 + NY), Lc);
 
     u64 totalVisits = 0, totalSurvivors = 0, verifiedOk = 0, verifiedBad = 0;
+    u64 rootsTotal = 0, rootsRejected = 0;
     bool foundKnown = false;
     u64 xCounted = 0;
 
@@ -1283,8 +1499,15 @@ static void runPatGate(const Constants &c, int NX, int NY, long rssBudgetKB = -1
         int32_t xP1 = 0; int64_t xP2 = 0;
         for (int d : xdigits) { xP1 += d; xP2 += (int64_t)d * d; }
 
+        LeafEnvelope env{};
+        if (SIEVE_LEVEL & 1) env = leafEnvelope(allowedMinusX, 12);
+
         for (int j = 0; j < c.lifts; j++) {
             u128 W = c_x + (u128)j * Lc;
+            if (SIEVE_LEVEL & 1) {
+                rootsTotal++;
+                if (!liftCouldContainLeaf(W, Lc, env)) { rootsRejected++; continue; }
+            }
             WalkStats stats;
             patWalkOne(pt, W, allowedMinusX, xmask, A19mask, stats, br, xP1, xP2,
                 [&](const std::array<int,12> &leaf, const PatNode &node, uint64_t used) {
@@ -1307,6 +1530,11 @@ static void runPatGate(const Constants &c, int NX, int NY, long rssBudgetKB = -1
     fprintf(stderr, "[pgate] x permutations=%llu, |Y|=%llu, total visits=%llu, survivors=%llu peakRSS=%ldKB\n",
             (unsigned long long)xCounted, (unsigned long long)yCount,
             (unsigned long long)totalVisits, (unsigned long long)totalSurvivors, peakRssKB());
+    if (SIEVE_LEVEL & 1) {
+        double pct = rootsTotal ? 100.0 * (double)rootsRejected / (double)rootsTotal : 0.0;
+        fprintf(stderr, "[pgate][sieve] roots total=%llu rejected=%llu (%.1f%%)\n",
+                (unsigned long long)rootsTotal, (unsigned long long)rootsRejected, pct);
+    }
     fprintf(stderr, "[pgate] direct-arithmetic verification of survivors: %llu OK, %llu FAILED\n",
             (unsigned long long)verifiedOk, (unsigned long long)verifiedBad);
     fprintf(stderr, "[pgate] known completion found among survivors: %s\n", foundKnown ? "YES" : "NO");
@@ -1337,16 +1565,30 @@ static void runFull(const Constants &c, int candidate, int NX, int NY) {
             (unsigned long long)rr.xCount, (unsigned long long)rr.yCount,
             (unsigned long long)rr.totalVisits, meanVisitsPerX,
             (unsigned long long)rr.totalSurvivors, rr.wallSeconds);
+    if (SIEVE_LEVEL & 1) {
+        double pct = rr.rootsTotal ? 100.0 * (double)rr.rootsRejected / (double)rr.rootsTotal : 0.0;
+        fprintf(stderr, "[sieve] roots total=%llu rejected=%llu (%.1f%%)\n",
+                (unsigned long long)rr.rootsTotal, (unsigned long long)rr.rootsRejected, pct);
+    }
 }
 
 int main(int argc, char **argv) {
+    initBpow12();
     Constants c = deriveConstants();
     printGuardSummary(c);
+
+    // SIEVE_LEVEL (LIFT-ENVELOPE-SIEVE.md) is read from the SIEVE env var so it
+    // doesn't have to be threaded through every mode's positional CLI:
+    //   SIEVE=0 off (default) | 1 root only | 2 root+every-node | 4 +depth3-joint
+    //   (bitmask; e.g. SIEVE=7 = root + every-node + depth3-joint combined)
+    if (const char *sv = getenv("SIEVE")) SIEVE_LEVEL = atoi(sv);
+    fprintf(stderr, "[sieve] SIEVE_LEVEL=%d (bit0=root bit1=every-node bit2=depth3-joint)\n", SIEVE_LEVEL);
 
     if (argc < 2) {
         fprintf(stderr, "usage: %s smoke|gate|full|pgate|pfull <cand> <NX> <NY> [pruneLevel]\n", argv[0]);
         fprintf(stderr, "  pgate/pfull: PATRICIA-CARRY-TRIE.md Phase A path-compressed builder/walker\n");
         fprintf(stderr, "  pruneLevel: 0=none 1=rung1(mask-union) 2=+rung2a(p1) 3=+rung2b(p2) [default 3]\n");
+        fprintf(stderr, "  SIEVE env var: LIFT-ENVELOPE-SIEVE.md bitmask, see above\n");
         return 1;
     }
     std::string mode = argv[1];
@@ -1355,9 +1597,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
         runSmoke(c);
     } else if (mode == "gate") {
-        if (argc >= 3) PRUNE_LEVEL = atoi(argv[2]);
+        // gate [NX] [NY] [pruneLevel]   (default 3 4, for back-compat)
+        int NX = 3, NY = 4;
+        if (argc >= 4) { NX = atoi(argv[2]); NY = atoi(argv[3]); }
+        if (argc >= 5) PRUNE_LEVEL = atoi(argv[4]);
         fprintf(stderr, "[prune] level=%d\n", PRUNE_LEVEL);
-        runGate(c);
+        runGate(c, NX, NY);
     } else if (mode == "full") {
         if (argc < 5) { fprintf(stderr, "full requires <cand> <NX> <NY>\n"); return 1; }
         int cand = atoi(argv[2]);
