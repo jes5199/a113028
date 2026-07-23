@@ -2545,6 +2545,86 @@ static int countAdmissibleSuffixTuplesGen(const std::vector<int> &pool, int T, i
     return count;
 }
 
+// Exact admissible-ordered-suffix-tuple COUNT via digit DP (BASE-50-FULL-
+// MODULUS-BUCKET.md Sec 6/9 Phase B): state = (occupied suffix-position mask
+// in 0..2^T-1, weighted partial sum mod Lnil), processed incrementally over
+// the pool's digits (each digit is either skipped, or placed into exactly
+// one currently-unoccupied suffix position). Reaching mask==full with
+// residue 0 after processing every pool digit corresponds to exactly one
+// ordered assignment of T distinct pool digits to positions 0..T-1 weighted
+// by B^position -- precisely the same set counted by
+// countAdmissibleSuffixTuplesGen's depth-first permutation enumeration
+// above, but in O(n * 2^T * T * Lnil) instead of O(n P T) time and without
+// ever materializing a tuple. For base 50 (T=5, Lnil=160) that is a few
+// thousand DP transitions per candidate digit instead of enumerating up to
+// tens of millions of suffix permutations (doc Sec 6 "do not materialize
+// tuples for counting").
+static uint64_t countAdmissibleSuffixTuplesDP(const std::vector<int> &pool, int T, int B, u128 Lnil) {
+    if (T <= 0) return 1; // no suffix positions: the empty tuple is trivially admissible
+    if (Lnil == 0 || Lnil > (u128)200000) return UINT64_MAX; // sentinel: caller falls back / declines
+    uint64_t Ln = (uint64_t)Lnil;
+    int nMasks = 1 << T;
+    std::vector<u128> Bpow(T, 1);
+    for (int i = 1; i < T; i++) Bpow[i] = (Bpow[i - 1] * (u128)B) % Lnil;
+
+    std::vector<uint64_t> dp((size_t)nMasks * Ln, 0);
+    dp[0] = 1;
+    std::vector<uint64_t> next(dp.size());
+    for (int d : pool) {
+        next = dp; // "skip this digit" case carried forward unchanged
+        for (int mask = 0; mask < nMasks; mask++) {
+            if (mask == nMasks - 1) continue; // no empty suffix position left to place d
+            const uint64_t *srcRow = &dp[(size_t)mask * Ln];
+            for (int j = 0; j < T; j++) {
+                if (mask & (1 << j)) continue;
+                uint64_t add = (uint64_t)((u128)d * Bpow[j] % Lnil);
+                uint64_t *dstRow = &next[(size_t)(mask | (1 << j)) * Ln];
+                for (uint64_t r = 0; r < Ln; r++) {
+                    if (!srcRow[r]) continue;
+                    dstRow[(r + add) % Ln] += srcRow[r];
+                }
+            }
+        }
+        dp.swap(next);
+    }
+    return dp[(size_t)(nMasks - 1) * Ln + 0];
+}
+
+// Cross-checks countAdmissibleSuffixTuplesDP against the brute-force
+// countAdmissibleSuffixTuplesGen (task requirement: "must agree exactly"),
+// plus an exact reproduction of BASE-50-FULL-MODULUS-BUCKET.md Sec 3.2's
+// worked example (pool {1..20}, T=5, B=50, Lnil=160 -> 11,552 admissible
+// ordered suffixes). Aborts the process (exit 1) on any mismatch -- a
+// disagreement here means the DP is unsound and nothing downstream that
+// relies on it (the planner's suffix multiplicity) can be trusted.
+static void selfTestSuffixDP() {
+    struct Case { std::vector<int> pool; int T; int B; u128 Lnil; uint64_t expect; const char *label; };
+    std::vector<int> p20; for (int i = 1; i <= 20; i++) p20.push_back(i);
+    std::vector<int> p15; for (int i = 1; i <= 15; i++) p15.push_back(i);
+    std::vector<int> p12; for (int i = 1; i <= 12; i++) p12.push_back(i);
+    std::vector<Case> cases = {
+        {p20, 5, 50, 160, 11552, "doc#23-Sec3.2-b50-cand21"},
+        {p15, 3, 48, 216, 0,     "b48-shape-T3-Lnil216"},
+        {p12, 1, 49, 7,   0,     "b49-shape-T1-Lnil7"},
+        {p15, 2, 48, 24,  0,     "misc-T2"},
+    };
+    bool allOk = true;
+    for (auto &tc : cases) {
+        uint64_t dpCount = countAdmissibleSuffixTuplesDP(tc.pool, tc.T, tc.B, tc.Lnil);
+        int bruteCount = countAdmissibleSuffixTuplesGen(tc.pool, tc.T, tc.B, tc.Lnil);
+        bool ok = (dpCount == (uint64_t)bruteCount) && (tc.expect == 0 || dpCount == tc.expect);
+        char expectBuf[64] = "";
+        if (tc.expect) snprintf(expectBuf, sizeof(expectBuf), " expect=%llu", (unsigned long long)tc.expect);
+        fprintf(stderr, "[selftest-suffixdp] %s: DP=%llu brute=%d%s -> %s\n",
+                tc.label, (unsigned long long)dpCount, bruteCount, expectBuf, ok ? "OK" : "MISMATCH");
+        if (!ok) allOk = false;
+    }
+    if (!allOk) {
+        fprintf(stderr, "[selftest-suffixdp] FATAL: suffix-tuple DP disagrees with brute enumeration\n");
+        exit(1);
+    }
+}
+
 // One admissible suffix tuple's induced branch (generalizes b48::SuffixBranch
 // to arbitrary T).
 struct SuffixBranchGen {
@@ -2658,6 +2738,96 @@ static std::string formatGiB(u128 bytes) {
     return std::string(buf);
 }
 
+// Current (not peak) RSS of this process, in KB (Linux /proc/self/status
+// VmRSS). Distinct from peakRssKB()'s VmHWM, which is monotonic non-
+// decreasing for the whole process lifetime. Every EXISTING call site
+// (cert/certfm, via bucketAdmissionGate's default useCurrentRssForAvailable
+// =false below) keeps using peakRssKB() UNCHANGED, so their output stays
+// byte-identical. certauto opts in (useCurrentRssForAvailable=true) both
+// for its own planner's preflight queries AND for the actual builds its
+// execution phase runs, because runWrongTurnSearch/FM loop over MULTIPLE
+// candidates and/or suffix tuples, each building and then FREEING its own
+// index -- charging a later candidate's admission check against the
+// process's historical peak double-charges it for memory that an earlier,
+// already-destructed index no longer holds (BASE-50-FULL-MODULUS-BUCKET.md
+// Sec 9 Phase B, task item 5's "multi-candidate double-charge"). VmRSS
+// reflects what is genuinely resident right now.
+static long currentRssKB() {
+    FILE *f = fopen("/proc/self/status", "r");
+    if (!f) return -1;
+    char line[256];
+    long kb = -1;
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "VmRSS:", 6) == 0) { sscanf(line + 6, "%ld", &kb); break; }
+    }
+    fclose(f);
+    return kb;
+}
+
+// The same "C(R+4) + YR + 3(Q+1)*4" projected-peak formula bucketAdmissionGate
+// uses inline below (RADIX-BUCKET-ADMISSION-CONTROL.md Sec 3), factored out
+// so the certauto planner can reuse it exactly (task item: "use the Phase-A
+// gate's projected-peak formula with the right record sizes") without
+// duplicating -- and risking drifting out of sync with -- the real gate's
+// arithmetic. bucketAdmissionGate's own body is left untouched below so its
+// existing exit(3) call sites keep byte-identical behavior.
+static std::optional<u128> projectedPeakBytesFor(u128 Y, u128 Q, size_t recBytes) {
+    auto cOpt = nextPow2U128(Y);
+    if (!cOpt) return std::nullopt;
+    u128 C = *cOpt;
+    u128 recBytesU = (u128)recBytes;
+    u128 idxBytes = (u128)sizeof(uint32_t);
+    return C * (recBytesU + idxBytes) + Y * recBytesU + (u128)3 * (Q + 1) * idxBytes;
+}
+
+// Pure QUERY form of the memory gate (RADIX-BUCKET-ADMISSION-CONTROL.md
+// Sec 9 "Sound fallback semantics" / Sec 10 planner sketch): computes the
+// admit/decline decision and returns it as data, WITHOUT printing a trace
+// or calling exit(3) -- the certauto planner below evaluates many
+// (NX,NY,K) configurations and must be able to discard infeasible ones
+// silently before committing to a trace for the CHOSEN plan. Existing
+// call sites keep calling bucketAdmissionGate() (unchanged, still prints
+// + exit(3)s); this is new additive plumbing, not a replacement.
+struct BucketAdmissionResult {
+    bool admitted = false;
+    std::string reason;
+    u128 Y = 0, Q = 0;
+    bool yOverflow = false, qOverflow = false; // which checked-arithmetic call (if any) actually overflowed
+    u128 projectedPeakBytes = 0;
+    bool haveProjected = false;
+    u128 availableBytes = 0;
+};
+static BucketAdmissionResult bucketAdmissionQuery(int a, int NY, int K, int B, long rssBudgetKB,
+                                                    size_t recBytes, long rssForAvailableKB) {
+    BucketAdmissionResult out;
+    if (rssBudgetKB <= 0) { out.admitted = true; return out; } // budget disabled: same convention as bucketAdmissionGate
+
+    auto yOpt = checkedFallingFactorial(a, NY);
+    auto qOpt = checkedPower((u128)B, K);
+
+    u128 currentRssBytes = rssForAvailableKB > 0 ? (u128)rssForAvailableKB * 1024 : (u128)0;
+    const u128 kReserveBytes = (u128)256 * 1024 * 1024;
+    u128 budgetBytes = (u128)rssBudgetKB * 1024;
+    out.availableBytes = (budgetBytes > currentRssBytes + kReserveBytes)
+                              ? (budgetBytes - currentRssBytes - kReserveBytes)
+                              : (u128)0;
+
+    if (!yOpt) { out.reason = "Y_overflow"; out.yOverflow = true; return out; }
+    if (!qOpt) { out.reason = "Q_overflow"; out.qOverflow = true; return out; }
+    out.Y = *yOpt; out.Q = *qOpt;
+    if (out.Y > (u128)UINT32_MAX) { out.reason = "Y_exceeds_uint32"; return out; }
+
+    auto bytesOpt = projectedPeakBytesFor(out.Y, out.Q, recBytes);
+    if (!bytesOpt) { out.reason = "peak_bytes_overflow"; return out; }
+    out.projectedPeakBytes = *bytesOpt;
+    out.haveProjected = true;
+    u128 need = out.projectedPeakBytes + (out.projectedPeakBytes * 15) / 100; // 1.15x, same margin as bucketAdmissionGate
+    if (need > out.availableBytes) { out.reason = "insufficient_budget"; return out; }
+
+    out.admitted = true;
+    return out;
+}
+
 // Preflight admission gate for the current grow-and-scatter builder below
 // (RADIX-BUCKET-ADMISSION-CONTROL.md Sec 2/3, Sec 12 Phase A). Active only
 // when rssBudgetKB > 0; manual/debug call sites that pass -1 keep exactly
@@ -2666,53 +2836,34 @@ static std::string formatGiB(u128 bytes) {
 // terminates the process immediately (exit 3 = BUCKET_DECLINED) with a
 // reproducible trace, rather than returning a value the caller (or the
 // wrong-turn search above it) could interpret as "no survivors."
+//
+// Thin wrapper over bucketAdmissionQuery: with useCurrentRssForAvailable
+// left at its default (false), this reproduces the ORIGINAL inline
+// computation's output EXACTLY -- same formula, same order of checks, same
+// (intentionally preserved) quirk that Y prints as 0 rather than the true
+// falling-factorial value on the rare Q-overflow-only path, since that
+// quirk was already unreachable in practice (Q=B^K never overflows for the
+// K<=4 values this driver uses) and preserving cert/certfm's byte-for-byte
+// output takes priority over quietly fixing it here. Passing
+// useCurrentRssForAvailable=true (certauto's execution-phase call sites)
+// is the only behavioral change this wrapper can introduce, and only for
+// callers that explicitly opt in.
 static void bucketAdmissionGate(int a, int NY, int K, int B, long rssBudgetKB,
-                                 size_t recBytes = sizeof(BucketRecordGen)) {
+                                 size_t recBytes = sizeof(BucketRecordGen),
+                                 bool useCurrentRssForAvailable = false) {
     if (rssBudgetKB <= 0) return;
 
-    auto yOpt = checkedFallingFactorial(a, NY);
-    auto qOpt = checkedPower((u128)B, K);
+    long rssKB = useCurrentRssForAvailable ? currentRssKB() : peakRssKB();
+    BucketAdmissionResult r = bucketAdmissionQuery(a, NY, K, B, rssBudgetKB, recBytes, rssKB);
 
-    long currentRssKB = peakRssKB();
-    u128 currentRssBytes = currentRssKB > 0 ? (u128)currentRssKB * 1024 : (u128)0;
-    const u128 kReserveBytes = (u128)256 * 1024 * 1024;
-    u128 budgetBytes = (u128)rssBudgetKB * 1024;
-    u128 available = (budgetBytes > currentRssBytes + kReserveBytes)
-                          ? (budgetBytes - currentRssBytes - kReserveBytes)
-                          : (u128)0;
-
-    bool declined = false;
-    bool haveProjected = false;
-    const char *reason = "";
-    u128 Y = 0, Q = 0, projected = 0;
-
-    if (!yOpt) { declined = true; reason = "Y_overflow"; }
-    else if (!qOpt) { declined = true; reason = "Q_overflow"; }
-    else {
-        Y = *yOpt; Q = *qOpt;
-        if (Y > (u128)UINT32_MAX) { declined = true; reason = "Y_exceeds_uint32"; }
-        else {
-            auto cOpt = nextPow2U128(Y);
-            u128 C = cOpt ? *cOpt : Y;
-            u128 recBytesU = (u128)recBytes;
-            u128 idxBytes = (u128)sizeof(uint32_t);
-            // doc Sec 3: C(R+4) + YR + 12(Q+1), using real sizeof rather than
-            // the copied constants in the doc's worked example.
-            projected = C * (recBytesU + idxBytes) + Y * recBytesU + (u128)3 * (Q + 1) * idxBytes;
-            haveProjected = true;
-            u128 need = projected + (projected * 15) / 100; // 1.15x projected
-            if (need > available) { declined = true; reason = "insufficient_budget"; }
-        }
-    }
-
-    std::string yStr = yOpt ? u128_to_string(Y) : std::string("OVERFLOW");
-    std::string qStr = qOpt ? u128_to_string(Q) : std::string("OVERFLOW");
-    std::string projStr = haveProjected ? formatGiB(projected) : std::string("n/a");
+    std::string yStr = r.yOverflow ? std::string("OVERFLOW") : u128_to_string(r.Y);
+    std::string qStr = r.qOverflow ? std::string("OVERFLOW") : u128_to_string(r.Q);
+    std::string projStr = r.haveProjected ? formatGiB(r.projectedPeakBytes) : std::string("n/a");
     fprintf(stderr, "[bucket-plan] B=%d a=%d NY=%d K=%d Y=%s Q=%s projectedPeak=%s availableForIndex=%s\n",
-            B, a, NY, K, yStr.c_str(), qStr.c_str(), projStr.c_str(), formatGiB(available).c_str());
+            B, a, NY, K, yStr.c_str(), qStr.c_str(), projStr.c_str(), formatGiB(r.availableBytes).c_str());
 
-    if (declined) {
-        fprintf(stderr, "[bucket-plan] decision=DECLINE_MEMORY reason=%s fallback=scan (exit 3 = BUCKET_DECLINED)\n", reason);
+    if (!r.admitted) {
+        fprintf(stderr, "[bucket-plan] decision=DECLINE_MEMORY reason=%s fallback=scan (exit 3 = BUCKET_DECLINED)\n", r.reason.c_str());
         exit(3);
     }
 
@@ -2720,8 +2871,8 @@ static void bucketAdmissionGate(int a, int NY, int K, int B, long rssBudgetKB,
 }
 
 static BucketIndexGen buildBucketIndexGen(const std::vector<int> &A, int NY, int K, int B, int Pc, u128 Lc,
-                                           u64 &yCount, long rssBudgetKB = -1) {
-    bucketAdmissionGate((int)A.size(), NY, K, B, rssBudgetKB);
+                                           u64 &yCount, long rssBudgetKB = -1, bool useCurrentRssForAvailable = false) {
+    bucketAdmissionGate((int)A.size(), NY, K, B, rssBudgetKB, sizeof(BucketRecordGen), useCurrentRssForAvailable);
     u128 BPcModLc = powmod_u128((u128)B, (u128)Pc, Lc);
     u64 bucketCount = 1;
     for (int i = 0; i < K; i++) bucketCount *= (u64)B;
@@ -2869,8 +3020,8 @@ struct BucketIndexFM {
 // (bucketAdmissionGate), passing the FM record's larger sizeof so the memory
 // projection stays accurate for this record shape.
 static BucketIndexFM buildBucketIndexFM(const std::vector<int> &A, int NY, int K, int B, int P, u128 M,
-                                         u64 &yCount, long rssBudgetKB = -1) {
-    bucketAdmissionGate((int)A.size(), NY, K, B, rssBudgetKB, sizeof(BucketRecordFM));
+                                         u64 &yCount, long rssBudgetKB = -1, bool useCurrentRssForAvailable = false) {
+    bucketAdmissionGate((int)A.size(), NY, K, B, rssBudgetKB, sizeof(BucketRecordFM), useCurrentRssForAvailable);
     u128 BPmodM = powmod_u128((u128)B, (u128)P, M);
     u64 bucketCount = 1;
     for (int i = 0; i < K; i++) bucketCount *= (u64)B;
@@ -3010,6 +3161,13 @@ struct AttemptResult {
     int winningCandidate = -1;
     double wallSeconds = 0;
     long peakRssKBSeen = 0;
+    // Cumulative BucketStatsGen totals across every candidate/suffix branch
+    // this call actually walked (wrong turns AND the eventual winner, if
+    // any) -- used by certauto to print predicted-vs-actual counters
+    // (task item 4) against the planner's single-representative-candidate
+    // estimate. Not populated by cert/certfm's call sites' callers (they
+    // never read these fields), so this is purely additive.
+    u64 totalRoots = 0, totalLookups = 0, totalScans = 0;
 };
 
 // The core wrong-turn-refutation search: given a fully-specified D, a
@@ -3019,7 +3177,7 @@ struct AttemptResult {
 // admissible suffix families).
 static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector<int> &prefix,
                                          const std::vector<int> &pool, int NX, int NY, int K,
-                                         long rssBudgetKB) {
+                                         long rssBudgetKB, bool useCurrentRssForAvailable = false) {
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
     AttemptResult res;
@@ -3047,7 +3205,7 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
 
             uint64_t Amask = 0; for (int d : sb.freeDigits) Amask |= bit(d);
             u64 yCount = 0;
-            BucketIndexGen idx = buildBucketIndexGen(sb.freeDigits, NY, K, c.B, c.Pc, c.Lc, yCount, rssBudgetKB);
+            BucketIndexGen idx = buildBucketIndexGen(sb.freeDigits, NY, K, c.B, c.Pc, c.Lc, yCount, rssBudgetKB, useCurrentRssForAvailable);
             u128 Bexp = powmod_u128((u128)c.B, (u128)(c.Pc + NY), c.Lc);
             BucketStatsGen stats;
             forEachPermutation(sb.freeDigits, NX, [&](const std::vector<int> &xdigits) {
@@ -3084,6 +3242,7 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
                     });
             });
             totalSurvivors += stats.survivors;
+            res.totalRoots += stats.roots; res.totalLookups += stats.lookups; res.totalScans += stats.scans;
             checkRssBudget(rssBudgetKB, "certdrv-per-suffix-tuple");
             long kb = peakRssKB(); if (kb > res.peakRssKBSeen) res.peakRssKBSeen = kb;
         }
@@ -3118,7 +3277,7 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
 // P + NY + NX == 20 (asserted below rather than assumed).
 static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vector<int> &prefix,
                                            const std::vector<int> &pool, int P, int NX, int NY, int K,
-                                           long rssBudgetKB) {
+                                           long rssBudgetKB, bool useCurrentRssForAvailable = false) {
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
     AttemptResult res;
@@ -3166,7 +3325,7 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
         u128 target = (c.L - (C % c.L)) % c.L;
 
         u64 yCount = 0;
-        BucketIndexFM idx = buildBucketIndexFM(restPool, NY, K, c.B, P, c.L, yCount, rssBudgetKB);
+        BucketIndexFM idx = buildBucketIndexFM(restPool, NY, K, c.B, P, c.L, yCount, rssBudgetKB, useCurrentRssForAvailable);
         u128 Bexp = powmod_u128((u128)c.B, (u128)(P + NY), c.L);
         BucketStatsGen stats;
         u64 totalSurvivors = 0, verifiedOk = 0, verifiedBad = 0;
@@ -3207,6 +3366,7 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
                 });
         });
         totalSurvivors += stats.survivors;
+        res.totalRoots += stats.roots; res.totalLookups += stats.lookups; res.totalScans += stats.scans;
         checkRssBudget(rssBudgetKB, "certdrv-fm-per-candidate");
         long kb = peakRssKB(); if (kb > res.peakRssKBSeen) res.peakRssKBSeen = kb;
 
@@ -3293,6 +3453,239 @@ static bool buildFeasiblePrefix(const ConstantsGen &c, int targetWY, int maxRele
         }
     }
     return false;
+}
+
+// ============================================================================
+// Phase B planner (BASE-50-FULL-MODULUS-BUCKET.md Sec 6/9 Phase B;
+// RADIX-BUCKET-ADMISSION-CONTROL.md Sec 4/5/8-10): enumerate BOTH plan
+// families (peeled-suffix bucket, full-modulus bucket) across legal
+// (NX,NY,K) splits, cost each with the doc's formulas, discard configs that
+// violate the memory budget (bucketAdmissionQuery), and select the minimum-
+// score feasible config. If nothing is feasible, the caller must treat this
+// as AttemptStatus::Declined (Sec 9): print the trace and exit(3), never
+// silently fall through as though the subset/candidate were refuted.
+// ============================================================================
+
+enum class BucketFamily { Peeled, FullModulus };
+static const char *familyName(BucketFamily f) { return f == BucketFamily::Peeled ? "peeled" : "full-modulus"; }
+
+struct PlanConfig {
+    BucketFamily family = BucketFamily::Peeled;
+    int NX = 0, NY = 0, K = 0;
+    int P = 0;                 // leaf width: c.Pc for Peeled, P_full for FullModulus
+    int lifts = 0;
+    uint64_t suffixMult = 1;   // exact admissible-suffix-tuple count (Peeled); always 1 for FullModulus
+    u128 Y = 0, Q = 0, roots = 0;
+    long double lookups = 0, meanBucket = 0, recordChecks = 0;
+    u128 projectedPeakBytes = 0;
+    long double score = 0;
+};
+
+// UNCALIBRATED coefficients (RADIX-BUCKET-ADMISSION-CONTROL.md Sec 5/7;
+// BASE-50-FULL-MODULUS-BUCKET.md Sec 6): rough relative ns-ish weights for
+// one build record / one bucket-directory slot cleared per index build /
+// one bucket lookup / one scanned record. These are placeholders picked to
+// get the RELATIVE ordering of candidate plans roughly right (build and
+// lookup are the expensive operations; a bucket-count "clear" is cheap;
+// a record scan is a single mask intersection, cheaper still per the docs'
+// own "most record checks are a single mask intersection" observation).
+// Calibrate later via doc Sec 7's online EWMA of completed certauto runs
+// once enough predicted-vs-actual residuals exist.
+static constexpr long double PLAN_C_BUILD  = 3.0L;
+static constexpr long double PLAN_C_CLEAR  = 0.3L;
+static constexpr long double PLAN_C_LOOKUP = 6.0L;
+static constexpr long double PLAN_C_SCAN   = 1.5L;
+
+static void scoreConfig(PlanConfig &pc) {
+    long double mult = (long double)pc.suffixMult; // index_build_count for Peeled (rebuilt per suffix); 1 for FullModulus
+    long double buildRecords = (long double)pc.Y * mult;
+    long double clearWork = (long double)pc.Q * mult;
+    pc.score = PLAN_C_BUILD * buildRecords + PLAN_C_CLEAR * clearWork
+             + PLAN_C_LOOKUP * pc.lookups * mult + PLAN_C_SCAN * pc.recordChecks * mult;
+}
+
+// Derives P_full = ceil(log_B L) exactly as runCertFM's chooseWYFM does.
+static int deriveP_full(const ConstantsGen &c) {
+    u128 v = 1; int P = 0;
+    while (v < c.L) { v *= (u128)c.B; P++; }
+    return P;
+}
+
+// Peeled family (doc #23 Sec 6a): modulus L_c, suffix depth T, one bucket
+// build per admissible suffix tuple -- NX = 0..W-1 (NY = W-NX >= 1), K = 2..4
+// (task-specified sweep range). a = Pc + W = 20 - T is the free-pool size
+// BOTH X and Y are drawn from (buildSuffixBranchGen's freeDigits), fixed by
+// the CANDIDATE_POS=20 invariant regardless of split.
+static void enumeratePeeledConfigs(const ConstantsGen &c, uint64_t suffixMult, long rssBudgetKB,
+                                    std::vector<PlanConfig> &out) {
+    int W = 20 - c.T - c.Pc;
+    if (W < 1 || suffixMult == 0 || suffixMult == UINT64_MAX) return;
+    int a = c.Pc + W;
+    for (int NX = 0; NX < W; NX++) {
+        int NY = W - NX;
+        if (NY < 1) continue;
+        for (int K = 2; K <= 4; K++) {
+            auto yOpt = checkedFallingFactorial(a, NY);
+            auto qOpt = checkedPower((u128)c.B, K);
+            if (!yOpt || !qOpt) {
+                fprintf(stderr, "[bucket-plan] reject peeled NX=%d NY=%d K=%d: Y_or_Q_overflow\n", NX, NY, K);
+                continue;
+            }
+            BucketAdmissionResult adm = bucketAdmissionQuery(a, NY, K, c.B, rssBudgetKB,
+                                                               sizeof(BucketRecordGen), currentRssKB());
+            if (!adm.admitted) {
+                fprintf(stderr, "[bucket-plan] reject peeled NX=%d NY=%d K=%d: Y=%s Q=%s reason=%s\n",
+                        NX, NY, K, u128_to_string(*yOpt).c_str(), u128_to_string(*qOpt).c_str(), adm.reason.c_str());
+                continue;
+            }
+            auto xOpt = checkedFallingFactorial(a, NX);
+            auto leafOpt = checkedFallingFactorial(a - NX, K);
+            if (!xOpt || !leafOpt) {
+                fprintf(stderr, "[bucket-plan] reject peeled NX=%d NY=%d K=%d: work_overflow\n", NX, NY, K);
+                continue;
+            }
+            PlanConfig pc;
+            pc.family = BucketFamily::Peeled;
+            pc.NX = NX; pc.NY = NY; pc.K = K; pc.P = c.Pc; pc.lifts = c.lifts;
+            pc.suffixMult = suffixMult;
+            pc.Y = *yOpt; pc.Q = *qOpt;
+            pc.roots = (*xOpt) * (u128)c.lifts;
+            pc.lookups = (long double)pc.roots * (long double)(*leafOpt);
+            pc.meanBucket = pc.Q > 0 ? (long double)pc.Y / (long double)pc.Q : 0.0L;
+            pc.recordChecks = pc.lookups * pc.meanBucket;
+            pc.projectedPeakBytes = adm.projectedPeakBytes;
+            scoreConfig(pc);
+            fprintf(stderr, "[bucket-plan] admit peeled NX=%d NY=%d K=%d: Y=%s Q=%s suffixMult=%llu "
+                            "projectedPeak=%s lookups=%.4Lg scans=%.4Lg score=%.4Lg\n",
+                    NX, NY, K, u128_to_string(pc.Y).c_str(), u128_to_string(pc.Q).c_str(),
+                    (unsigned long long)suffixMult, formatGiB(pc.projectedPeakBytes).c_str(),
+                    pc.lookups, pc.recordChecks, pc.score);
+            out.push_back(pc);
+        }
+    }
+}
+
+// Full-modulus family (doc #23 Sec 6b / Sec 4/9 Phase A): modulus L, no
+// suffix loop, P + NX + NY == 20 always. a = 20 fixed regardless of split.
+static void enumerateFMConfigs(const ConstantsGen &c, int P_full, long rssBudgetKB,
+                                std::vector<PlanConfig> &out) {
+    int W = 20 - P_full;
+    if (W < 1) return;
+    auto BPowOpt = checkedPower((u128)c.B, P_full);
+    if (!BPowOpt) { fprintf(stderr, "[bucket-plan] reject full-modulus: B^P_full overflow\n"); return; }
+    u128 jmax = (*BPowOpt + c.L - 1) / c.L;
+    int liftsFull = (int)jmax + 1;
+    const int a = 20;
+    for (int NX = 0; NX < W; NX++) {
+        int NY = W - NX;
+        if (NY < 1) continue;
+        for (int K = 2; K <= 4; K++) {
+            auto yOpt = checkedFallingFactorial(a, NY);
+            auto qOpt = checkedPower((u128)c.B, K);
+            if (!yOpt || !qOpt) {
+                fprintf(stderr, "[bucket-plan] reject full-modulus NX=%d NY=%d K=%d: Y_or_Q_overflow\n", NX, NY, K);
+                continue;
+            }
+            BucketAdmissionResult adm = bucketAdmissionQuery(a, NY, K, c.B, rssBudgetKB,
+                                                               sizeof(BucketRecordFM), currentRssKB());
+            if (!adm.admitted) {
+                fprintf(stderr, "[bucket-plan] reject full-modulus NX=%d NY=%d K=%d: Y=%s Q=%s reason=%s\n",
+                        NX, NY, K, u128_to_string(*yOpt).c_str(), u128_to_string(*qOpt).c_str(), adm.reason.c_str());
+                continue;
+            }
+            auto xOpt = checkedFallingFactorial(a, NX);
+            auto leafOpt = checkedFallingFactorial(a - NX, K);
+            if (!xOpt || !leafOpt) {
+                fprintf(stderr, "[bucket-plan] reject full-modulus NX=%d NY=%d K=%d: work_overflow\n", NX, NY, K);
+                continue;
+            }
+            PlanConfig pc;
+            pc.family = BucketFamily::FullModulus;
+            pc.NX = NX; pc.NY = NY; pc.K = K; pc.P = P_full; pc.lifts = liftsFull;
+            pc.suffixMult = 1;
+            pc.Y = *yOpt; pc.Q = *qOpt;
+            pc.roots = (*xOpt) * (u128)liftsFull;
+            pc.lookups = (long double)pc.roots * (long double)(*leafOpt);
+            pc.meanBucket = pc.Q > 0 ? (long double)pc.Y / (long double)pc.Q : 0.0L;
+            pc.recordChecks = pc.lookups * pc.meanBucket;
+            pc.projectedPeakBytes = adm.projectedPeakBytes;
+            scoreConfig(pc);
+            fprintf(stderr, "[bucket-plan] admit full-modulus NX=%d NY=%d K=%d: Y=%s Q=%s "
+                            "projectedPeak=%s lookups=%.4Lg scans=%.4Lg score=%.4Lg\n",
+                    NX, NY, K, u128_to_string(pc.Y).c_str(), u128_to_string(pc.Q).c_str(),
+                    formatGiB(pc.projectedPeakBytes).c_str(), pc.lookups, pc.recordChecks, pc.score);
+            out.push_back(pc);
+        }
+    }
+}
+
+struct PlanResult {
+    bool admitted = false;
+    PlanConfig chosen;
+};
+
+// Prints the doc Sec 11-style trace and returns the minimum-score feasible
+// config across both families, or a Declined result if neither family has
+// any config that fits the memory budget.
+static PlanResult planBucket(int B, int T, int Pc, int lifts, int P_full, uint64_t suffixMult,
+                              long rssBudgetKB,
+                              const ConstantsGen *cPeeled, const ConstantsGen *cFM) {
+    char suffixMultBuf[32];
+    if (suffixMult == UINT64_MAX) snprintf(suffixMultBuf, sizeof(suffixMultBuf), "DP_DECLINED");
+    else snprintf(suffixMultBuf, sizeof(suffixMultBuf), "%llu", (unsigned long long)suffixMult);
+    fprintf(stderr, "[bucket-plan] B=%d T=%d Pc=%d lifts=%d P_full=%d suffixMult=%s budget=%ldKB\n",
+            B, T, Pc, lifts, P_full, suffixMultBuf, rssBudgetKB);
+    std::vector<PlanConfig> feasible;
+    if (cPeeled) enumeratePeeledConfigs(*cPeeled, suffixMult, rssBudgetKB, feasible);
+    if (cFM) enumerateFMConfigs(*cFM, P_full, rssBudgetKB, feasible);
+
+    PlanResult res;
+    if (feasible.empty()) {
+        fprintf(stderr, "[bucket-plan] decision=DECLINE fallback=scan (exit 3 = BUCKET_DECLINED)\n");
+        return res;
+    }
+    auto best = std::min_element(feasible.begin(), feasible.end(),
+                                  [](const PlanConfig &x, const PlanConfig &y) { return x.score < y.score; });
+    PlanConfig chosen = *best;
+
+    // Robustness rule (RADIX-BUCKET-ADMISSION-CONTROL.md Sec 7 "require a
+    // clear expected win"): the uncalibrated cost model can steer the
+    // minimum-score search toward a plan that is, in practice, far slower
+    // than cert/certfm's long-validated legacy default (peeled, NX=2,
+    // NY=W-2, K=3) -- an uncalibrated coefficient or an underweighted term
+    // (e.g. suffix multiplicity, B^K clear cost) can make a bad plan LOOK
+    // cheapest. Guard against that by always locating the legacy default
+    // among the feasible configs (if it is itself feasible) and only
+    // accepting a DIFFERENT chosen plan when its score beats the legacy
+    // default's by at least this margin. This bounds certauto's worst case
+    // at "roughly the legacy default," never worse than cert by more than
+    // planning noise -- it cannot make certauto slower than the known-good
+    // baseline by relying on an uncalibrated model.
+    constexpr long double LEGACY_DEFAULT_BEAT_MARGIN = 3.0L;
+    auto legacyIt = std::find_if(feasible.begin(), feasible.end(), [](const PlanConfig &p) {
+        return p.family == BucketFamily::Peeled && p.NX == 2 && p.K == 3;
+    });
+    if (legacyIt != feasible.end()) {
+        bool differs = !(chosen.family == legacyIt->family && chosen.NX == legacyIt->NX &&
+                          chosen.NY == legacyIt->NY && chosen.K == legacyIt->K);
+        if (differs && !(chosen.score * LEGACY_DEFAULT_BEAT_MARGIN <= legacyIt->score)) {
+            fprintf(stderr, "[bucket-plan] challenger family=%s NX=%d NY=%d K=%d score=%.4Lg did not beat "
+                            "legacy default (peeled NX=2 NY=%d K=3) score=%.4Lg by %.1Lgx -- keeping legacy default\n",
+                    familyName(chosen.family), chosen.NX, chosen.NY, chosen.K, chosen.score,
+                    legacyIt->NY, legacyIt->score, LEGACY_DEFAULT_BEAT_MARGIN);
+            chosen = *legacyIt;
+        }
+    }
+
+    res.admitted = true;
+    res.chosen = chosen;
+    fprintf(stderr, "[bucket-plan] decision=ADMIT family=%s NX=%d NY=%d K=%d P=%d Y=%s Q=%s suffixMult=%llu "
+                    "projectedPeak=%s projectedLookups=%.4Lg projectedScans=%.4Lg score=%.4Lg\n",
+            familyName(chosen.family), chosen.NX, chosen.NY, chosen.K, chosen.P,
+            u128_to_string(chosen.Y).c_str(), u128_to_string(chosen.Q).c_str(),
+            (unsigned long long)chosen.suffixMult, formatGiB(chosen.projectedPeakBytes).c_str(),
+            chosen.lookups, chosen.recordChecks, chosen.score);
+    return res;
 }
 
 // ---------------------------------------------------------------------
@@ -3792,6 +4185,192 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
                     "[subsetsChecked=%lld subsetsScanned=%lld]\n", B, subsetsChecked, subsetsScanned);
 }
 
+// Autonomous planner-driven driver (BASE-50-FULL-MODULUS-BUCKET.md Sec 9
+// Phase B): same subset-discovery loop and Declined-vs-Refuted-safe
+// certification discipline as runCert/runCertFM, but instead of a
+// hardcoded chooseWY/chooseWYFM split, calls planBucket() for each
+// surviving subset to pick the cheapest FEASIBLE (family, NX, NY, K) from
+// BOTH the peeled and full-modulus families before running any search.
+//
+// Sec 9's fallback semantics are load-bearing here: if planBucket() finds
+// NO feasible config for a subset, that is AttemptStatus::Declined, which
+// "must propagate out of runWrongTurnSearch and runCert. It must not ...
+// advance to another digit subset as though the current subset were
+// impossible." So an outright decline here exits the WHOLE process with
+// status 3 (BUCKET_DECLINED) immediately -- exactly the propagation
+// discipline the existing bucketAdmissionGate already enforces for a single
+// config, just now reached only after every legal split in both families
+// has been tried and found wanting. This mirrors cert/certfm's own
+// existing behavior (their first infeasible config aborts the whole run
+// via bucketAdmissionGate's exit(3)), just with a smarter search before
+// giving up.
+static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudgetKB, double capSeconds1800, double capSeconds5400) {
+    using clock = std::chrono::steady_clock;
+    auto tAll0 = clock::now();
+    int n = B - 1;
+    fprintf(stderr, "[certauto] base=%d, n=%d, autonomous subset+divergence+PLAN discovery starting "
+                     "(subsetdisc: solve_base-style descending-lex enumeration; planner: BASE-50-FULL-MODULUS-BUCKET.md Sec 9 Phase B)\n", B, n);
+
+    selfTestSuffixDP();
+
+    const int CANDIDATE_POS = 20;
+    subsetdisc::SB_B = B;
+    long long subsetsChecked = 0, subsetsScanned = 0;
+
+    for (int k = n; k >= 1; k--) {
+        subsetdisc::SB_k = k;
+        std::vector<int> comb(k);
+        for (int i = 0; i < k; i++) comb[i] = i;
+        bool done = false;
+        while (!done) {
+            for (int i = 0; i < k; i++) subsetdisc::SB_S[i] = (B - 1) - comb[i];
+            subsetsChecked++;
+            subsetdisc::SB_setmask = 0;
+            for (int i = 0; i < k; i++) subsetdisc::SB_setmask |= 1ULL << subsetdisc::SB_S[i];
+
+            if (subsetdisc::SB_build_pps() && subsetdisc::SB_subset_filters()) {
+                subsetsScanned++;
+                std::vector<int> D(subsetdisc::SB_S, subsetdisc::SB_S + k);
+
+                if (getenv("DEBUG_SUBSETDISC")) {
+                    std::vector<bool> present(B, false);
+                    for (int d : D) present[d] = true;
+                    fprintf(stderr, "[dbg-auto] k=%d dropped=", k);
+                    for (int d = 1; d < B; d++) if (!present[d]) fprintf(stderr, "%d,", d);
+                    fprintf(stderr, "\n");
+                }
+
+                ConstantsGen c = deriveConstantsGen(B, D);
+                if (!c.ok) goto nextComb;
+
+                {
+                    int W_peeled = CANDIDATE_POS - c.T - c.Pc;
+                    int P_full = deriveP_full(c);
+                    int W_fm = CANDIDATE_POS - P_full;
+                    bool feasPeeledShape = W_peeled >= 1;
+                    bool feasFMShape = W_fm >= 1;
+                    if (!feasPeeledShape && !feasFMShape) goto nextComb;
+
+                    std::vector<int> prefixP, poolP, prefixF, poolF;
+                    bool feasPeeled = feasPeeledShape && buildFeasiblePrefix(c, W_peeled, 3, prefixP, poolP);
+                    ConstantsGen cFM = c; cFM.T = 0; cFM.Pc = P_full;
+                    bool feasFM = feasFMShape && buildFeasiblePrefix(cFM, W_fm, 3, prefixF, poolF);
+                    if (!feasPeeled && !feasFM) goto nextComb;
+
+                    // Representative-candidate suffix multiplicity for the
+                    // peeled family's cost estimate: mirror the ACTUAL
+                    // search order (runWrongTurnSearch tries pool digits
+                    // largest-first, silently skipping any digit whose
+                    // restPool admits zero suffix tuples -- doc's "not a
+                    // real refutation, just infeasible bookkeeping"). Using
+                    // the single largest digit unconditionally can pick a
+                    // digit with suffixMult==0 even though the family is
+                    // perfectly viable for the next-largest digit (this bit
+                    // base 48: candidate 21 has suffixMult==0 for its
+                    // restPool while the actual winner, candidate 20, does
+                    // not) -- walk the same descending order and take the
+                    // first nonzero count.
+                    uint64_t suffixMult = 1;
+                    if (feasPeeled) {
+                        std::vector<int> sortedPoolP = poolP;
+                        std::sort(sortedPoolP.begin(), sortedPoolP.end(), std::greater<int>());
+                        suffixMult = 0;
+                        for (int repCandidate : sortedPoolP) {
+                            std::vector<int> restPool;
+                            for (int d : poolP) if (d != repCandidate) restPool.push_back(d);
+                            uint64_t cnt = countAdmissibleSuffixTuplesDP(restPool, c.T, c.B, c.Lnil);
+                            if (cnt == UINT64_MAX) { suffixMult = UINT64_MAX; break; } // DP declined; stop guessing
+                            if (cnt > 0) { suffixMult = cnt; break; }
+                        }
+                    }
+
+                    PlanResult plan = planBucket(B, c.T, c.Pc, c.lifts, P_full, suffixMult, rssBudgetKB,
+                                                  feasPeeled ? &c : nullptr, feasFM ? &cFM : nullptr);
+                    if (!plan.admitted) {
+                        fprintf(stderr, "[certauto] base=%d: |D|=%d bucket planner DECLINED (no feasible "
+                                        "peeled or full-modulus config within budget=%ldKB) -- this is a "
+                                        "resource-policy DECLINE, not a refutation. fallback=scan\n",
+                                B, k, rssBudgetKB);
+                        double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
+                        fprintf(stderr, "[certauto] base=%d total autonomous-search wall=%.3fs [subsetsChecked=%lld subsetsScanned=%lld]\n",
+                                B, totalWall, subsetsChecked, subsetsScanned);
+                        exit(3);
+                    }
+
+                    AttemptResult ar;
+                    const PlanConfig &pl = plan.chosen;
+                    if (pl.family == BucketFamily::Peeled) {
+                        ar = runWrongTurnSearch(c, prefixP, poolP, pl.NX, pl.NY, pl.K, rssBudgetKB, /*useCurrentRssForAvailable=*/true);
+                    } else {
+                        ar = runWrongTurnSearchFM(c, prefixF, poolF, pl.P, pl.NX, pl.NY, pl.K, rssBudgetKB, /*useCurrentRssForAvailable=*/true);
+                    }
+
+                    fprintf(stderr, "[certauto]   predicted-vs-actual: family=%s predLookups=%.4Lg actualLookups=%llu "
+                                    "predScans=%.4Lg actualScans=%llu actualRoots=%llu wall=%.3fs\n",
+                            familyName(pl.family), pl.lookups, (unsigned long long)ar.totalLookups,
+                            pl.recordChecks, (unsigned long long)ar.totalScans, (unsigned long long)ar.totalRoots,
+                            ar.wallSeconds);
+
+                    if (getenv("DEBUG_SUBSETDISC")) fprintf(stderr, "[dbg-auto]   success=%d winCand=%d refuted=%d survivors=%llu verifiedOk=%llu verifiedBad=%llu family=%s NX=%d NY=%d K=%d\n",
+                        ar.success, ar.winningCandidate, ar.wrongTurnsRefuted, (unsigned long long)ar.totalSurvivors,
+                        (unsigned long long)ar.verifiedOk, (unsigned long long)ar.verifiedBad, familyName(pl.family), pl.NX, pl.NY, pl.K);
+
+                    double elapsed = std::chrono::duration<double>(clock::now() - tAll0).count();
+                    if (elapsed > capSeconds1800 && elapsed < capSeconds1800 + 5) {
+                        fprintf(stderr, "[certauto] checkpoint at %.0fs: still searching (k=%d, subsetsChecked=%lld, subsetsScanned=%lld)\n",
+                                elapsed, k, subsetsChecked, subsetsScanned);
+                    }
+                    if (elapsed > capSeconds5400) {
+                        fprintf(stderr, "[certauto] FATAL: exceeded %.0fs cap, aborting search\n", capSeconds5400);
+                        return;
+                    }
+
+                    bool certified = ar.success && ar.verifiedOk >= 1 && ar.verifiedBad == 0;
+                    if (ar.success && !certified && getenv("DEBUG_SUBSETDISC")) {
+                        fprintf(stderr, "[certauto] base=%d: subset |D|=%d had %llu survivor(s) but NONE "
+                                        "direct-verified true (verified %llu OK / %llu FAILED) -- not a "
+                                        "certified completion, continuing\n",
+                                B, k, (unsigned long long)ar.totalSurvivors,
+                                (unsigned long long)ar.verifiedOk, (unsigned long long)ar.verifiedBad);
+                    }
+                    if (certified) {
+                        fprintf(stderr, "[certauto] base=%d: FOUND with |D|=%d (dropped %d digit(s)) family=%s NX=%d NY=%d K=%d "
+                                        "winningCandidate=%d wrongTurnsRefuted=%d survivors=%llu "
+                                        "(verified %llu OK / %llu FAILED) wall=%.3fs peakRSS~%ldKB "
+                                        "[subsetsChecked=%lld subsetsScanned=%lld]\n",
+                                B, k, n - k, familyName(pl.family), pl.NX, pl.NY, pl.K, ar.winningCandidate,
+                                ar.wrongTurnsRefuted, (unsigned long long)ar.totalSurvivors,
+                                (unsigned long long)ar.verifiedOk, (unsigned long long)ar.verifiedBad,
+                                ar.wallSeconds, ar.peakRssKBSeen, subsetsChecked, subsetsScanned);
+                        fprintf(stderr, "[certauto] base=%d: maximum value (%zu digits): %s\n",
+                                B, ar.maxDecimal.size(), ar.maxDecimal.c_str());
+
+                        bool exact = expectedDecimalOrNull && ar.maxDecimal == expectedDecimalOrNull;
+                        if (expectedDecimalOrNull) {
+                            fprintf(stderr, "[certauto] base=%d CERTIFICATION (matches known target): %s\n",
+                                    B, exact ? "PASS" : "FAIL");
+                        } else {
+                            fprintf(stderr, "[certauto] base=%d CERTIFICATION (direct-verified, no external target "
+                                            "to compare): PASS\n", B);
+                        }
+                        double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
+                        fprintf(stderr, "[certauto] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                        return;
+                    }
+                }
+            }
+
+            nextComb:;
+            int i = k - 1;
+            while (i >= 0 && comb[i] == n - k + i) i--;
+            if (i < 0) { done = true; }
+            else { comb[i]++; for (int j = i + 1; j < k; j++) comb[j] = comb[j - 1] + 1; }
+        }
+    }
+    fprintf(stderr, "[certauto] base=%d: FAILED to find a working (subset, prefix) hypothesis within bounded search "
+                    "[subsetsChecked=%lld subsetsScanned=%lld]\n", B, subsetsChecked, subsetsScanned);
+}
+
 } // namespace certdrv
 
 int main(int argc, char **argv) {
@@ -3914,6 +4493,18 @@ int main(int argc, char **argv) {
         if (argc >= 5) rssBudgetKB = atol(argv[4]);
         fprintf(stderr, "[certfm] base=%d rssBudgetKB=%ld expected=%s\n", base, rssBudgetKB, expected ? expected : "(none)");
         certdrv::runCertFM(base, expected, rssBudgetKB, 1800.0, 5400.0);
+    } else if (mode == "certauto") {
+        // certauto <base> [expectedDecimal] [rssBudgetKB]
+        // BASE-50-FULL-MODULUS-BUCKET.md Sec 9 Phase B: planner-driven driver
+        // -- chooses peeled vs full-modulus and (NX,NY,K) per surviving
+        // subset via a cost model, instead of cert/certfm's hardcoded split.
+        if (argc < 3) { fprintf(stderr, "certauto requires <base>\n"); return 1; }
+        int base = atoi(argv[2]);
+        const char *expected = (argc >= 4 && std::string(argv[3]) != "-") ? argv[3] : nullptr;
+        long rssBudgetKB = -1;
+        if (argc >= 5) rssBudgetKB = atol(argv[4]);
+        fprintf(stderr, "[certauto] base=%d rssBudgetKB=%ld expected=%s\n", base, rssBudgetKB, expected ? expected : "(none)");
+        certdrv::runCertAuto(base, expected, rssBudgetKB, 1800.0, 5400.0);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 1;
