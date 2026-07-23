@@ -2468,6 +2468,34 @@ static void runBranch(const Constants48 &c, int candidate, int NX, int NY, int K
 // original L regardless.
 namespace certdrv {
 
+// CHANGE 2 (window-position widening knob, b50 audit): every hard-coded "20"
+// below was the fixed digit-position (below the top/candidate digit) that
+// buildSuffixBranchGen, runWrongTurnSearchFM, and the peeled/full-modulus
+// planner's window derivations (chooseWY/chooseWYFM, enumeratePeeledConfigs,
+// enumerateFMConfigs, buildFeasiblePrefix's callers) all assumed in lockstep.
+// certPos() reads CERTPOS once (default 20, matching every prior run
+// byte-for-byte), validates it against [20,24], and caches it -- every one
+// of those sites now derives from this single value instead of repeating
+// the literal, so widening the window is a one-env-var change instead of a
+// silent-mismatch risk.
+static int certPos() {
+    static int pos = [] {
+        const char *env = getenv("CERTPOS");
+        int p = 20;
+        if (env && *env) {
+            char *end = nullptr;
+            long v = strtol(env, &end, 10);
+            if (end == env || *end != '\0' || v < 20 || v > 24) {
+                fprintf(stderr, "[certdrv] FATAL: CERTPOS=\"%s\" invalid; must be an integer in [20,24]\n", env);
+                exit(1);
+            }
+            p = (int)v;
+        }
+        return p;
+    }();
+    return pos;
+}
+
 struct ConstantsGen {
     int B = 0;
     std::vector<int> D;
@@ -2644,13 +2672,13 @@ static SuffixBranchGen buildSuffixBranchGen(const ConstantsGen &c, const std::ve
     }
     u128 Lc = c.Lc;
     u128 C = 0;
-    int pos = 20 + (int)prefix.size(); // candidate fixed at position 20, same convention as b48
+    int pos = certPos() + (int)prefix.size(); // candidate fixed at position CERTPOS, same convention as b48
     for (int dd : prefix) {
         u128 term = mulmod_u128((u128)dd, powmod_u128((u128)c.B, (u128)pos, Lc), Lc);
         C = (C + term) % Lc;
         pos--;
     }
-    C = (C + mulmod_u128((u128)candidate, powmod_u128((u128)c.B, 20, Lc), Lc)) % Lc;
+    C = (C + mulmod_u128((u128)candidate, powmod_u128((u128)c.B, (u128)certPos(), Lc), Lc)) % Lc;
     u128 S = 0, w = 1;
     for (int d : suffix) { S = (S + (u128)d * w) % Lc; w *= (u128)c.B; } // Lc-reduced is fine, S<Lc always since S<B^T<=Lc*B typically; safe mod
     C = (C + S) % Lc;
@@ -3273,8 +3301,8 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
 // loop at all -- T plays no role in this decomposition -- so `pool` minus
 // the tried candidate IS the free window directly (size P+NX+NY), unlike
 // the peeled path where restPool still had to be split into a suffix tuple
-// plus SuffixBranchGen's freeDigits. The CANDIDATE_POS=20 invariant becomes
-// P + NY + NX == 20 (asserted below rather than assumed).
+// plus SuffixBranchGen's freeDigits. The CANDIDATE_POS=certPos() invariant
+// becomes P + NY + NX == certPos() (asserted below rather than assumed).
 static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vector<int> &prefix,
                                            const std::vector<int> &pool, int P, int NX, int NY, int K,
                                            long rssBudgetKB, bool useCurrentRssForAvailable = false) {
@@ -3282,9 +3310,9 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
     auto t0 = clock::now();
     AttemptResult res;
 
-    if (P + NX + NY != 20) {
-        fprintf(stderr, "[certfm] FATAL: CANDIDATE_POS invariant violated: P=%d NX=%d NY=%d (sum=%d != 20)\n",
-                P, NX, NY, P + NX + NY);
+    if (P + NX + NY != certPos()) {
+        fprintf(stderr, "[certfm] FATAL: CANDIDATE_POS invariant violated: P=%d NX=%d NY=%d (sum=%d != %d)\n",
+                P, NX, NY, P + NX + NY, certPos());
         exit(1);
     }
 
@@ -3315,13 +3343,13 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
         // N == C + leaf + B^P y + B^(P+NY) x (mod L), so
         // leaf + B^P y + B^(P+NY) x == target := -C (mod L).
         u128 C = 0;
-        int pos = 20 + (int)prefix.size();
+        int pos = certPos() + (int)prefix.size();
         for (int dd : prefix) {
             u128 term = mulmod_u128((u128)dd, powmod_u128((u128)c.B, (u128)pos, c.L), c.L);
             C = (C + term) % c.L;
             pos--;
         }
-        C = (C + mulmod_u128((u128)candidate, powmod_u128((u128)c.B, 20, c.L), c.L)) % c.L;
+        C = (C + mulmod_u128((u128)candidate, powmod_u128((u128)c.B, (u128)certPos(), c.L), c.L)) % c.L;
         u128 target = (c.L - (C % c.L)) % c.L;
 
         u64 yCount = 0;
@@ -3423,7 +3451,7 @@ static bool buildFeasiblePrefix(const ConstantsGen &c, int targetWY, int maxRele
     // prefix digits (not necessarily contiguous/trailing) back into the
     // pool -- but pool.size() MUST stay exactly windowSize (runWrongTurnSearch's
     // buildSuffixBranchGen hard-requires freeDigits.size()==Pc+NX+NY, i.e.
-    // pool.size()==windowSize, via its fixed pos=20-style convention). So
+    // pool.size()==windowSize, via its fixed pos=certPos()-style convention). So
     // every release of r prefix digits is paired with a compensating
     // PROMOTION of the r boundary-adjacent (largest) pool digits into the
     // prefix, keeping both sizes exactly fixed -- a swap, not a plain
@@ -3513,12 +3541,12 @@ static int deriveP_full(const ConstantsGen &c) {
 
 // Peeled family (doc #23 Sec 6a): modulus L_c, suffix depth T, one bucket
 // build per admissible suffix tuple -- NX = 0..W-1 (NY = W-NX >= 1), K = 2..4
-// (task-specified sweep range). a = Pc + W = 20 - T is the free-pool size
-// BOTH X and Y are drawn from (buildSuffixBranchGen's freeDigits), fixed by
-// the CANDIDATE_POS=20 invariant regardless of split.
+// (task-specified sweep range). a = Pc + W = certPos() - T is the free-pool
+// size BOTH X and Y are drawn from (buildSuffixBranchGen's freeDigits), fixed
+// by the CANDIDATE_POS=certPos() invariant regardless of split.
 static void enumeratePeeledConfigs(const ConstantsGen &c, uint64_t suffixMult, long rssBudgetKB,
                                     std::vector<PlanConfig> &out) {
-    int W = 20 - c.T - c.Pc;
+    int W = certPos() - c.T - c.Pc;
     if (W < 1 || suffixMult == 0 || suffixMult == UINT64_MAX) return;
     int a = c.Pc + W;
     for (int NX = 0; NX < W; NX++) {
@@ -3566,16 +3594,17 @@ static void enumeratePeeledConfigs(const ConstantsGen &c, uint64_t suffixMult, l
 }
 
 // Full-modulus family (doc #23 Sec 6b / Sec 4/9 Phase A): modulus L, no
-// suffix loop, P + NX + NY == 20 always. a = 20 fixed regardless of split.
+// suffix loop, P + NX + NY == certPos() always. a = certPos() fixed
+// regardless of split.
 static void enumerateFMConfigs(const ConstantsGen &c, int P_full, long rssBudgetKB,
                                 std::vector<PlanConfig> &out) {
-    int W = 20 - P_full;
+    int W = certPos() - P_full;
     if (W < 1) return;
     auto BPowOpt = checkedPower((u128)c.B, P_full);
     if (!BPowOpt) { fprintf(stderr, "[bucket-plan] reject full-modulus: B^P_full overflow\n"); return; }
     u128 jmax = (*BPowOpt + c.L - 1) / c.L;
     int liftsFull = (int)jmax + 1;
-    const int a = 20;
+    const int a = certPos();
     for (int NX = 0; NX < W; NX++) {
         int NY = W - NX;
         if (NY < 1) continue;
@@ -3907,9 +3936,10 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
     // Reasonable NY/K heuristics, matching what won tonight's head-to-head:
     // aim for B^NY in the low millions, K=3.
     // buildSuffixBranchGen hardcodes the candidate at ABSOLUTE digit-position
-    // 20 (pos = 20 + prefix.size(); powmod_u128(B, 20, Lc) for the candidate
-    // term) -- i.e. it hard-requires exactly 20 digit-positions below the
-    // candidate: T (suffix) + Pc (leaf window) + NX + NY (free digits) == 20,
+    // certPos() (default 20; pos = certPos() + prefix.size();
+    // powmod_u128(B, certPos(), Lc) for the candidate term) -- i.e. it hard-
+    // requires exactly certPos() digit-positions below the candidate:
+    // T (suffix) + Pc (leaf window) + NX + NY (free digits) == certPos(),
     // always, for every subset. The old "aim for B^NY in the low millions"
     // heuristic chose NY independently of T/Pc and only coincidentally
     // matched this invariant for some subsets (e.g. base 48's T=3,Pc=11);
@@ -3917,7 +3947,7 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
     // wrong position arithmetic and false refutations. NY is now DERIVED
     // from the invariant directly, with NX shrunk first if T+Pc alone
     // already leaves little room.
-    const int CANDIDATE_POS = 20;
+    const int CANDIDATE_POS = certPos();
     auto chooseWY = [&](const ConstantsGen &c) -> std::pair<int,int> {
         int NX = 2;
         int NY = CANDIDATE_POS - c.T - c.Pc - NX;
@@ -4012,6 +4042,24 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
                             fprintf(stderr, "[cert] base=%d: maximum value (%zu digits): %s\n",
                                     B, ar.maxDecimal.size(), ar.maxDecimal.c_str());
 
+                            // CHANGE 1 (b50 audit, honest refute-and-descend labeling):
+                            // when the winning subset was NOT the first one scanned,
+                            // one or more earlier-scanned subsets were refuted only
+                            // within the fixed CANDIDATE_POS-position window + a single
+                            // feasibility-adjusted prefix (buildFeasiblePrefix), which
+                            // does not exhaustively prove no completion exists for
+                            // them -- so the maximality claim behind "CERTIFICATION" is
+                            // unsupported. subsetsScanned==1 (every decade-sweep base
+                            // to date) is unaffected and stays byte-identical.
+                            if (subsetsScanned > 1) {
+                                fprintf(stderr, "[cert] base=%d STRONG CANDIDATE (direct-verified completion; "
+                                                "NOT certified-maximal: %lld earlier-scanned subset(s) refuted "
+                                                "only within the fixed %d-position window -- see RESULTS.md b50 "
+                                                "audit)\n", B, subsetsScanned - 1, CANDIDATE_POS + 1);
+                                double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
+                                fprintf(stderr, "[cert] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                                exit(4); // CANDIDATE_ONLY: direct-verified but not proven maximal
+                            }
                             bool exact = expectedDecimalOrNull && ar.maxDecimal == expectedDecimalOrNull;
                             if (expectedDecimalOrNull) {
                                 fprintf(stderr, "[cert] base=%d CERTIFICATION (matches known target): %s\n",
@@ -4060,13 +4108,13 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
                      "(full-modulus bucket join, subsetdisc: solve_base-style descending-lex enumeration)\n", B, n);
 
     // Same ABSOLUTE digit-position convention as runCert's chooseWY/
-    // buildSuffixBranchGen (candidate fixed at position 20), but with T
+    // buildSuffixBranchGen (candidate fixed at position certPos()), but with T
     // replaced by 0 (no suffix in the full-modulus decomposition) and Pc
     // replaced by P_full = ceil(log_B L): P + NY + NX == CANDIDATE_POS,
     // always. NY is derived from the invariant directly, with NX shrunk
     // first if P alone already leaves little room -- mirrors chooseWY
     // exactly, just with (0, P_full) standing in for (T, Pc).
-    const int CANDIDATE_POS = 20;
+    const int CANDIDATE_POS = certPos();
     auto chooseWYFM = [&](const ConstantsGen &c, int &outP) -> std::pair<int,int> {
         u128 v = 1; int P = 0;
         while (v < c.L) { v *= (u128)c.B; P++; }
@@ -4158,6 +4206,16 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
                                 fprintf(stderr, "[certfm] base=%d: maximum value (%zu digits): %s\n",
                                         B, ar.maxDecimal.size(), ar.maxDecimal.c_str());
 
+                                // CHANGE 1 (b50 audit): see runCert's identical comment.
+                                if (subsetsScanned > 1) {
+                                    fprintf(stderr, "[certfm] base=%d STRONG CANDIDATE (direct-verified completion; "
+                                                    "NOT certified-maximal: %lld earlier-scanned subset(s) refuted "
+                                                    "only within the fixed %d-position window -- see RESULTS.md b50 "
+                                                    "audit)\n", B, subsetsScanned - 1, CANDIDATE_POS + 1);
+                                    double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
+                                    fprintf(stderr, "[certfm] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                                    exit(4); // CANDIDATE_ONLY: direct-verified but not proven maximal
+                                }
                                 bool exact = expectedDecimalOrNull && ar.maxDecimal == expectedDecimalOrNull;
                                 if (expectedDecimalOrNull) {
                                     fprintf(stderr, "[certfm] base=%d CERTIFICATION (matches known target): %s\n",
@@ -4213,7 +4271,7 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
 
     selfTestSuffixDP();
 
-    const int CANDIDATE_POS = 20;
+    const int CANDIDATE_POS = certPos();
     subsetdisc::SB_B = B;
     long long subsetsChecked = 0, subsetsScanned = 0;
 
@@ -4345,6 +4403,16 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
                         fprintf(stderr, "[certauto] base=%d: maximum value (%zu digits): %s\n",
                                 B, ar.maxDecimal.size(), ar.maxDecimal.c_str());
 
+                        // CHANGE 1 (b50 audit): see runCert's identical comment.
+                        if (subsetsScanned > 1) {
+                            fprintf(stderr, "[certauto] base=%d STRONG CANDIDATE (direct-verified completion; "
+                                            "NOT certified-maximal: %lld earlier-scanned subset(s) refuted "
+                                            "only within the fixed %d-position window -- see RESULTS.md b50 "
+                                            "audit)\n", B, subsetsScanned - 1, CANDIDATE_POS + 1);
+                            double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
+                            fprintf(stderr, "[certauto] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                            exit(4); // CANDIDATE_ONLY: direct-verified but not proven maximal
+                        }
                         bool exact = expectedDecimalOrNull && ar.maxDecimal == expectedDecimalOrNull;
                         if (expectedDecimalOrNull) {
                             fprintf(stderr, "[certauto] base=%d CERTIFICATION (matches known target): %s\n",
