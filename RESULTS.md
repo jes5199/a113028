@@ -115,3 +115,16 @@ if needed. b40 under v7 (wide leaf) in progress.
 **Divergence-law audit, final scoreboard: 3 flags → 1 real error found and
 corrected (a46), 2 cleared (a40 by direct solve, a48 by certificate — both
 "outliers" were forced nilpotent-suffix effects, now understood).**
+
+## Bucket-engine scorecard (2026-07-23 sweep, carrytrie `cert` mode)
+
+Autonomous per-base certifier: subset discovery + divergence + shallow-radix
+bucket join + direct verification, self-checked against the known answer.
+BUCKET-only times — no scan fallback. Sequential sweep, nice 19, per-base
+1800s cap, 3GB RSS self-abort + 6GB address-space backstop. b40 excluded
+(5.81s v13 peeling record stands; bucket untested there pre-crash).
+
+| base | bucket outcome | wall | self-check |
+|------|----------------|------|------------|
+| 41 | **FAILED — memory**: auto-configured bucket build ballooned to 8.9GB peak RSS (>3GB budget) at `certdrv-bucket-post-generation`, clean self-abort. Prime base, no nilpotent peel — expected hard case, honest failure. | 197.9s (to abort) | n/a |
+| 42–49 | in flight | | |
