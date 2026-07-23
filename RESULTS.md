@@ -148,6 +148,22 @@ memory-feasible 3+6/K=4 plan and times out at 1800s instead of work-declining
 — no absolute work-vs-scan cap yet; the sweep's rc-based scan fallback
 covers it. Binary: carrytrie_cert.
 
+## Dual-campaign cap scorecard (caps expired ~12:53 UTC 2026-07-23)
+
+- **b50 v4 arbiter: CONFIRMED a(50)** — Engine S completed in 8043.8s with
+  exactly the certified value, char-for-char. a(50) now rests on THREE
+  independent engines (fixed full-modulus certauto, peeled width-21, v4 scan).
+- **b51 FIRST VALUE EVER** — v4 Engine S COMPLETED (not capped) in 21080.9s:
+  a(51) ?= 180145958793036691752603389680297418249529280174180771266050386968626019795153600
+  Self-verified: 47 distinct nonzero base-51 digits, dropped {17,24,34}
+  (17/34 kill the 17-factor per the ten-rule; 24 restores digit-sum ≡ 0 mod
+  50), lcm=182296735543882159200 divides N, MSB descending 50,49,...
+  Status: single-method (scan) — certauto second-method run launched.
+  The v15 candidate arm emitted nothing before its cap (banner only).
+- **b52: v4 scan INCONCLUSIVE at 6h cap** (budget ladder reached 2^36
+  mid-grind, no completion line). The v15 candidate stands as the only b52
+  value, still pending a second method — certauto run launched.
+
 ## b50 — CERTIFIED (2026-07-23 ~11:10, post-autopsy engine)
 
 a(50) = 71024679959360285134972854735006247396917902186058529912810323948019000719382560
