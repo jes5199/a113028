@@ -1,0 +1,221 @@
+[guard] L = 442720643463713815200  (assert OK)
+[guard] L_c = 63245806209101973600
+[guard] gcd(L_c mod 49, 49) = 1  (assert OK)
+[guard] lifts = ceil(B^12 / L_c) = 4  (assert OK, target ~4)
+[guard] fixed prefix digit count = 26 (24 + 2 = 26, assert OK)
+[guard] digit count: 26 fixed + 1 candidate + 19 free + 1 suffix = 47  (assert OK)
+
+=== Guard-rail summary ===
+B=49, |D|=47, L=442720643463713815200
+L_nil=7, L_c=63245806209101973600
+P=12, lifts=4
+===========================
+
+[sieve] SIEVE_LEVEL=0 (bit0=root bit1=every-node bit2=depth3-joint)
+[certauto] base=55 rssBudgetKB=3000000 expected=(none)
+[certauto] base=55, n=54, autonomous subset+divergence+PLAN discovery starting (subsetdisc: solve_base-style descending-lex enumeration; planner: BASE-50-FULL-MODULUS-BUCKET.md Sec 9 Phase B)
+[selftest-suffixdp] doc#23-Sec3.2-b50-cand21: DP=11552 brute=11552 expect=11552 -> OK
+[selftest-suffixdp] b48-shape-T3-Lnil216: DP=0 brute=0 -> OK
+[selftest-suffixdp] b49-shape-T1-Lnil7: DP=1 brute=1 -> OK
+[selftest-suffixdp] misc-T2: DP=0 brute=0 -> OK
+[bucket-plan] B=55 T=2 Pc=12 lifts=2 P_full=13 suffixMult=16 budget=3000000KB
+[bucket-plan] admit peeled NX=0 NY=6 K=2: Y=13366080 Q=3025 suffixMult=16 projectedPeak=0.96GiB lookups=612 scans=2.704e+06 score=7.065e+08
+[bucket-plan] admit peeled NX=0 NY=6 K=3: Y=13366080 Q=166375 suffixMult=16 projectedPeak=0.96GiB lookups=9792 scans=7.867e+05 score=6.622e+08
+[bucket-plan] admit peeled NX=0 NY=6 K=4: Y=13366080 Q=9150625 suffixMult=16 projectedPeak=1.06GiB lookups=1.469e+05 scans=2.145e+05 score=7.047e+08
+[bucket-plan] admit peeled NX=1 NY=5 K=2: Y=1028160 Q=3025 suffixMult=16 projectedPeak=0.07GiB lookups=9792 scans=3.328e+06 score=1.302e+08
+[bucket-plan] admit peeled NX=1 NY=5 K=3: Y=1028160 Q=166375 suffixMult=16 projectedPeak=0.07GiB lookups=1.469e+05 scans=9.077e+05 score=8.604e+07
+[bucket-plan] admit peeled NX=1 NY=5 K=4: Y=1028160 Q=9150625 suffixMult=16 projectedPeak=0.17GiB lookups=2.056e+06 scans=2.31e+05 score=2.962e+08
+[bucket-plan] admit peeled NX=2 NY=4 K=2: Y=73440 Q=3025 suffixMult=16 projectedPeak=0.01GiB lookups=1.469e+05 scans=3.566e+06 score=1.032e+08
+[bucket-plan] admit peeled NX=2 NY=4 K=3: Y=73440 Q=166375 suffixMult=16 projectedPeak=0.01GiB lookups=2.056e+06 scans=9.077e+05 score=2.235e+08
+[bucket-plan] admit peeled NX=2 NY=4 K=4: Y=73440 Q=9150625 suffixMult=16 projectedPeak=0.11GiB lookups=2.673e+07 scans=2.145e+05 score=2.619e+09
+[bucket-plan] admit peeled NX=3 NY=3 K=2: Y=4896 Q=3025 suffixMult=16 projectedPeak=0.00GiB lookups=2.056e+06 scans=3.328e+06 score=2.775e+08
+[bucket-plan] admit peeled NX=3 NY=3 K=3: Y=4896 Q=166375 suffixMult=16 projectedPeak=0.00GiB lookups=2.673e+07 scans=7.867e+05 score=2.586e+09
+[bucket-plan] admit peeled NX=3 NY=3 K=4: Y=4896 Q=9150625 suffixMult=16 projectedPeak=0.10GiB lookups=3.208e+08 scans=1.716e+05 score=3.084e+10
+[bucket-plan] admit peeled NX=4 NY=2 K=2: Y=306 Q=3025 suffixMult=16 projectedPeak=0.00GiB lookups=2.673e+07 scans=2.704e+06 score=2.631e+09
+[bucket-plan] admit peeled NX=4 NY=2 K=3: Y=306 Q=166375 suffixMult=16 projectedPeak=0.00GiB lookups=3.208e+08 scans=5.9e+05 score=3.081e+10
+[bucket-plan] admit peeled NX=4 NY=2 K=4: Y=306 Q=9150625 suffixMult=16 projectedPeak=0.10GiB lookups=3.529e+09 scans=1.18e+05 score=3.388e+11
+[bucket-plan] admit peeled NX=5 NY=1 K=2: Y=18 Q=3025 suffixMult=16 projectedPeak=0.00GiB lookups=3.208e+08 scans=1.909e+06 score=3.084e+10
+[bucket-plan] admit peeled NX=5 NY=1 K=3: Y=18 Q=166375 suffixMult=16 projectedPeak=0.00GiB lookups=3.529e+09 scans=3.818e+05 score=3.388e+11
+[bucket-plan] admit peeled NX=5 NY=1 K=4: Y=18 Q=9150625 suffixMult=16 projectedPeak=0.10GiB lookups=3.529e+10 scans=6.941e+04 score=3.388e+12
+[bucket-plan] reject full-modulus NX=0 NY=7 K=2: Y=390700800 Q=3025 reason=insufficient_budget
+[bucket-plan] reject full-modulus NX=0 NY=7 K=3: Y=390700800 Q=166375 reason=insufficient_budget
+[bucket-plan] reject full-modulus NX=0 NY=7 K=4: Y=390700800 Q=9150625 reason=insufficient_budget
+[bucket-plan] admit full-modulus NX=1 NY=6 K=2: Y=27907200 Q=3025 projectedPeak=1.96GiB lookups=2.736e+04 scans=2.524e+08 score=4.625e+08
+[bucket-plan] admit full-modulus NX=1 NY=6 K=3: Y=27907200 Q=166375 projectedPeak=1.96GiB lookups=4.651e+05 scans=7.802e+07 score=2.036e+08
+[bucket-plan] admit full-modulus NX=1 NY=6 K=4: Y=27907200 Q=9150625 projectedPeak=2.06GiB lookups=7.442e+06 scans=2.27e+07 score=1.652e+08
+[bucket-plan] admit full-modulus NX=2 NY=5 K=2: Y=1860480 Q=3025 projectedPeak=0.13GiB lookups=4.651e+05 scans=2.861e+08 score=4.375e+08
+[bucket-plan] admit full-modulus NX=2 NY=5 K=3: Y=1860480 Q=166375 projectedPeak=0.13GiB lookups=7.442e+06 scans=8.322e+07 score=1.751e+08
+[bucket-plan] admit full-modulus NX=2 NY=5 K=4: Y=1860480 Q=9150625 projectedPeak=0.23GiB lookups=1.116e+08 scans=2.27e+07 score=7.121e+08
+[bucket-plan] admit full-modulus NX=3 NY=4 K=2: Y=116280 Q=3025 projectedPeak=0.01GiB lookups=7.442e+06 scans=2.861e+08 score=4.741e+08
+[bucket-plan] admit full-modulus NX=3 NY=4 K=3: Y=116280 Q=166375 projectedPeak=0.01GiB lookups=1.116e+08 scans=7.802e+07 score=7.872e+08
+[bucket-plan] admit full-modulus NX=3 NY=4 K=4: Y=116280 Q=9150625 projectedPeak=0.11GiB lookups=1.563e+09 scans=1.986e+07 score=9.41e+09
+[bucket-plan] admit full-modulus NX=4 NY=3 K=2: Y=6840 Q=3025 projectedPeak=0.00GiB lookups=1.116e+08 scans=2.524e+08 score=1.048e+09
+[bucket-plan] admit full-modulus NX=4 NY=3 K=3: Y=6840 Q=166375 projectedPeak=0.00GiB lookups=1.563e+09 scans=6.425e+07 score=9.473e+09
+[bucket-plan] admit full-modulus NX=4 NY=3 K=4: Y=6840 Q=9150625 projectedPeak=0.10GiB lookups=2.032e+10 scans=1.519e+07 score=1.219e+11
+[bucket-plan] admit full-modulus NX=5 NY=2 K=2: Y=380 Q=3025 projectedPeak=0.00GiB lookups=1.563e+09 scans=1.963e+08 score=9.671e+09
+[bucket-plan] admit full-modulus NX=5 NY=2 K=3: Y=380 Q=166375 projectedPeak=0.00GiB lookups=2.032e+10 scans=4.64e+07 score=1.22e+11
+[bucket-plan] admit full-modulus NX=5 NY=2 K=4: Y=380 Q=9150625 projectedPeak=0.10GiB lookups=2.438e+11 scans=1.012e+07 score=1.463e+12
+[bucket-plan] admit full-modulus NX=6 NY=1 K=2: Y=20 Q=3025 projectedPeak=0.00GiB lookups=2.032e+10 scans=1.343e+08 score=1.221e+11
+[bucket-plan] admit full-modulus NX=6 NY=1 K=3: Y=20 Q=166375 projectedPeak=0.00GiB lookups=2.438e+11 scans=2.931e+07 score=1.463e+12
+[bucket-plan] admit full-modulus NX=6 NY=1 K=4: Y=20 Q=9150625 projectedPeak=0.10GiB lookups=2.682e+12 scans=5.861e+06 score=1.609e+13
+[bucket-plan] challenger family=peeled NX=1 NY=5 K=3 score=8.604e+07 did not beat legacy default (peeled NX=2 NY=4 K=3) score=2.235e+08 by 3x -- keeping legacy default
+[bucket-plan] decision=ADMIT family=peeled NX=2 NY=4 K=3 P=12 Y=73440 Q=166375 suffixMult=16 projectedPeak=0.01GiB projectedLookups=2.056e+06 projectedScans=9.077e+05 score=2.235e+08
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=55 a=18 NY=4 K=3 Y=73440 Q=166375 projectedPeak=0.01GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[certauto]   predicted-vs-actual: family=peeled predLookups=2.056e+06 actualLookups=158336640 predScans=9.077e+05 actualScans=69894227 actualRoots=47124 wall=7.106s
+[certauto] base=55: FOUND with |D|=49 (dropped 5 digit(s)) family=peeled NX=2 NY=4 K=3 winningCandidate=18 wrongTurnsRefuted=4 survivors=1 (verified 1 OK / 0 FAILED) wall=7.106s peakRSS~11772KB [subsetsChecked=1343344 subsetsScanned=1]
+[certauto] base=55: maximum value (86 digits): 18950593883712953094852355579302043793829907380935165052003989360731470319629320169600
+[certauto] base=55 CERTIFICATION (direct-verified, no external target to compare): PASS
+[certauto] base=55 total autonomous-search wall=14.758s

@@ -75,7 +75,8 @@ B−1 is prime or nearly-prime should behave like b54; smooth B−1 like b52
 | 52 | 448735208793063714451606009674691709006633117645639135533102744646118644150575200 | **CERTIFIED ×2 methods** | 21s | certauto + v15 candidate concordant |
 | 53 | 8667796530759171030732652761285454124185037606953473954566810515107048776076588809114400 | **STRONG** (single exhaustive; v15 2nd method in flight) | 279s | prime base, drop {26} |
 | 54 | 416421702506789485219242774659857217353557918404448765237845114648269563412650818364000 | **WEAK candidate** (CERTPOS=21 probe in flight) | 725s | HARDNESS ONSET; 10 window-bounded refutations |
-| 55–64 | *(fast-mode climb in progress)* | | | |
+| 55 | 18950593883712953094852355579302043793829907380935165052003989360731470319629320169600 | **STRONG** (single exhaustive) | 7.1s | smooth B−1=54=2·3³ → strong filtering (drop 5: {11,22,25,33,44}); prediction confirmed |
+| 56–64 | *(fast-mode climb in progress)* | | | |
 
 ## Deferred option: deep window escalation
 
