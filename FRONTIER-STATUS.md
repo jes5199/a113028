@@ -142,8 +142,10 @@ a(56) (314s: 1 found / 25 refuted terminals / 25 pruned / 0 unfinished) and
 a(60) (30.7s: 1 found / 24 pruned) char-exact — complementary disposition
 mixes, valid aggregates, zero declined-refuted conflation. **b56 and b60
 are hereby 2-method certified** (original engine + outer proof). b58's
-outer proof is performance-bound (90-min cap insufficient; 6h rerun in
-flight). Window width is now provably a performance knob, not a soundness
+outer proof COMPLETED on the 6h rerun (9559s: 1 found / 32 pruned / 0
+unfinished, incumbent char-exact) — **the known-base proof gate is 3/3 and
+b58 is 2-method certified as well**. Window width is now provably a
+performance knob, not a soundness
 boundary — the fixed-window era's WEAK labels are attackable branch by
 branch.
 
