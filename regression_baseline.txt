@@ -1,0 +1,24 @@
+=== regression_suite.sh run label=precal binary=./carrytrie_cert.new5 started 2026-07-23T21:30:37Z ===
+b50: label=precal status=PASS rc=0 wall=35.95s value_match=yes [subsetsChecked=350 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b50_precal.log
+b51: label=precal status=PASS rc=0 wall=45.52s value_match=yes [subsetsChecked=7002 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b51_precal.log
+b52: label=precal status=PASS rc=0 wall=18.87s value_match=yes [subsetsChecked=98533 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b52_precal.log
+b56: label=precal status=PASS rc=0 wall=586.47s value_match=yes [subsetsChecked=159959046 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b56_precal.log
+b58: label=precal status=PASS rc=0 wall=1921.39s value_match=yes [subsetsChecked=464 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b58_precal.log
+b60: label=precal status=PASS rc=0 wall=12.23s value_match=yes [subsetsChecked=21 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b60_precal.log
+=== regression_suite.sh run label=precal finished 2026-07-23T22:14:17Z: PASS=6 FAIL=0 ===
+=== regression_suite.sh run label=postcal binary=./carrytrie_cert.new5 started 2026-07-23T22:31:43Z ===
+b50: label=postcal status=PASS rc=0 wall=36.59s value_match=yes [subsetsChecked=350 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b50_postcal.log
+b51: label=postcal status=PASS rc=0 wall=44.94s value_match=yes [subsetsChecked=7002 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b51_postcal.log
+b52: label=postcal status=PASS rc=0 wall=113.66s value_match=yes [subsetsChecked=98533 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b52_postcal.log
+b56: label=postcal status=PASS rc=0 wall=588.93s value_match=yes [subsetsChecked=159959046 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b56_postcal.log
+b58: label=postcal status=PASS rc=0 wall=2013.09s value_match=yes [subsetsChecked=464 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b58_postcal.log
+b60: label=postcal status=PASS rc=0 wall=228.83s value_match=yes [subsetsChecked=21 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b60_postcal.log
+=== regression_suite.sh run label=postcal finished 2026-07-23T23:22:09Z: PASS=6 FAIL=0 ===
+=== regression_suite.sh run label=postcal2 binary=./carrytrie_cert.new5 started 2026-07-23T23:43:03Z ===
+b50: label=postcal2 status=PASS rc=0 wall=35.04s value_match=yes [subsetsChecked=350 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b50_postcal2.log
+b51: label=postcal2 status=PASS rc=0 wall=45.89s value_match=yes [subsetsChecked=7002 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b51_postcal2.log
+b52: label=postcal2 status=PASS rc=0 wall=18.45s value_match=yes [subsetsChecked=98533 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b52_postcal2.log
+b56: label=postcal2 status=PASS rc=0 wall=586.21s value_match=yes [subsetsChecked=159959046 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b56_postcal2.log
+b58: label=postcal2 status=PASS rc=0 wall=235.87s value_match=yes [subsetsChecked=464 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b58_postcal2.log
+b60: label=postcal2 status=PASS rc=0 wall=11.85s value_match=yes [subsetsChecked=21 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b60_postcal2.log
+=== regression_suite.sh run label=postcal2 finished 2026-07-23T23:58:37Z: PASS=6 FAIL=0 ===

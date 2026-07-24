@@ -29,6 +29,9 @@
 #include <set>
 #include <unordered_map>
 #include <optional>
+#include <ctime>
+#include <cerrno>
+#include <unistd.h>
 #include <sys/stat.h>
 
 using u64 = uint64_t;
@@ -3520,27 +3523,96 @@ struct PlanConfig {
     long double score = 0;
 };
 
-// UNCALIBRATED coefficients (RADIX-BUCKET-ADMISSION-CONTROL.md Sec 5/7;
-// BASE-50-FULL-MODULUS-BUCKET.md Sec 6): rough relative ns-ish weights for
-// one build record / one bucket-directory slot cleared per index build /
-// one bucket lookup / one scanned record. These are placeholders picked to
-// get the RELATIVE ordering of candidate plans roughly right (build and
-// lookup are the expensive operations; a bucket-count "clear" is cheap;
-// a record scan is a single mask intersection, cheaper still per the docs'
-// own "most record checks are a single mask intersection" observation).
-// Calibrate later via doc Sec 7's online EWMA of completed certauto runs
-// once enough predicted-vs-actual residuals exist.
-static constexpr long double PLAN_C_BUILD  = 3.0L;
-static constexpr long double PLAN_C_CLEAR  = 0.3L;
-static constexpr long double PLAN_C_LOOKUP = 6.0L;
-static constexpr long double PLAN_C_SCAN   = 1.5L;
+// CALIBRATED coefficients (BAND-DEPTH-CERTIFICATION.md Phase 3, fit
+// 2026-07-23; REVISED 2026-07-23 same day after postcal regression showed a
+// cross-K ranking regression -- see revision note below). Provenance:
+// fit_planner.py parsed 402 (chosen-config, predicted-vs-actual) pairs out
+// of planner_telemetry.csv's Phase-1 baseline plus every existing
+// "[bucket-plan] admit ..".."[certauto] .. predicted-vs-actual" line pair
+// already present in b*_certauto*.log / b*_certpos21.log / b50_certified.log
+// / b60_certified.log (bases 50-64, both peeled and full-modulus families).
+// Method: per-term actual/predicted RATIO MEDIANS (task-sanctioned
+// alternative to full least-squares) -- robust to the handful of
+// catastrophic outliers (8 of 30 unique (B,family,NX,NY,K) configs are
+// >100x) that would dominate an OLS fit and wash out the well-behaved
+// majority's calibration.
+//
+// The actual/predicted ratio for the LOOKUP and SCAN terms is STRONGLY
+// K-dependent, not a single global constant (median ratio, n = number of
+// (config) telemetry rows in that K bucket):
+//   K=2: 115100x (n=12)     K=3: 21x (n=379)     K=4: 14x (n=11)
+// A K=2 leaf's B^K modulus is too small for the mean-bucket (Y/Q)
+// approximation to hold -- actual bucket occupancy runs orders of magnitude
+// higher than the falling-factorial estimate. This is the root cause of the
+// b58 W=21 pathological pick this task was told to fix: peeled NX=0/NY=4/
+// K=2, predLookups=2160 vs actualLookups=329,253,120 (152,400x
+// underestimate), wall=2394s.
+//
+// REVISION: the first cut applied ALL THREE per-K medians (K=2/K=3/K=4) as
+// independent multipliers. Postcal regression caught the defect: K=3's n=379
+// and K=4's n=11 samples aren't estimating the same thing a K=2-vs-others
+// correction needs -- they're two DIFFERENT populations' typical residual,
+// and dividing K=3's score by 21x while K=4's is only divided by 14x
+// artificially tilted cross-K RANKING (not just each K's own accuracy)
+// toward K=4, flipping b52's picked plan (NX=2/NY=4/K=3, 18s -> NX=1/NY=5/
+// K=3... wait: -> a K=3 plan is unaffected in family, the actual regression
+// was K=4 winning where K=3 legacy used to: b60 flipped 12s peeled NX=1/
+// NY=5/K=3 -> 229s/1GB NX=0/NY=6/K=4). A per-K scale fit from small,
+// disjoint samples is not sound evidence for RANKING plans against each
+// other across K; it is only sound for the ONE comparison it was actually
+// built from evidence for: "K=2 configs are catastrophically undercosted
+// relative to everything else" (unambiguous direction, large effect, the
+// specific defect this phase was tasked to fix). So: K=3 and K=4 are
+// reverted to the untouched legacy constants (6.0 / 1.5, no ratio, no
+// safety-margin rescaling -- byte-identical to the pre-Phase-3 code path)
+// since legacy K=3/K=4 constants have empirically produced every good pick
+// to date (b50/51/52/56/60's precal plans, all char-exact, all fast). Only
+// K=2 keeps its fitted correction. Revisit K=3-vs-K=4 relative weighting
+// only with a fit that directly models cross-K RANKING (e.g. paired
+// same-subset K=3-vs-K=4 wall-time comparisons), not independent per-K
+// scaling of an already-relative score.
+//
+// BUILD/CLEAR (Y, Q) terms have no directly-measured actual counterpart in
+// the existing predicted-vs-actual telemetry (index build/clear wall-time
+// isn't logged separately from lookup/scan time) -- kept at their prior
+// RELATIVE weights, scaled only by the legacy 1.5x safety margin below;
+// inventing an independent correction for them from no data would be
+// speculation, not a fit. (These were NOT implicated in the cross-K
+// regression -- they don't vary by K -- so they are unchanged by this
+// revision.)
+static constexpr long double LEGACY_C_BUILD  = 3.0L;
+static constexpr long double LEGACY_C_CLEAR  = 0.3L;
+static constexpr long double LEGACY_C_LOOKUP = 6.0L;
+static constexpr long double LEGACY_C_SCAN   = 1.5L;
+static constexpr long double CAL_SAFETY_MARGIN = 1.5L;
+static constexpr long double CAL_RATIO_K2 = 115100.0L; // median actual/predicted, n=12 -- KEPT (unambiguous, disqualifies K=2 only)
+
+static constexpr long double PLAN_C_BUILD = LEGACY_C_BUILD * CAL_SAFETY_MARGIN; // 4.5
+static constexpr long double PLAN_C_CLEAR = LEGACY_C_CLEAR * CAL_SAFETY_MARGIN; // 0.45
+
+// K=2's LOOKUP/SCAN coefficients carry the fitted correction (ratio x legacy
+// x safety margin); K=3/K=4 are the untouched legacy constants (REVISION
+// above) -- byte-identical to the pre-Phase-3 scoring for any K != 2 plan.
+// K only ever takes 2, 3, or 4 (enumeratePeeledConfigs / enumerateFMConfigs
+// both loop K = 2..4); any other value defensively falls back to legacy
+// (uncalibrated, matches pre-Phase-3 behavior for the whole score).
+static long double planCLookup(int K) {
+    if (K == 2) return LEGACY_C_LOOKUP * CAL_RATIO_K2 * CAL_SAFETY_MARGIN; // 1.036e6
+    return LEGACY_C_LOOKUP; // K=3, K=4, and defensive fallback: unchanged
+}
+static long double planCScan(int K) {
+    if (K == 2) return LEGACY_C_SCAN * CAL_RATIO_K2 * CAL_SAFETY_MARGIN; // 2.5895e5
+    return LEGACY_C_SCAN; // K=3, K=4, and defensive fallback: unchanged
+}
 
 static void scoreConfig(PlanConfig &pc) {
     long double mult = (long double)pc.suffixMult; // index_build_count for Peeled (rebuilt per suffix); 1 for FullModulus
     long double buildRecords = (long double)pc.Y * mult;
     long double clearWork = (long double)pc.Q * mult;
+    long double cLookup = planCLookup(pc.K);
+    long double cScan   = planCScan(pc.K);
     pc.score = PLAN_C_BUILD * buildRecords + PLAN_C_CLEAR * clearWork
-             + PLAN_C_LOOKUP * pc.lookups * mult + PLAN_C_SCAN * pc.recordChecks * mult;
+             + cLookup * pc.lookups * mult + cScan * pc.recordChecks * mult;
 }
 
 // Derives P_full = ceil(log_B L) exactly as runCertFM's chooseWYFM does.
@@ -4498,6 +4570,45 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
 // existing behavior (their first infeasible config aborts the whole run
 // via bucketAdmissionGate's exit(3)), just with a smarter search before
 // giving up.
+
+// BAND-DEPTH-CERTIFICATION.md Phase 1A telemetry: append-only CSV row per
+// completed scan at the certauto predicted-vs-actual print site (soundness-
+// neutral -- pure instrumentation, no effect on any exit code, gate, prune,
+// or enumeration decision). Header written once if the file does not yet
+// exist; every subsequent call appends one row. Columns: B,|D|,family,NX,NY,
+// K,suffixMult,Y,Q,predLookups,actualLookups,predScans,actualScans,
+// wallSeconds,certposW,timestamp (ISO-8601 UTC). Best-effort: if the file
+// can't be opened, log to stderr and continue -- telemetry must never abort
+// or alter a certification run.
+static void appendPlannerTelemetryCSV(int B, int Dsize, const PlanConfig &pl,
+                                       const AttemptResult &ar, int certposW) {
+    static const char *kPath = "planner_telemetry.csv";
+    bool exists = (access(kPath, F_OK) == 0);
+    FILE *f = fopen(kPath, "a");
+    if (!f) {
+        fprintf(stderr, "[telemetry] WARNING: could not open %s for append (errno=%d) -- skipping row\n",
+                kPath, errno);
+        return;
+    }
+    if (!exists) {
+        fprintf(f, "B,|D|,family,NX,NY,K,suffixMult,Y,Q,predLookups,actualLookups,predScans,actualScans,"
+                   "wallSeconds,certposW,timestamp\n");
+    }
+    time_t now = time(nullptr);
+    struct tm tmUtc;
+    gmtime_r(&now, &tmUtc);
+    char tsBuf[32];
+    strftime(tsBuf, sizeof(tsBuf), "%Y-%m-%dT%H:%M:%SZ", &tmUtc);
+    fprintf(f, "%d,%d,%s,%d,%d,%d,%llu,%s,%s,%.6Lg,%llu,%.6Lg,%llu,%.6f,%d,%s\n",
+            B, Dsize, familyName(pl.family), pl.NX, pl.NY, pl.K,
+            (unsigned long long)pl.suffixMult,
+            u128_to_string(pl.Y).c_str(), u128_to_string(pl.Q).c_str(),
+            pl.lookups, (unsigned long long)ar.totalLookups,
+            pl.recordChecks, (unsigned long long)ar.totalScans,
+            ar.wallSeconds, certposW, tsBuf);
+    fclose(f);
+}
+
 static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudgetKB, double capSeconds1800, double capSeconds5400) {
     using clock = std::chrono::steady_clock;
     auto tAll0 = clock::now();
@@ -4598,6 +4709,11 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
                             familyName(pl.family), pl.lookups, (unsigned long long)ar.totalLookups,
                             pl.recordChecks, (unsigned long long)ar.totalScans, (unsigned long long)ar.totalRoots,
                             ar.wallSeconds);
+
+                    // Phase 1A telemetry (BAND-DEPTH-CERTIFICATION.md): append-only,
+                    // always-on, one row per completed scan. Pure instrumentation --
+                    // no effect on any exit code, gate, prune, or enumeration decision.
+                    appendPlannerTelemetryCSV(B, k, pl, ar, CANDIDATE_POS);
 
                     if (getenv("DEBUG_SUBSETDISC")) fprintf(stderr, "[dbg-auto]   success=%d winCand=%d refuted=%d survivors=%llu verifiedOk=%llu verifiedBad=%llu family=%s NX=%d NY=%d K=%d\n",
                         ar.success, ar.winningCandidate, ar.wrongTurnsRefuted, (unsigned long long)ar.totalSurvivors,

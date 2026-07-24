@@ -109,6 +109,22 @@ adopted 2026-07-23 ~15:45: **W=21 is the fast-pass width from b60 up**
 (climb3.sh); the W=20 attempts of 60–64 were abandoned mid-b60. The W=20
 data through b59 stands as the uniform onset-discovery series.
 
+## Planner calibration (band-depth plan Phase 1+3, landed 2026-07-24)
+
+Telemetry (planner_telemetry.csv, always-on) + a 6-base regression harness
+(regression_suite.sh: b50/51/52 default, b56/58 W=21, b60 W=21+new-enum;
+pass = char-exact value + exit 0) are now production. Calibration outcome,
+honestly told: the full per-K median fit (K=2: 115,000× underestimate!,
+K=3: 21×, K=4: 14×, from 402 pairs) passed soundness (6/6 char-exact) but
+FAILED the performance gate — small-sample cross-K ratios invert plan
+rankings (b60 flipped to a 19×-slower K=4 plan). **Lesson: calibration must
+model plan RANKING, not per-K scaling.** The shipped revision keeps only
+the unambiguous K=2 disqualifier + legacy K=3/K=4 constants. Result:
+postcal2 6/6 char-exact, b52/b60 at baseline walls, and **b58 8× faster
+(1921s → 235.9s)** — its certified W=21 run had itself been on the
+pathological K=2 plan; the disqualifier re-planned it to full-modulus
+NX=3/NY=5/K=3, same value char-exact. The K=2 misplan class is closed.
+
 ## Deferred engine fixes (distinct remedies for distinct modes)
 
 - **Band/window depth (b54, b59):** the CERTPOS widen ladder (autowiden.sh),
