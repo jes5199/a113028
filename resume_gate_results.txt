@@ -1,0 +1,8 @@
+=== resume gates started 2026-07-24T10:49:45Z binary=new9 ===
+G1 b60 fresh: rc=0 CERTIFIED (zero unfinished branches) val=incumbent (84 decimal digits): 374096795553866901593729675694543662806191148614834420420657978999648347496776816352
+G2 s1 (cap120): rc=4 INCOMPLETE: 1 branches unfinished this session (union unfinished=1) -- best incumbent is a LOWER BOUND manifest=2
+G2 s2 (resume): rc=0 resume: loaded certbb_56_manifest.jsonl: 1 lines -> 0 proven-REFUTED (skip), 0 proven-FOUND (skip+seed), 1 unfinished (will re-run)
+G2 s2 verdict: CERTIFIED (zero unfinished branches) val=incumbent (84 decimal digits): 818241795167031571216125942108524047248252714836991418093245122512858064867506776900
+G3 b63 smoke: rc=4 resume: loaded certbb_63_manifest.jsonl: 1256 lines -> 40 proven-REFUTED (skip), 0 proven-FOUND (skip+seed), 1216 unfinished (will re-run)
+G3 verdict: INCOMPLETE: 1214 branches unfinished this session (union unfinished=1214) -- best incumbent is a LOWER BOUND DFS DONE: nodesVisited=1289 found=0 refuted=2 pruned=0 unfinished(declined)=1214 resume-skipped(refuted=40 found=0) wall=600.273s
+=== resume gates done 2026-07-24T11:07:54Z ===

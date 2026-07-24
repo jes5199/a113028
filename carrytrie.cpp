@@ -5605,6 +5605,12 @@ static void runCertSet(int B, const std::vector<int> &drops, long rssBudgetKB) {
     }
 }
 
+// RESUME (task item 4, duplicate-safety classes): forward-declared here so
+// CertBBContext's proven-branch map below can use it directly. Definition
+// and the manifest-loading/classification logic that produces it live
+// further down next to writeManifestLineBB/classifyManifestBB.
+enum class ProvenClassBB { UNFINISHED, REFUTED, FOUND };
+
 // Sec8.3+8.4-lite: incumbent-guided outer DFS state + manifest.
 struct CertBBContext {
     ConstantsGen c;
@@ -5617,16 +5623,161 @@ struct CertBBContext {
     long long nodesVisited = 0;
     long long nFound = 0, nRefuted = 0, nPruned = 0, nDeclined = 0;
     bool anyUnfinished = false;
+    // RESUME (task item 2): branches proven by a PRIOR session (loaded from
+    // the manifest before this DFS starts), keyed by exact prefix. REFUTED
+    // entries are skipped outright; FOUND entries are skipped AND their
+    // stored digit array is available to seed/update the incumbent (I1:
+    // array, never the decimal string). Empty when not resuming.
+    std::unordered_map<std::string, std::pair<ProvenClassBB, std::vector<int>>> proven;
+    long long nSkippedRefuted = 0, nSkippedFound = 0; // this session's resume-skip counts (for G2's "loaded-as-proven" report)
 };
 
+// Manifest v2 (RESUME task item 1): EXACT_TERMINAL_FOUND records gain
+// "maxSurvivor" (decimal string, per the task spec, for human/tool
+// readability) AND "maxSurvivorDigits" (the exact base-B MSD-first digit
+// array, obligation I1: resume-seeding comparisons must be array
+// lex-compares, never a decimal-string/integer decision -- the decimal
+// field stays display-only, exactly as decimalFromDigitsMSBfirstBB's own
+// header comment already requires). maxSurvivorDigits is empty/omitted for
+// every non-FOUND disposition and is what distinguishes a v2 FOUND record
+// (resumable) from a v1 FOUND record (no digits -- must be re-executed).
 static void writeManifestLineBB(CertBBContext &ctx, const std::vector<int> &prefix, const char *disposition,
-                                 unsigned long long survivors, double wall, const char *note = "") {
+                                 unsigned long long survivors, double wall, const char *note = "",
+                                 const std::vector<int> *maxSurvivorDigits = nullptr) {
     if (!ctx.manifest) return;
     fprintf(ctx.manifest, "{\"prefix\":[");
     for (size_t i = 0; i < prefix.size(); i++) fprintf(ctx.manifest, "%s%d", i ? "," : "", prefix[i]);
-    fprintf(ctx.manifest, "],\"disposition\":\"%s\",\"survivors\":%llu,\"wall\":%.3f,\"note\":\"%s\"}\n",
+    fprintf(ctx.manifest, "],\"disposition\":\"%s\",\"survivors\":%llu,\"wall\":%.3f,\"note\":\"%s\",\"maxSurvivor\":\"",
             disposition, survivors, wall, note);
+    if (maxSurvivorDigits && !maxSurvivorDigits->empty()) {
+        fprintf(ctx.manifest, "%s", decimalFromDigitsMSBfirstBB(ctx.c.B, *maxSurvivorDigits).c_str());
+    }
+    fprintf(ctx.manifest, "\",\"maxSurvivorDigits\":[");
+    if (maxSurvivorDigits) {
+        for (size_t i = 0; i < maxSurvivorDigits->size(); i++)
+            fprintf(ctx.manifest, "%s%d", i ? "," : "", (*maxSurvivorDigits)[i]);
+    }
+    fprintf(ctx.manifest, "]}\n");
     fflush(ctx.manifest);
+}
+
+// ---------------------------------------------------------------------
+// RESUME (manifest v2) support.
+//
+// Format: still append-only JSONL, one flat object per line, backward
+// readable -- a v1 line simply has no "maxSurvivor"/"maxSurvivorDigits"
+// keys, which parseIntArrayBB below reports as "not found" (empty), so a
+// v1 FOUND record is classified UNFINISHED (must be re-executed) exactly
+// as the task requires ("a v1 FOUND record cannot seed the incumbent, so
+// treat it as unfinished and re-run that branch").
+// ---------------------------------------------------------------------
+
+// Extracts a JSON int array "key":[a,b,c] from a single manifest line.
+// Returns false (out left empty) if the key is absent -- used both for
+// "prefix" (always present) and "maxSurvivorDigits" (v2-only).
+static bool parseIntArrayBB(const std::string &line, const char *key, std::vector<int> &out) {
+    out.clear();
+    std::string pat = std::string("\"") + key + "\":[";
+    size_t p = line.find(pat);
+    if (p == std::string::npos) return false;
+    p += pat.size();
+    size_t end = line.find(']', p);
+    if (end == std::string::npos) return false;
+    std::string body = line.substr(p, end - p);
+    size_t pos = 0;
+    while (pos < body.size()) {
+        size_t comma = body.find(',', pos);
+        std::string tok = body.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+        if (!tok.empty()) out.push_back(atoi(tok.c_str()));
+        if (comma == std::string::npos) break;
+        pos = comma + 1;
+    }
+    return true;
+}
+
+static bool parseStringFieldBB(const std::string &line, const char *key, std::string &out) {
+    std::string pat = std::string("\"") + key + "\":\"";
+    size_t p = line.find(pat);
+    if (p == std::string::npos) return false;
+    p += pat.size();
+    size_t end = line.find('"', p);
+    if (end == std::string::npos) return false;
+    out = line.substr(p, end - p);
+    return true;
+}
+
+static std::string prefixKeyBB(const std::vector<int> &p) {
+    std::string s;
+    s.reserve(p.size() * 3);
+    for (size_t i = 0; i < p.size(); i++) { if (i) s += ','; s += std::to_string(p[i]); }
+    return s;
+}
+
+// Duplicate-safety obligation (task item 4): the STRONGEST disposition
+// wins per branch (REFUTED/FOUND over DECLINED/unfinished). A REFUTED and
+// a FOUND(v2) record for the *same* prefix is a contradiction -- loud
+// abort, treated as a soundness oracle firing, never silently resolved.
+// (ProvenClassBB itself is declared above CertBBContext, which needs it.)
+struct ManifestUnionBB {
+    // key -> (class, digits [only meaningful for FOUND]).
+    std::unordered_map<std::string, std::pair<ProvenClassBB, std::vector<int>>> byPrefix;
+    long long linesTotal = 0;
+    long long provenRefuted = 0, provenFound = 0, unfinished = 0; // distinct branches, after dedup
+};
+
+// Reads and classifies an entire certbb manifest file (loaded-only pass
+// pre-DFS, or loaded+appended union pass post-DFS -- same function, same
+// dedup rule, called twice by runCertBB for the two purposes).
+static ManifestUnionBB classifyManifestBB(const char *path) {
+    ManifestUnionBB u;
+    FILE *f = fopen(path, "r");
+    if (!f) return u;
+    char *lineBuf = nullptr; size_t lineCap = 0; ssize_t n;
+    while ((n = getline(&lineBuf, &lineCap, f)) != -1) {
+        std::string line(lineBuf, (size_t)n);
+        std::string disp;
+        if (!parseStringFieldBB(line, "disposition", disp)) continue;
+        if (disp == "DISCOVERY_SEED_FOUND") continue; // not a DFS branch record (doc: "not part of the DFS proof itself")
+        std::vector<int> prefix;
+        if (!parseIntArrayBB(line, "prefix", prefix)) continue;
+        u.linesTotal++;
+        std::vector<int> digits;
+        bool hasDigits = parseIntArrayBB(line, "maxSurvivorDigits", digits) && !digits.empty();
+        ProvenClassBB cls;
+        if (disp == "EXACT_TERMINAL_REFUTED") cls = ProvenClassBB::REFUTED;
+        else if (disp == "EXACT_TERMINAL_FOUND" && hasDigits) cls = ProvenClassBB::FOUND;
+        else cls = ProvenClassBB::UNFINISHED; // RESOURCE_DECLINED, or a v1 FOUND record (no digits)
+        std::string key = prefixKeyBB(prefix);
+        auto it = u.byPrefix.find(key);
+        if (it == u.byPrefix.end()) {
+            u.byPrefix.emplace(key, std::make_pair(cls, digits));
+        } else {
+            ProvenClassBB existing = it->second.first;
+            if (existing != cls) {
+                bool existingProven = existing != ProvenClassBB::UNFINISHED;
+                bool newProven = cls != ProvenClassBB::UNFINISHED;
+                if (existingProven && newProven) {
+                    fprintf(stderr, "[certbb] FATAL manifest contradiction for prefix [%s]: %s vs %s -- "
+                                    "REFUTED and FOUND for the identical branch is impossible unless something "
+                                    "is unsound; treating as a contradiction oracle firing, aborting.\n",
+                            key.c_str(),
+                            existing == ProvenClassBB::REFUTED ? "REFUTED" : "FOUND",
+                            cls == ProvenClassBB::REFUTED ? "REFUTED" : "FOUND");
+                    exit(5);
+                }
+                if (newProven && !existingProven) it->second = std::make_pair(cls, digits);
+                // else: existing proven entry wins over a new/older unfinished one -- keep as-is.
+            }
+        }
+    }
+    free(lineBuf);
+    fclose(f);
+    for (auto &kv : u.byPrefix) {
+        if (kv.second.first == ProvenClassBB::REFUTED) u.provenRefuted++;
+        else if (kv.second.first == ProvenClassBB::FOUND) u.provenFound++;
+        else u.unfinished++;
+    }
+    return u;
 }
 
 // Sec3.2 recurrence, obligation I1 (array compares only), I4 (RESOURCE_DECLINED
@@ -5634,6 +5785,31 @@ static void writeManifestLineBB(CertBBContext &ctx, const std::vector<int> &pref
 // entire subtree is fully accounted for (no unfinished descendant).
 static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, const std::vector<int> &remaining) {
     ctx.nodesVisited++;
+
+    // RESUME (task item 2): if a PRIOR session already proved this exact
+    // branch (REFUTED or FOUND-with-digits), skip re-execution entirely --
+    // no deadline check, no manifest write (the record already exists in
+    // the file we're appending to). Only REFUTED/FOUND(v2) entries are
+    // ever in ctx.proven (classifyManifestBB never admits UNFINISHED
+    // there), so this can only ever match a terminal-shaped node, exactly
+    // where the prior session's own EXACT_TERMINAL_* record was written.
+    if (!ctx.proven.empty()) {
+        auto pit = ctx.proven.find(prefixKeyBB(prefix));
+        if (pit != ctx.proven.end()) {
+            if (pit->second.first == ProvenClassBB::REFUTED) {
+                ctx.nSkippedRefuted++;
+                return true;
+            } else if (pit->second.first == ProvenClassBB::FOUND) {
+                ctx.nSkippedFound++;
+                if (!ctx.incumbentSet || lexCompareDigitsBB(pit->second.second, ctx.incumbent) > 0) {
+                    ctx.incumbent = pit->second.second;
+                    ctx.incumbentSet = true;
+                }
+                return true;
+            }
+        }
+    }
+
     if (std::chrono::steady_clock::now() >= ctx.deadline) {
         ctx.nDeclined++;
         ctx.anyUnfinished = true;
@@ -5660,7 +5836,8 @@ static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, cons
         }
         if (outc.disposition == TerminalOutcomeBB::FOUND) {
             ctx.nFound++;
-            writeManifestLineBB(ctx, prefix, "EXACT_TERMINAL_FOUND", (unsigned long long)outc.ar.totalSurvivors, wall);
+            writeManifestLineBB(ctx, prefix, "EXACT_TERMINAL_FOUND", (unsigned long long)outc.ar.totalSurvivors, wall,
+                                 "", &outc.ar.maxDigitsMSBfirst);
             // Obligation I3 of doc Sec4 (direct verification already exists):
             // incumbent updates take the terminal's max survivor, compared by
             // fixed-length array lex order only (I1).
@@ -5702,14 +5879,15 @@ static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, cons
     return allFinished;
 }
 
-static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, double capSecondsGlobal) {
+static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, double capSecondsGlobal,
+                       bool resumeMode) {
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
     int W = certSetupWBB(B);
     std::vector<int> D;
     for (int d = 1; d < B; d++) if (std::find(drops.begin(), drops.end(), d) == drops.end()) D.push_back(d);
-    fprintf(stderr, "[certbb] base=%d |D|=%zu dropped=%zu W_terminal=%d capSeconds=%.0f\n",
-            B, D.size(), drops.size(), W, capSecondsGlobal);
+    fprintf(stderr, "[certbb] base=%d |D|=%zu dropped=%zu W_terminal=%d capSeconds=%.0f resume=%s\n",
+            B, D.size(), drops.size(), W, capSecondsGlobal, resumeMode ? "on" : "off");
 
     ConstantsGen c = deriveConstantsGen(B, D);
     if (!c.ok) {
@@ -5724,14 +5902,88 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
 
     char manifestPath[128];
     snprintf(manifestPath, sizeof(manifestPath), "certbb_%d_manifest.jsonl", B);
-    FILE *manifest = fopen(manifestPath, "w"); // fresh manifest each run (Sec8.4-lite: rerun-from-scratch OK)
+
+    // RESUME (task item 2): load and classify any existing manifest BEFORE
+    // opening our own write handle. loadedUnion.byPrefix seeds ctx.proven
+    // (skip-on-match during the DFS below); its FOUND digit arrays also
+    // seed the initial incumbent (I1: array compare only). Terminal-shaped
+    // REFUTED/FOUND entries whose digits fall outside the current D, or
+    // whose prefix length doesn't match this D's terminal depth, indicate
+    // the on-disk manifest belongs to a DIFFERENT drop set for this same
+    // base -- loud abort rather than silently corrupting the proof.
+    ManifestUnionBB loadedUnion;
+    bool haveManifestFile = false;
+    {
+        FILE *test = fopen(manifestPath, "r");
+        if (test) { haveManifestFile = true; fclose(test); }
+    }
+    if (resumeMode && haveManifestFile) {
+        loadedUnion = classifyManifestBB(manifestPath);
+        std::set<int> Dset(D.begin(), D.end());
+        int terminalPrefixLen = (int)D.size() - (W + 1);
+        for (auto &kv : loadedUnion.byPrefix) {
+            if (kv.second.first == ProvenClassBB::UNFINISHED) continue; // only proven entries are load-bearing
+            // Reconstruct the prefix array from its key to length-check it.
+            std::vector<int> px;
+            { std::string tmp; for (char ch : kv.first) { if (ch == ',') { px.push_back(atoi(tmp.c_str())); tmp.clear(); } else tmp += ch; } if (!tmp.empty()) px.push_back(atoi(tmp.c_str())); }
+            bool ok = ((int)px.size() == terminalPrefixLen);
+            for (int d : px) if (ok && !Dset.count(d)) ok = false;
+            if (kv.second.first == ProvenClassBB::FOUND) {
+                if ((int)kv.second.second.size() != (int)D.size()) ok = false;
+                for (int d : kv.second.second) if (ok && !Dset.count(d)) ok = false;
+            }
+            if (!ok) {
+                fprintf(stderr, "[certbb] FATAL: %s does not match this run's digit set/drops (base=%d "
+                                "dropped=%zu terminalPrefixLen=%d) -- refusing to resume from a mismatched "
+                                "manifest. Move/remove it, or rerun with the matching <drops>.\n",
+                        manifestPath, B, drops.size(), terminalPrefixLen);
+                exit(5);
+            }
+        }
+        fprintf(stderr, "[certbb] resume: loaded %s: %lld lines -> %lld proven-REFUTED (skip), "
+                        "%lld proven-FOUND (skip+seed), %lld unfinished (will re-run)\n",
+                manifestPath, loadedUnion.linesTotal, loadedUnion.provenRefuted, loadedUnion.provenFound,
+                loadedUnion.unfinished);
+    } else if (resumeMode) {
+        fprintf(stderr, "[certbb] resume requested but no existing %s found -- starting fresh\n", manifestPath);
+    }
+
+    FILE *manifest = fopen(manifestPath, (resumeMode && haveManifestFile) ? "a" : "w");
     if (!manifest) fprintf(stderr, "[certbb] WARNING: could not open %s for writing (errno=%d)\n", manifestPath, errno);
-    else fprintf(stderr, "[certbb] base=%d manifest: %s\n", B, manifestPath);
+    else fprintf(stderr, "[certbb] base=%d manifest: %s (%s)\n", B, manifestPath,
+                 (resumeMode && haveManifestFile) ? "append" : "fresh, truncated");
 
     CertBBContext ctx;
     ctx.c = c; ctx.W = W; ctx.rssBudgetKB = rssBudgetKB;
     ctx.deadline = t0 + std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(capSecondsGlobal));
     ctx.manifest = manifest;
+    // BUGFIX (found during G2 validation): ctx.proven must contain ONLY
+    // proven branches (REFUTED/FOUND) -- an UNFINISHED (RESOURCE_DECLINED,
+    // or v1 FOUND-without-digits) entry must NOT be admitted here. The
+    // skip-check in certBBProve treats "found in ctx.proven and not
+    // REFUTED" as FOUND; if an UNFINISHED entry were present it would be
+    // misclassified as a proven survivor and the branch would be wrongly
+    // skipped instead of re-executed (silently corrupting the proof --
+    // this exact bug produced a false CERTIFIED with nodesVisited==1 on
+    // the very first resume test run). Filter explicitly.
+    for (auto &kv : loadedUnion.byPrefix) {
+        if (kv.second.first == ProvenClassBB::UNFINISHED) continue;
+        ctx.proven.emplace(kv.first, kv.second);
+    }
+    // Seed the incumbent from loaded FOUND records too (max over all of
+    // them, I1 array compare) -- independent of, and combined with, the
+    // discovery seed below (whichever is larger wins).
+    for (auto &kv : ctx.proven) {
+        if (kv.second.first != ProvenClassBB::FOUND) continue;
+        if (!ctx.incumbentSet || lexCompareDigitsBB(kv.second.second, ctx.incumbent) > 0) {
+            ctx.incumbent = kv.second.second;
+            ctx.incumbentSet = true;
+        }
+    }
+    if (ctx.incumbentSet) {
+        fprintf(stderr, "[certbb] base=%d resume-seeded incumbent from manifest: %s\n", B,
+                decimalFromDigitsMSBfirstBB(B, ctx.incumbent).c_str());
+    }
 
     // Discovery seed (doc Sec3.4): buildFeasiblePrefix + one terminal call
     // at the FULL digit set's own heuristic top prefix, purely to seed the
@@ -5764,8 +6016,9 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
 
     double wall = std::chrono::duration<double>(clock::now() - t0).count();
     fprintf(stderr, "[certbb] base=%d DFS DONE: nodesVisited=%lld found=%lld refuted=%lld pruned=%lld "
-                    "unfinished(declined)=%lld wall=%.3fs\n",
-            B, ctx.nodesVisited, ctx.nFound, ctx.nRefuted, ctx.nPruned, ctx.nDeclined, wall);
+                    "unfinished(declined)=%lld resume-skipped(refuted=%lld found=%lld) wall=%.3fs\n",
+            B, ctx.nodesVisited, ctx.nFound, ctx.nRefuted, ctx.nPruned, ctx.nDeclined,
+            ctx.nSkippedRefuted, ctx.nSkippedFound, wall);
     if (ctx.incumbentSet) {
         std::string dec = decimalFromDigitsMSBfirstBB(B, ctx.incumbent);
         fprintf(stderr, "[certbb] base=%d incumbent (%zu decimal digits): %s\n", B, dec.size(), dec.c_str());
@@ -5774,13 +6027,26 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
     }
     if (manifest) fclose(manifest);
 
+    // Union/report pass (task item 2): re-classify the manifest file NOW
+    // that it holds loaded+appended records, purely for reporting totals
+    // across the union -- the CERTIFIED/INCOMPLETE decision itself is
+    // already sound from `finished`/`ctx.anyUnfinished` alone (this
+    // session's DFS walks the WHOLE tree regardless of resume; resume only
+    // changes whether a given terminal node is skipped-via-proven-lookup
+    // or actually executed, never which nodes are visited/pruned/proved).
+    ManifestUnionBB finalUnion = classifyManifestBB(manifestPath);
+    fprintf(stderr, "[certbb] base=%d UNION manifest summary (loaded+new, %lld lines): refuted=%lld found=%lld "
+                    "unfinished=%lld (%lld distinct branches)\n",
+            B, finalUnion.linesTotal, finalUnion.provenRefuted, finalUnion.provenFound, finalUnion.unfinished,
+            finalUnion.provenRefuted + finalUnion.provenFound + finalUnion.unfinished);
+
     bool allAccounted = finished && !ctx.anyUnfinished;
     if (allAccounted) {
         fprintf(stderr, "[certbb] base=%d CERTIFIED (zero unfinished branches)%s\n", B,
                 ctx.incumbentSet ? "" : " -- and NO valid arrangement exists for this digit set");
     } else {
-        fprintf(stderr, "[certbb] base=%d INCOMPLETE: %lld branches unfinished -- best incumbent is a LOWER "
-                        "BOUND\n", B, ctx.nDeclined);
+        fprintf(stderr, "[certbb] base=%d INCOMPLETE: %lld branches unfinished this session (union unfinished=%lld) "
+                        "-- best incumbent is a LOWER BOUND\n", B, ctx.nDeclined, finalUnion.unfinished);
         exit(4);
     }
 }
@@ -5933,22 +6199,52 @@ int main(int argc, char **argv) {
         fprintf(stderr, "[certset] base=%d dropsArg=%s rssBudgetKB=%ld\n", base, argv[3], rssBudgetKB);
         certdrv::runCertSet(base, drops, rssBudgetKB);
     } else if (mode == "certbb") {
-        // HIGHER-BASE-CERTIFICATION-STRATEGY.md Sec8.3:
-        // certbb <base> <comma-separated-dropped-digits> [rssBudgetKB] [capSeconds]
+        // HIGHER-BASE-CERTIFICATION-STRATEGY.md Sec8.3 + RESUME task:
+        // certbb <base> <comma-separated-dropped-digits> [rssBudgetKB] [capSeconds] [resume]
+        //   -- or --
+        // certbb <base> <comma-separated-dropped-digits> [rssBudgetKB] [resume]
         // Incumbent-guided outer lexicographic branch-and-bound over the
         // EXPLICIT digit set D={1..B-1}\drops. CERTSET_W env (default 22)
-        // sets W_terminal. capSeconds (default 5400) is the GLOBAL wall
-        // budget for the whole DFS (per-terminal deadline == same clock).
+        // sets W_terminal. capSeconds (default 5400, or CERTBB_CAP_S env --
+        // see below) is the GLOBAL wall budget for the whole DFS
+        // (per-terminal deadline == same clock).
+        //
+        // RESUME (positional "resume" literal in any arg slot from argv[5]
+        // on, OR env CERTBB_RESUME=1 -- either works, both documented
+        // here): loads certbb_<base>_manifest.jsonl if present and skips
+        // re-executing already-REFUTED/FOUND branches (see runCertBB).
+        //
+        // CERTBB_CAP_S env (task item 3): overrides the capSeconds default
+        // (and any explicit positional capSeconds) with an operator-chosen
+        // internal hard cap; validated >= 60s. External timeout(1) remains
+        // the operator's own belt-and-suspenders bound.
         if (argc < 4) { fprintf(stderr, "certbb requires <base> <comma-separated-dropped-digits>\n"); return 1; }
         int base = atoi(argv[2]);
         std::vector<int> drops = certdrv::parseDropListBB(argv[3]);
         long rssBudgetKB = -1;
         if (argc >= 5) rssBudgetKB = atol(argv[4]);
         double capSeconds = 5400.0;
-        if (argc >= 6) capSeconds = atof(argv[5]);
-        fprintf(stderr, "[certbb] base=%d dropsArg=%s rssBudgetKB=%ld capSeconds=%.0f\n",
-                base, argv[3], rssBudgetKB, capSeconds);
-        certdrv::runCertBB(base, drops, rssBudgetKB, capSeconds);
+        bool resumeMode = false;
+        for (int i = 5; i < argc; i++) {
+            std::string tok = argv[i];
+            if (tok == "resume") resumeMode = true;
+            else capSeconds = atof(argv[i]);
+        }
+        if (const char *rs = getenv("CERTBB_RESUME")) if (atoi(rs) != 0) resumeMode = true;
+        if (const char *cs = getenv("CERTBB_CAP_S")) {
+            double v = atof(cs);
+            if (v < 60.0) {
+                fprintf(stderr, "[certbb] FATAL: CERTBB_CAP_S=%s invalid -- must be >= 60 (validate)\n", cs);
+                return 1;
+            }
+            capSeconds = v; // env wins over any positional capSeconds when set (documented precedence)
+        }
+        fprintf(stderr, "[certbb] base=%d dropsArg=%s rssBudgetKB=%ld capSeconds=%.0f resume=%s "
+                        "(CERTBB_CAP_S=%s CERTBB_RESUME=%s)\n",
+                base, argv[3], rssBudgetKB, capSeconds, resumeMode ? "on" : "off",
+                getenv("CERTBB_CAP_S") ? getenv("CERTBB_CAP_S") : "(unset)",
+                getenv("CERTBB_RESUME") ? getenv("CERTBB_RESUME") : "(unset)");
+        certdrv::runCertBB(base, drops, rssBudgetKB, capSeconds, resumeMode);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 1;

@@ -1,0 +1,2 @@
+{"prefix":[55,54,53,51,50,49,47,46,45,44,43,42,41,39,38,37,36,35,34,33,31,30,29,27,26],"disposition":"DISCOVERY_SEED_FOUND","survivors":7,"wall":0.000,"note":"not part of the DFS proof itself","maxSurvivor":"","maxSurvivorDigits":[]}
+{"prefix":[],"disposition":"RESOURCE_DECLINED","survivors":0,"wall":0.000,"note":"global deadline reached before this node","maxSurvivor":"","maxSurvivorDigits":[]}
