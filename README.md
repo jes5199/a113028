@@ -64,14 +64,31 @@ in 47m 57s combined, 1 memory-declined base rescued by scan.
 
 Bases 50–64 are **first-ever computed values** (the published OEIS b-file
 ends at 48) at graded confidence — read the labels carefully: *certified
-×N methods* = independent engines concordant (proof of maximality);
-*CERTIFIED (clean single engine)* = one exhaustive engine, clean
-window-completion; *STRONG* = single-method exhaustive; ***WEAK lower
-bound*** = a valid completion whose **maximality is unproven** (refutations
-were window-bounded, and such refutations have provably hidden larger
-answers three times — see the b50/b56/b58 supersede stories). Canonical
-per-base detail, evidence-class definitions, and the hardness taxonomy:
+×N methods* = independent methods concordant (proof of maximality);
+*STRONG* = single-method exhaustive; ***WEAK lower bound*** = a valid
+completion whose **maximality is unproven** (refutations were
+window-bounded, and such refutations have provably hidden larger answers
+three times — see the b50/b56/b58 supersede stories). Canonical per-base
+detail, evidence-class definitions, and the hardness taxonomy:
 **[FRONTIER-STATUS.md](FRONTIER-STATUS.md)**.
+
+**The maximality-proof engine** (2026-07-24,
+[HIGHER-BASE-CERTIFICATION-STRATEGY.md](HIGHER-BASE-CERTIFICATION-STRATEGY.md)):
+an exact outer lexicographic branch-and-bound wraps the bucket engine as a
+terminal oracle — every branch above the incumbent is bound-pruned,
+exhaustively refuted, or exact-searched, so **window width is a performance
+knob, never a soundness boundary**, and discovery heuristics can never
+justify a refutation. Validated by reproducing and *proving* the known
+a(56)/a(58)/a(60) end-to-end (upgrading all three to ×2-method certified);
+live in the unified production binary with resumable, shard-parallel proof
+manifests.
+
+**Bases 65–89** are open territory unlocked by the 128-bit mask widening
+(2026-07-24): fast passes at b65/b73/b81 all came back honest NO-VALUE
+(band-deep — the machinery is validated, the answers sit below fast-pass
+windows; the proof engine is the path). **Base 89 is the exact arithmetic
+ceiling** (lcm(1..88) fits in 128 bits; lcm(1..89) does not — bases ≥90
+refuse cleanly and await a bignum arithmetic epic).
 
 | base | value (alphabet) | wall-clock | m\* | log₁₀ W |
 |-----:|------------------|-----------:|----:|--------:|
@@ -129,14 +146,14 @@ per-base detail, evidence-class definitions, and the hardness taxonomy:
 | 53 | `ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSRPONM8EG4FC75BLJK29A3DI6H1` | 279s · STRONG (single-method exhaustive) | 22 | 11.3 |
 | 54 | `ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSQPO1BC2D7H3GE8N96LKJFA5I` | **WEAK lower bound** (window-bounded; 725s fast pass) | 22 | 10.1 |
 | 55 | `ו‎ה‎ד‎ג‎ב‎א‎νμλκθηζεδγβαZYWVUTSRQOI1N8532AHG64EC9LKJD7F` | 7.1s · STRONG (single-method exhaustive) | 22 | 11.3 |
-| 56 | `ז‎ו‎ה‎ג‎ב‎א‎μλκιθηζδγβαZYXVUTRQPLCN5B967DA2JK4FMHE1I3S` | 677s · CERTIFIED (clean single engine, W=21) | 22 | 11.3 |
+| 56 | `ז‎ו‎ה‎ג‎ב‎א‎μλκιθηζδγβαZYXVUTRQPLCN5B967DA2JK4FMHE1I3S` | 677s · **certified, ×2 methods** (engine + outer-B&B maximality proof) | 22 | 11.3 |
 | 57 | `ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδβαZYXWVUTSQPONFB2DI1MK86GA349E7CH5L` | 46s · STRONG (single-method exhaustive) | 22 | 11.3 |
-| 58 | `ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVURQPONLCKADM763I9JFB85124HEG` | 236s · CERTIFIED (clean single engine, W=21; 8× via planner calibration) | 22 | 11.3 |
+| 58 | `ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVURQPONLCKADM763I9JFB85124HEG` | 236s · **certified, ×2 methods** (engine + outer-B&B proof; 8× via planner calibration) | 22 | 11.3 |
 | 59 | `י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSRQP91O728BNAG6HJCL3D4KIM5` | **WEAK lower bound** (window-bounded at W=21) | 23 | 11.5 |
-| 60 | `כ‎י‎ט‎ח‎ו‎ה‎ד‎ג‎א‎νμλιθηζδγβαYXWVTNB7Q19SI648RHEL23DGMJC` | 13.9s · CERTIFIED (clean single engine, post-churn-fix) | 23 | 11.5 |
+| 60 | `כ‎י‎ט‎ח‎ו‎ה‎ד‎ג‎א‎νμλιθηζδγβαYXWVTNB7Q19SI648RHEL23DGMJC` | 13.9s · **certified, ×2 methods** (engine + outer-B&B proof; post-churn-fix) | 23 | 11.5 |
 | 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νλκιηζεδγβαZYXWVUTSRQPONM56197GHKFCED834ILJ2AB` | **WEAK lower bound** (window-bounded at W=21; 1504s) | 22 | 11.3 |
 | 62 | `מ‎ל‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXUTSRQPONB9E8FCG15LID26A7H3J4MK` | **WEAK lower bound** (window-bounded at W=21; 4122s) | 23 | 12.6 |
-| 63 | *(no value known)* | NO-VALUE — genuine band-depth timeout at W=21/90min | — | — |
+| 63 | *(no value yet — proof in progress)* | outer-B&B maximality proof STARTED on the forced 55-digit set: top 40 lex branches exhaustively refuted (permanent), full parallel grind running | — | — |
 | 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμκιηζεδγαZYXVUTSRQPONMHKADCLJ5F493EB1I2768GW` | **WEAK lower bound** (window-bounded at W=21; 3139s; mask ceiling) | 23 | 11.5 |
 
 
