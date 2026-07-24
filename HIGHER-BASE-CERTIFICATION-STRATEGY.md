@@ -597,3 +597,42 @@ forced, its predicted depth is only one position beyond the current window,
 and its existing per-subset scans are relatively cheap. It may be possible to
 turn “no value known” into a 55-digit lower bound before undertaking any major
 new engine.
+
+---
+
+## Review note (Fable, 2026-07-24, pre-implementation vet)
+
+§3.3 verified sound: every D-arrangement above the incumbent lies in exactly
+one outer child (unique next-digit), bound-pruning is arithmetically safe
+(descending suffix maximizes), terminals are exhaustive for their pool. All
+§2 forced-set derivations re-derived by hand and confirmed (b54 {26,27},
+b59 {29}, b61 {30}, b62 {30,31}, b63 {9,18,27,28,36,45,54} — the 9-multiples
+route at 7 drops beats the 7-multiples route at ≥8, set unique; b64 full).
+§6's ternary proof and u128 bound check out. Implementation obligations:
+
+**I1 (comparisons are NOT integers):** full values run to ~64^63 ≈ 2^378 —
+far beyond u128. ALL outer-search comparisons (incumbent, upper bounds)
+must be fixed-length digit-sequence lex comparisons, never integer
+arithmetic. Only per-branch RESIDUES (mod L < 2^128) are u128.
+
+**I2 (one terminal geometry):** fire the terminal exactly at
+|remaining| == W_terminal+1 (candidate slot + W_terminal window), a single
+validated configuration — not "fits ≤", which would need per-size position
+arithmetic re-validation.
+
+**I3 (the historic bug class, highest risk):** the terminal's
+prefix-contribution C must be computed from the EXPLICIT (possibly
+non-descending) outer prefix. Every prior false-refutation incident in this
+engine was position/contribution arithmetic. Hard gate before b63: the
+outer DFS in certification mode must reproduce AND prove the known answers
+on b56/b58/b60 end-to-end (known-value oracle for the whole pipeline,
+including non-descending prefix branches explored en route).
+
+**I4 (status discipline):** RESOURCE_DECLINED / timeout terminals stay
+unfinished in the manifest and block the certification claim; only
+REFUTED/FOUND/PRUNED branches may aggregate. Incumbent updates take the
+terminal's max survivor.
+
+Minor: b64's terminal will eventually need the CERTPOS>24 validation range
+opened (doc notes this); the queue/manifest (§4) can start as a simple
+append-only JSONL. Build order §8.1→8.3 then §5.1 b63 endorsed.
