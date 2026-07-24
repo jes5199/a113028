@@ -22,3 +22,24 @@ b56: label=postcal2 status=PASS rc=0 wall=586.21s value_match=yes [subsetsChecke
 b58: label=postcal2 status=PASS rc=0 wall=235.87s value_match=yes [subsetsChecked=464 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b58_postcal2.log
 b60: label=postcal2 status=PASS rc=0 wall=11.85s value_match=yes [subsetsChecked=21 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b60_postcal2.log
 === regression_suite.sh run label=postcal2 finished 2026-07-23T23:58:37Z: PASS=6 FAIL=0 ===
+=== regression_suite.sh run label=groupdp_shadow binary=./carrytrie_cert.new6 started 2026-07-24T00:28:53Z ===
+b50: label=groupdp_shadow status=PASS rc=0 wall=35.34s value_match=yes [subsetsChecked=350 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b50_groupdp_shadow.log
+b51: label=groupdp_shadow status=PASS rc=0 wall=46.21s value_match=yes [subsetsChecked=7002 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b51_groupdp_shadow.log
+b52: label=groupdp_shadow status=PASS rc=0 wall=21.24s value_match=yes [subsetsChecked=98533 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b52_groupdp_shadow.log
+b56: label=groupdp_shadow status=PASS rc=0 wall=597.41s value_match=yes [subsetsChecked=159959046 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b56_groupdp_shadow.log
+b58: label=groupdp_shadow status=PASS rc=0 wall=224.91s value_match=yes [subsetsChecked=464 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b58_groupdp_shadow.log
+b60: label=groupdp_shadow status=PASS rc=0 wall=12.10s value_match=yes [subsetsChecked=21 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b60_groupdp_shadow.log
+=== regression_suite.sh run label=groupdp_shadow finished 2026-07-24T00:44:30Z: PASS=6 FAIL=0 ===
+=== regression_suite.sh run label=groupdp_shadow binary=./carrytrie_cert.new6 started 2026-07-24T01:05:44Z ===
+b50: label=groupdp_shadow status=PASS rc=0 wall=37.40s value_match=yes [subsetsChecked=350 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b50_groupdp_shadow.log
+b51: label=groupdp_shadow status=PASS rc=0 wall=45.73s value_match=yes [subsetsChecked=7002 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b51_groupdp_shadow.log
+b52: label=groupdp_shadow status=PASS rc=0 wall=21.18s value_match=yes [subsetsChecked=98533 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b52_groupdp_shadow.log
+=== [duplicate groupdp_shadow run 01:05 killed by operator — original completed 00:44, results above are canonical] ===
+=== regression_suite.sh run label=groupdp_active binary=./carrytrie_cert.new6 started 2026-07-24T01:11:15Z ===
+b50: label=groupdp_active status=PASS rc=0 wall=35.79s value_match=yes [subsetsChecked=350 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b50_groupdp_active.log
+b51: label=groupdp_active status=PASS rc=0 wall=45.82s value_match=yes [subsetsChecked=7002 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b51_groupdp_active.log
+b52: label=groupdp_active status=PASS rc=0 wall=22.87s value_match=yes [subsetsChecked=98533 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b52_groupdp_active.log
+b56: label=groupdp_active status=PASS rc=0 wall=597.67s value_match=yes [subsetsChecked=159959046 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b56_groupdp_active.log
+b58: label=groupdp_active status=PASS rc=0 wall=234.02s value_match=yes [subsetsChecked=464 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b58_groupdp_active.log
+b60: label=groupdp_active status=PASS rc=0 wall=11.95s value_match=yes [subsetsChecked=21 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b60_groupdp_active.log
+=== regression_suite.sh run label=groupdp_active finished 2026-07-24T01:27:03Z: PASS=6 FAIL=0 ===
