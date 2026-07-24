@@ -43,3 +43,19 @@ b56: label=groupdp_active status=PASS rc=0 wall=597.67s value_match=yes [subsets
 b58: label=groupdp_active status=PASS rc=0 wall=234.02s value_match=yes [subsetsChecked=464 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b58_groupdp_active.log
 b60: label=groupdp_active status=PASS rc=0 wall=11.95s value_match=yes [subsetsChecked=21 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b60_groupdp_active.log
 === regression_suite.sh run label=groupdp_active finished 2026-07-24T01:27:03Z: PASS=6 FAIL=0 ===
+=== regression_suite.sh run label=mask128_reg binary=./carrytrie_cert.new7 started 2026-07-24T03:17:19Z ===
+b50: label=mask128_reg status=PASS rc=0 wall=22.64s value_match=yes [subsetsChecked=350 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b50_mask128_reg.log
+b51: label=mask128_reg status=PASS rc=0 wall=156.38s value_match=yes [subsetsChecked=7002 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b51_mask128_reg.log
+b52: label=mask128_reg status=PASS rc=0 wall=20.97s value_match=yes [subsetsChecked=98533 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b52_mask128_reg.log
+b56: label=mask128_reg status=PASS rc=0 wall=597.78s value_match=yes [subsetsChecked=159959046 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b56_mask128_reg.log
+b58: label=mask128_reg status=PASS rc=0 wall=316.58s value_match=yes [subsetsChecked=464 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b58_mask128_reg.log
+b60: label=mask128_reg status=PASS rc=0 wall=12.67s value_match=yes [subsetsChecked=21 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b60_mask128_reg.log
+=== regression_suite.sh run label=mask128_reg finished 2026-07-24T03:36:06Z: PASS=6 FAIL=0 ===
+=== regression_suite.sh run label=new9_reg binary=./carrytrie_cert.new9 started 2026-07-24T11:10:00Z ===
+b50: label=new9_reg status=PASS rc=0 wall=22.26s value_match=yes [subsetsChecked=350 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b50_new9_reg.log
+b51: label=new9_reg status=PASS rc=0 wall=152.56s value_match=yes [subsetsChecked=7002 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b51_new9_reg.log
+b52: label=new9_reg status=PASS rc=0 wall=21.06s value_match=yes [subsetsChecked=98533 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b52_new9_reg.log
+b56: label=new9_reg status=PASS rc=0 wall=599.26s value_match=yes [subsetsChecked=159959046 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b56_new9_reg.log
+b58: label=new9_reg status=PASS rc=0 wall=300.57s value_match=yes [subsetsChecked=464 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b58_new9_reg.log
+b60: label=new9_reg status=PASS rc=0 wall=12.32s value_match=yes [subsetsChecked=21 subsetsScanned=1] certline="CERTIFICATION (matches known target): PASS" log=regression_logs/b60_new9_reg.log
+=== regression_suite.sh run label=new9_reg finished 2026-07-24T11:28:28Z: PASS=6 FAIL=0 ===
