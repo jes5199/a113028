@@ -62,6 +62,17 @@ exist, are labeled separately); *bucket ✗* = honest bucket failure (reason +
 scan-fallback time in RESULTS.md). Sweep total: 8/9 bases bucket-certified
 in 47m 57s combined, 1 memory-declined base rescued by scan.
 
+Bases 50–64 are **first-ever computed values** (the published OEIS b-file
+ends at 48) at graded confidence — read the labels carefully: *certified
+×N methods* = independent engines concordant (proof of maximality);
+*CERTIFIED (clean single engine)* = one exhaustive engine, clean
+window-completion; *STRONG* = single-method exhaustive; ***WEAK lower
+bound*** = a valid completion whose **maximality is unproven** (refutations
+were window-bounded, and such refutations have provably hidden larger
+answers three times — see the b50/b56/b58 supersede stories). Canonical
+per-base detail, evidence-class definitions, and the hardness taxonomy:
+**[FRONTIER-STATUS.md](FRONTIER-STATUS.md)**.
+
 | base | value (alphabet) | wall-clock | m\* | log₁₀ W |
 |-----:|------------------|-----------:|----:|--------:|
 | 2 | `1` | 0.000s | 1 | 0.0 |
@@ -115,6 +126,18 @@ in 47m 57s combined, 1 memory-declined base rescued by scan.
 | 50 | `א‎νμλκιθηζεδγβαZYXWVUTSRQNMKDC6I897L4HBJEG2F531A` | 49.0s · certauto certified ×3 engines (see RESULTS: autopsy story) | 21 | 9.9 |
 | 51 | `ב‎א‎νμλκιθηζεδγβαZXWVUTSRQPNLJDE758GKC2M43BA6F19I` | 50.1s · certauto certified, ×2 methods (v4 scan concordant, 5h51m) | 21 | 11.0 |
 | 52 | `ג‎ב‎א‎νμλκιθηζεγβαZYXWVUTSRPNLBCFJH765K9E1MAI2438G` | 21.5s · certauto certified, ×2 methods (v15 candidate concordant) | 21 | 11.0 |
+| 53 | `ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSRPONM8EG4FC75BLJK29A3DI6H1` | 279s · STRONG (single-method exhaustive) | 22 | 11.3 |
+| 54 | `ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSQPO1BC2D7H3GE8N96LKJFA5I` | **WEAK lower bound** (window-bounded; 725s fast pass) | 22 | 10.1 |
+| 55 | `ו‎ה‎ד‎ג‎ב‎א‎νμλκθηζεδγβαZYWVUTSRQOI1N8532AHG64EC9LKJD7F` | 7.1s · STRONG (single-method exhaustive) | 22 | 11.3 |
+| 56 | `ז‎ו‎ה‎ג‎ב‎א‎μλκιθηζδγβαZYXVUTRQPLCN5B967DA2JK4FMHE1I3S` | 677s · CERTIFIED (clean single engine, W=21) | 22 | 11.3 |
+| 57 | `ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδβαZYXWVUTSQPONFB2DI1MK86GA349E7CH5L` | 46s · STRONG (single-method exhaustive) | 22 | 11.3 |
+| 58 | `ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVURQPONLCKADM763I9JFB85124HEG` | 236s · CERTIFIED (clean single engine, W=21; 8× via planner calibration) | 22 | 11.3 |
+| 59 | `י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSRQP91O728BNAG6HJCL3D4KIM5` | **WEAK lower bound** (window-bounded at W=21) | 23 | 11.5 |
+| 60 | `כ‎י‎ט‎ח‎ו‎ה‎ד‎ג‎א‎νμλιθηζδγβαYXWVTNB7Q19SI648RHEL23DGMJC` | 13.9s · CERTIFIED (clean single engine, post-churn-fix) | 23 | 11.5 |
+| 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νλκιηζεδγβαZYXWVUTSRQPONM56197GHKFCED834ILJ2AB` | **WEAK lower bound** (window-bounded at W=21; 1504s) | 22 | 11.3 |
+| 62 | `מ‎ל‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXUTSRQPONB9E8FCG15LID26A7H3J4MK` | **WEAK lower bound** (window-bounded at W=21; 4122s) | 23 | 12.6 |
+| 63 | *(no value known)* | NO-VALUE — genuine band-depth timeout at W=21/90min | — | — |
+| 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμκιηζεδγαZYXVUTSRQPONMHKADCLJ5F493EB1I2768GW` | **WEAK lower bound** (window-bounded at W=21; 3139s; mask ceiling) | 23 | 11.5 |
 
 
 ### Correction to the published a(46)
@@ -173,16 +196,25 @@ the table.
 ## The tractability frontier
 
 W grows like exp(Θ(n·ln ln n / ln n)) — subexponential but far
-superpolynomial. Consequences (see FRONTIER.md for the full analysis):
+superpolynomial. The 2026-07-23 frontier campaign rewrote the practical
+picture (FRONTIER.md has the original analysis; FRONTIER-STATUS.md the
+current one):
 
-- bases ≤ 47: seconds to minutes (all validated against the b-file);
-- **bases 48–53: the current frontier** (hours–days) — exactly where the
-  published b-file stops;
-- bases 54–64: days to months, the practical endpoint under any realistic
-  budget (and 64 is this implementation's digit-mask ceiling);
-- bases ≥ 80: effectively never (>10¹⁷ refutation steps). A thousandfold
-  more compute moves the frontier by only ~4–6 bases; the only real levers
-  are the arithmetic luck of B±1 and better theory.
+- bases ≤ 52: **certified** (multi-method) — the certified frontier moved
+  from the b-file's 48 to 52 in one day;
+- bases 53–64: **values computed at graded confidence** up to the
+  implementation's digit-mask ceiling — certified-clean (56, 58, 60),
+  strong (53, 55, 57), weak lower bounds (54, 59, 61, 62, 64), one open
+  (63). Hardness is not one wall but three separable modes: *discovery
+  churn* (fixed by feasible-subset enumeration — b60 went from no-value at
+  90 min to certified in 14s), *memory* (fixed by admission control), and
+  *band depth* — the one real open problem: when the answer's divergence
+  from descending order exceeds the affordable search window (~9× cost per
+  extra position), refutations become window-bounded and maximality is
+  unprovable by search alone;
+- the real levers are the arithmetic of B−1 (smooth ⇒ strong subset
+  filtering; prime ⇒ deep bands), band-depth certification theory, and —
+  as always — the luck of the nilpotent structure.
 
 ## Build & run
 
