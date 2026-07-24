@@ -30,6 +30,7 @@
 #include <unordered_map>
 #include <optional>
 #include <ctime>
+#include <cctype>
 #include <cerrno>
 #include <cassert>
 #include <unistd.h>
@@ -5630,7 +5631,58 @@ struct CertBBContext {
     // array, never the decimal string). Empty when not resuming.
     std::unordered_map<std::string, std::pair<ProvenClassBB, std::vector<int>>> proven;
     long long nSkippedRefuted = 0, nSkippedFound = 0; // this session's resume-skip counts (for G2's "loaded-as-proven" report)
+
+    // ---------------------------------------------------------------
+    // SHARD-PARALLEL support (CERTBB_SHARD=i/N).
+    //
+    // terminalCounter: a deterministic count of "would-be terminal
+    // execution points" reached in DFS order -- incremented exactly once
+    // per node that (a) survives the resume-proven-skip check, (b)
+    // survives the bound-pruning check, and (c) is terminal-shaped
+    // (|remaining| == W+1). This is precisely the site where the
+    // pre-existing code called runExactTerminalBB. Steps (a) and (b) are
+    // identical across every shard in a session (shared read-only resume
+    // baseline + FROZEN pruning incumbent, see pruneIncumbent below), so
+    // every shard visits the exact same DFS tree shape and assigns the
+    // exact same counter value to the exact same prefix, independent of N
+    // and i. A worker EXECUTES the terminal iff terminalCounter % shardN
+    // == shardIdx; otherwise it records SKIPPED_OTHER_SHARD (prefix +
+    // counter, no execution) and moves on. Bound-pruned nodes (terminal-
+    // shaped or not) never reach the counter at all -- they are cheap
+    // pure arithmetic that every shard performs identically, so there is
+    // nothing to record or shard for them ("dedup handles it": since no
+    // shard ever writes a manifest line for a pruned node, there is
+    // nothing to reconcile).
+    long long terminalCounter = 0;
+    bool shardMode = false;
+    long long shardIdx = 0, shardN = 1;
+    // pruneIncumbent: the incumbent value used for ALL bound-pruning
+    // decisions in shard mode. Snapshotted ONCE, immediately after
+    // resume-loading + discovery-seeding complete and BEFORE the DFS
+    // starts, then NEVER updated again for the rest of the session --
+    // this is the "freeze" the task requires. Survivors found *during*
+    // this shard's own DFS (via resume-skip-FOUND or an executed
+    // terminal) still update ctx.incumbent (for reporting / the final
+    // manifest), but must NOT feed back into pruning: if they did, two
+    // shards that happen to find their local incumbent at different
+    // points in their traversal would prune DIFFERENT subtrees, and the
+    // deterministic terminal-branch counter above would desynchronize
+    // between shards -- silently corrupting the shard-vs-shard prefix
+    // alignment the merge step relies on. In non-shard mode this field is
+    // unused; pruning uses the live ctx.incumbent exactly as before (I1
+    // constraint: array-lex compare only, never integer).
+    std::vector<int> pruneIncumbent;
+    bool pruneIncumbentSet = false;
 };
+
+// Returns the incumbent to use for a bound-pruning COMPARISON (never for
+// recording/reporting): the frozen snapshot in shard mode, the live
+// (continuously-updated) incumbent otherwise. nullptr means "no incumbent
+// yet -- nothing can be pruned".
+static inline const std::vector<int> *pruneIncumbentPtrBB(const CertBBContext &ctx) {
+    if (ctx.shardMode) return ctx.pruneIncumbentSet ? &ctx.pruneIncumbent : nullptr;
+    return ctx.incumbentSet ? &ctx.incumbent : nullptr;
+}
 
 // Manifest v2 (RESUME task item 1): EXACT_TERMINAL_FOUND records gain
 // "maxSurvivor" (decimal string, per the task spec, for human/tool
@@ -5641,14 +5693,21 @@ struct CertBBContext {
 // header comment already requires). maxSurvivorDigits is empty/omitted for
 // every non-FOUND disposition and is what distinguishes a v2 FOUND record
 // (resumable) from a v1 FOUND record (no digits -- must be re-executed).
+// counter: the deterministic terminal-branch counter value (see
+// CertBBContext::terminalCounter) for terminal-shaped records
+// (EXACT_TERMINAL_FOUND/REFUTED, RESOURCE_DECLINED-at-terminal,
+// SKIPPED_OTHER_SHARD). Pass -1 (default) for records that are not tied
+// to one specific terminal-branch slot (e.g. an internal-node
+// RESOURCE_DECLINED, or DISCOVERY_SEED_FOUND) -- certbb-merge's
+// counter-coverage check only looks at counter >= 0 lines.
 static void writeManifestLineBB(CertBBContext &ctx, const std::vector<int> &prefix, const char *disposition,
                                  unsigned long long survivors, double wall, const char *note = "",
-                                 const std::vector<int> *maxSurvivorDigits = nullptr) {
+                                 const std::vector<int> *maxSurvivorDigits = nullptr, long long counter = -1) {
     if (!ctx.manifest) return;
     fprintf(ctx.manifest, "{\"prefix\":[");
     for (size_t i = 0; i < prefix.size(); i++) fprintf(ctx.manifest, "%s%d", i ? "," : "", prefix[i]);
-    fprintf(ctx.manifest, "],\"disposition\":\"%s\",\"survivors\":%llu,\"wall\":%.3f,\"note\":\"%s\",\"maxSurvivor\":\"",
-            disposition, survivors, wall, note);
+    fprintf(ctx.manifest, "],\"disposition\":\"%s\",\"survivors\":%llu,\"wall\":%.3f,\"counter\":%lld,\"note\":\"%s\",\"maxSurvivor\":\"",
+            disposition, survivors, wall, counter, note);
     if (maxSurvivorDigits && !maxSurvivorDigits->empty()) {
         fprintf(ctx.manifest, "%s", decimalFromDigitsMSBfirstBB(ctx.c.B, *maxSurvivorDigits).c_str());
     }
@@ -5704,6 +5763,22 @@ static bool parseStringFieldBB(const std::string &line, const char *key, std::st
     if (end == std::string::npos) return false;
     out = line.substr(p, end - p);
     return true;
+}
+
+// Extracts a JSON integer (non-string) field "key":N, e.g. "counter":-1 or
+// "counter":137. Returns false (out left at defaultVal) if the key is
+// absent -- so v2-pre-shard manifest lines (no "counter" key at all) are
+// treated as counter==-1 ("not applicable"), same convention as a line
+// written with the default counter=-1 argument.
+static long long parseLongLongFieldBB(const std::string &line, const char *key, long long defaultVal = -1) {
+    std::string pat = std::string("\"") + key + "\":";
+    size_t p = line.find(pat);
+    if (p == std::string::npos) return defaultVal;
+    p += pat.size();
+    size_t end = p;
+    while (end < line.size() && (isdigit((unsigned char)line[end]) || line[end] == '-')) end++;
+    if (end == p) return defaultVal;
+    return atoll(line.substr(p, end - p).c_str());
 }
 
 static std::string prefixKeyBB(const std::vector<int> &p) {
@@ -5801,6 +5876,9 @@ static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, cons
                 return true;
             } else if (pit->second.first == ProvenClassBB::FOUND) {
                 ctx.nSkippedFound++;
+                // Reporting-only update (see pruneIncumbent doc comment):
+                // safe even in shard mode since this branch executes
+                // identically in every shard (shared read-only baseline).
                 if (!ctx.incumbentSet || lexCompareDigitsBB(pit->second.second, ctx.incumbent) > 0) {
                     ctx.incumbent = pit->second.second;
                     ctx.incumbentSet = true;
@@ -5818,12 +5896,29 @@ static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, cons
     }
 
     std::vector<int> upper = upperBoundArrayBB(prefix, remaining);
-    if (ctx.incumbentSet && lexCompareDigitsBB(upper, ctx.incumbent) <= 0) {
-        ctx.nPruned++;
-        return true; // PROVED_BELOW_INCUMBENT
+    {
+        const std::vector<int> *pinc = pruneIncumbentPtrBB(ctx);
+        if (pinc && lexCompareDigitsBB(upper, *pinc) <= 0) {
+            ctx.nPruned++;
+            return true; // PROVED_BELOW_INCUMBENT -- identical across shards (frozen incumbent in shard mode)
+        }
     }
 
     if ((int)remaining.size() == ctx.W + 1) {
+        // SHARD-PARALLEL (design point 1): this is the "would-be terminal
+        // execution point". Assign the deterministic counter value HERE --
+        // after the resume-skip and bound-pruning checks above (both
+        // identical across shards), so every shard assigns the SAME
+        // counter to the SAME prefix in the SAME DFS order regardless of
+        // CERTBB_SHARD.
+        long long myCounter = ctx.terminalCounter++;
+        if (ctx.shardMode && (myCounter % ctx.shardN) != ctx.shardIdx) {
+            char note[64];
+            snprintf(note, sizeof(note), "shard %lld/%lld skip", ctx.shardIdx, ctx.shardN);
+            writeManifestLineBB(ctx, prefix, "SKIPPED_OTHER_SHARD", 0, 0, note, nullptr, myCounter);
+            return true; // not this shard's job -- not unfinished, just not ours
+        }
+
         auto t0 = std::chrono::steady_clock::now();
         TerminalOutcomeBB outc = runExactTerminalBB(ctx.c, prefix, remaining, ctx.rssBudgetKB, ctx.deadline);
         double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -5831,16 +5926,19 @@ static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, cons
             ctx.nDeclined++;
             ctx.anyUnfinished = true;
             writeManifestLineBB(ctx, prefix, "RESOURCE_DECLINED", (unsigned long long)outc.ar.totalSurvivors,
-                                 wall, outc.declineReason);
+                                 wall, outc.declineReason, nullptr, myCounter);
             return false;
         }
         if (outc.disposition == TerminalOutcomeBB::FOUND) {
             ctx.nFound++;
             writeManifestLineBB(ctx, prefix, "EXACT_TERMINAL_FOUND", (unsigned long long)outc.ar.totalSurvivors, wall,
-                                 "", &outc.ar.maxDigitsMSBfirst);
+                                 "", &outc.ar.maxDigitsMSBfirst, myCounter);
             // Obligation I3 of doc Sec4 (direct verification already exists):
             // incumbent updates take the terminal's max survivor, compared by
-            // fixed-length array lex order only (I1).
+            // fixed-length array lex order only (I1). This ALWAYS updates
+            // ctx.incumbent (the reporting/record value) even in shard mode
+            // -- only the PRUNING comparisons above are frozen (see
+            // CertBBContext::pruneIncumbent doc comment).
             if (!ctx.incumbentSet || lexCompareDigitsBB(outc.ar.maxDigitsMSBfirst, ctx.incumbent) > 0) {
                 ctx.incumbent = outc.ar.maxDigitsMSBfirst;
                 ctx.incumbentSet = true;
@@ -5849,7 +5947,7 @@ static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, cons
             }
         } else {
             ctx.nRefuted++;
-            writeManifestLineBB(ctx, prefix, "EXACT_TERMINAL_REFUTED", 0, wall);
+            writeManifestLineBB(ctx, prefix, "EXACT_TERMINAL_REFUTED", 0, wall, "", nullptr, myCounter);
         }
         return true;
     }
@@ -5869,7 +5967,8 @@ static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, cons
         childRemaining.reserve(remaining.size() - 1);
         for (int x : remaining) if (x != d) childRemaining.push_back(x);
         std::vector<int> childUpper = upperBoundArrayBB(childPrefix, childRemaining);
-        if (ctx.incumbentSet && lexCompareDigitsBB(childUpper, ctx.incumbent) <= 0) {
+        const std::vector<int> *pinc = pruneIncumbentPtrBB(ctx);
+        if (pinc && lexCompareDigitsBB(childUpper, *pinc) <= 0) {
             ctx.nPruned++;
             break; // monotonic: every remaining (smaller) digit choice also fails
         }
@@ -5880,14 +5979,16 @@ static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, cons
 }
 
 static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, double capSecondsGlobal,
-                       bool resumeMode) {
+                       bool resumeMode, bool shardMode, long long shardIdx, long long shardN,
+                       const char *manifestPathOverride) {
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
     int W = certSetupWBB(B);
     std::vector<int> D;
     for (int d = 1; d < B; d++) if (std::find(drops.begin(), drops.end(), d) == drops.end()) D.push_back(d);
-    fprintf(stderr, "[certbb] base=%d |D|=%zu dropped=%zu W_terminal=%d capSeconds=%.0f resume=%s\n",
-            B, D.size(), drops.size(), W, capSecondsGlobal, resumeMode ? "on" : "off");
+    fprintf(stderr, "[certbb] base=%d |D|=%zu dropped=%zu W_terminal=%d capSeconds=%.0f resume=%s shard=%s\n",
+            B, D.size(), drops.size(), W, capSecondsGlobal, resumeMode ? "on" : "off",
+            shardMode ? (std::to_string(shardIdx) + "/" + std::to_string(shardN)).c_str() : "off");
 
     ConstantsGen c = deriveConstantsGen(B, D);
     if (!c.ok) {
@@ -5900,10 +6001,20 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
         exit(1);
     }
 
-    char manifestPath[128];
-    snprintf(manifestPath, sizeof(manifestPath), "certbb_%d_manifest.jsonl", B);
+    // baselinePath: the DEFAULT certbb_<base>_manifest.jsonl. Per the task
+    // spec this is ALWAYS the resume-loading source, read-only, whether or
+    // not CERTBB_MANIFEST is set -- shards never treat each other's
+    // manifests, or the pre-shard baseline, as anything but a read-only
+    // shared starting point.
+    // outputPath: CERTBB_MANIFEST override if set (shard mode), else the
+    // same baselinePath (non-shard mode, unchanged from before this task).
+    char baselinePath[128];
+    snprintf(baselinePath, sizeof(baselinePath), "certbb_%d_manifest.jsonl", B);
+    std::string outputPathStr = (manifestPathOverride && manifestPathOverride[0]) ? manifestPathOverride : baselinePath;
+    const char *manifestPath = outputPathStr.c_str(); // legacy name kept for the diff below
+    bool outputIsBaseline = (outputPathStr == baselinePath);
 
-    // RESUME (task item 2): load and classify any existing manifest BEFORE
+    // RESUME (task item 2): load and classify the BASELINE manifest BEFORE
     // opening our own write handle. loadedUnion.byPrefix seeds ctx.proven
     // (skip-on-match during the DFS below); its FOUND digit arrays also
     // seed the initial incumbent (I1: array compare only). Terminal-shaped
@@ -5914,11 +6025,11 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
     ManifestUnionBB loadedUnion;
     bool haveManifestFile = false;
     {
-        FILE *test = fopen(manifestPath, "r");
+        FILE *test = fopen(baselinePath, "r");
         if (test) { haveManifestFile = true; fclose(test); }
     }
     if (resumeMode && haveManifestFile) {
-        loadedUnion = classifyManifestBB(manifestPath);
+        loadedUnion = classifyManifestBB(baselinePath);
         std::set<int> Dset(D.begin(), D.end());
         int terminalPrefixLen = (int)D.size() - (W + 1);
         for (auto &kv : loadedUnion.byPrefix) {
@@ -5936,27 +6047,50 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
                 fprintf(stderr, "[certbb] FATAL: %s does not match this run's digit set/drops (base=%d "
                                 "dropped=%zu terminalPrefixLen=%d) -- refusing to resume from a mismatched "
                                 "manifest. Move/remove it, or rerun with the matching <drops>.\n",
-                        manifestPath, B, drops.size(), terminalPrefixLen);
+                        baselinePath, B, drops.size(), terminalPrefixLen);
                 exit(5);
             }
         }
-        fprintf(stderr, "[certbb] resume: loaded %s: %lld lines -> %lld proven-REFUTED (skip), "
+        fprintf(stderr, "[certbb] resume: loaded baseline %s: %lld lines -> %lld proven-REFUTED (skip), "
                         "%lld proven-FOUND (skip+seed), %lld unfinished (will re-run)\n",
-                manifestPath, loadedUnion.linesTotal, loadedUnion.provenRefuted, loadedUnion.provenFound,
+                baselinePath, loadedUnion.linesTotal, loadedUnion.provenRefuted, loadedUnion.provenFound,
                 loadedUnion.unfinished);
     } else if (resumeMode) {
-        fprintf(stderr, "[certbb] resume requested but no existing %s found -- starting fresh\n", manifestPath);
+        fprintf(stderr, "[certbb] resume requested but no existing baseline %s found -- starting fresh\n", baselinePath);
     }
 
-    FILE *manifest = fopen(manifestPath, (resumeMode && haveManifestFile) ? "a" : "w");
+    // Shard mode with a distinct output path: also allow resuming THIS
+    // shard's own prior partial output (crash-recovery convenience, not
+    // required by the spec but harmless and consistent -- it never touches
+    // the baseline, only outputPath, which this session owns exclusively).
+    bool haveOwnOutputFile = false;
+    if (shardMode && !outputIsBaseline) {
+        FILE *test = fopen(outputPathStr.c_str(), "r");
+        if (test) { haveOwnOutputFile = true; fclose(test); }
+        if (haveOwnOutputFile) {
+            ManifestUnionBB ownUnion = classifyManifestBB(outputPathStr.c_str());
+            for (auto &kv : ownUnion.byPrefix) {
+                if (kv.second.first == ProvenClassBB::UNFINISHED) continue; // SKIPPED_OTHER_SHARD included here
+                auto it = loadedUnion.byPrefix.find(kv.first);
+                if (it == loadedUnion.byPrefix.end()) loadedUnion.byPrefix.emplace(kv.first, kv.second);
+                else if (it->second.first == ProvenClassBB::UNFINISHED) it->second = kv.second;
+                // else: baseline already had a proven entry for this prefix -- keep it (identical value expected).
+            }
+            fprintf(stderr, "[certbb] shard: also resumed own prior output %s (%lld lines)\n",
+                    outputPathStr.c_str(), ownUnion.linesTotal);
+        }
+    }
+
+    FILE *manifest = fopen(manifestPath, (resumeMode && (haveManifestFile || haveOwnOutputFile)) ? "a" : "w");
     if (!manifest) fprintf(stderr, "[certbb] WARNING: could not open %s for writing (errno=%d)\n", manifestPath, errno);
     else fprintf(stderr, "[certbb] base=%d manifest: %s (%s)\n", B, manifestPath,
-                 (resumeMode && haveManifestFile) ? "append" : "fresh, truncated");
+                 (resumeMode && (haveManifestFile || haveOwnOutputFile)) ? "append" : "fresh, truncated");
 
     CertBBContext ctx;
     ctx.c = c; ctx.W = W; ctx.rssBudgetKB = rssBudgetKB;
     ctx.deadline = t0 + std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(capSecondsGlobal));
     ctx.manifest = manifest;
+    ctx.shardMode = shardMode; ctx.shardIdx = shardIdx; ctx.shardN = shardN;
     // BUGFIX (found during G2 validation): ctx.proven must contain ONLY
     // proven branches (REFUTED/FOUND) -- an UNFINISHED (RESOURCE_DECLINED,
     // or v1 FOUND-without-digits) entry must NOT be admitted here. The
@@ -6012,13 +6146,26 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
         }
     }
 
+    // SHARD-PARALLEL freeze point (design point 1): snapshot the pruning
+    // incumbent HERE, now that resume-loading + discovery-seeding are both
+    // done and BEFORE the DFS below runs. This is "the resume-loaded/seed
+    // value" the task specifies. From this point on, in shard mode, no
+    // survivor found by THIS session's own DFS may change what gets
+    // pruned -- see CertBBContext::pruneIncumbent's doc comment for why.
+    if (ctx.shardMode) {
+        ctx.pruneIncumbent = ctx.incumbent; // copy, empty vector if !ctx.incumbentSet
+        ctx.pruneIncumbentSet = ctx.incumbentSet;
+        fprintf(stderr, "[certbb] shard %lld/%lld: pruning incumbent FROZEN at %s\n", ctx.shardIdx, ctx.shardN,
+                ctx.pruneIncumbentSet ? decimalFromDigitsMSBfirstBB(B, ctx.pruneIncumbent).c_str() : "(none)");
+    }
+
     bool finished = certBBProve(ctx, {}, D);
 
     double wall = std::chrono::duration<double>(clock::now() - t0).count();
     fprintf(stderr, "[certbb] base=%d DFS DONE: nodesVisited=%lld found=%lld refuted=%lld pruned=%lld "
-                    "unfinished(declined)=%lld resume-skipped(refuted=%lld found=%lld) wall=%.3fs\n",
+                    "unfinished(declined)=%lld resume-skipped(refuted=%lld found=%lld) terminalCounterMax=%lld wall=%.3fs\n",
             B, ctx.nodesVisited, ctx.nFound, ctx.nRefuted, ctx.nPruned, ctx.nDeclined,
-            ctx.nSkippedRefuted, ctx.nSkippedFound, wall);
+            ctx.nSkippedRefuted, ctx.nSkippedFound, ctx.terminalCounter - 1, wall);
     if (ctx.incumbentSet) {
         std::string dec = decimalFromDigitsMSBfirstBB(B, ctx.incumbent);
         fprintf(stderr, "[certbb] base=%d incumbent (%zu decimal digits): %s\n", B, dec.size(), dec.c_str());
@@ -6041,7 +6188,23 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
             finalUnion.provenRefuted + finalUnion.provenFound + finalUnion.unfinished);
 
     bool allAccounted = finished && !ctx.anyUnfinished;
-    if (allAccounted) {
+    if (ctx.shardMode) {
+        // A single shard NEVER claims full-base CERTIFIED -- it only
+        // proves it did its own 1/N share of the terminal work without a
+        // local RESOURCE_DECLINED. The real certification is the
+        // certbb-merge + plain resume verification pass over the union of
+        // all shards (task item 3).
+        if (allAccounted) {
+            fprintf(stderr, "[certbb] base=%d SHARD %lld/%lld COMPLETE (zero declined in this shard's own share) "
+                            "-- NOT a certification by itself; run certbb-merge then a plain `resume` pass over "
+                            "all shards' outputs for the aggregate CERTIFIED verdict.\n", B, ctx.shardIdx, ctx.shardN);
+        } else {
+            fprintf(stderr, "[certbb] base=%d SHARD %lld/%lld INCOMPLETE: %lld branches declined this shard's own "
+                            "share -- this shard's output cannot be merged into a certification until re-run/resumed.\n",
+                    B, ctx.shardIdx, ctx.shardN, ctx.nDeclined);
+            exit(4);
+        }
+    } else if (allAccounted) {
         fprintf(stderr, "[certbb] base=%d CERTIFIED (zero unfinished branches)%s\n", B,
                 ctx.incumbentSet ? "" : " -- and NO valid arrangement exists for this digit set");
     } else {
@@ -6049,6 +6212,192 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
                         "-- best incumbent is a LOWER BOUND\n", B, ctx.nDeclined, finalUnion.unfinished);
         exit(4);
     }
+}
+
+// ---------------------------------------------------------------------
+// SHARD-PARALLEL merge+verify (design point 3): certbb-merge.
+//
+// Concatenates one or more shard-output manifests for the SAME base/drop
+// set, applies the strongest-disposition-wins dedup keyed by exact prefix
+// (REFUTED/FOUND > SKIPPED_OTHER_SHARD > RESOURCE_DECLINED; identical
+// contradiction rule to classifyManifestBB -- a REFUTED and a FOUND for
+// the same prefix from two different shards is a soundness-oracle firing,
+// loud abort), THEN independently verifies coverage by the deterministic
+// terminal-branch COUNTER: every value 0..max seen anywhere in the union
+// must have SOME record with a definitive (REFUTED/FOUND) disposition --
+// a counter value covered only by SKIPPED_OTHER_SHARD/RESOURCE_DECLINED
+// records means some shard's share of the work never actually finished
+// (an incomplete split), and is reported as a hard failure rather than
+// silently accepted. This counter check is deliberately independent of,
+// and in addition to, the prefix-keyed dedup: it exists to catch a
+// determinism bug (e.g. a differently-frozen incumbent making one shard's
+// DFS diverge from another's) that could otherwise hide as "every
+// prefix that shows up somewhere is accounted for" while some slice of
+// the intended work was never assigned to ANY shard at all.
+//
+// Output: a fresh manifest at <out> containing ONLY the winning
+// REFUTED/FOUND record per distinct prefix (SKIPPED_OTHER_SHARD and
+// RESOURCE_DECLINED records are dropped -- they are not proof-bearing).
+// That file is meant to be resumed from (directly via CERTBB_MANIFEST, or
+// copied/moved to the default certbb_<base>_manifest.jsonl path) with a
+// normal `certbb ... resume` pass as the final aggregate certification
+// check: with every branch already proven, that pass must execute
+// nothing new.
+static int runCertBBMerge(int B, const std::vector<int> &drops, const std::string &outPath,
+                           const std::vector<std::string> &inputs) {
+    int W = certSetupWBB(B);
+    std::vector<int> D;
+    for (int d = 1; d < B; d++) if (std::find(drops.begin(), drops.end(), d) == drops.end()) D.push_back(d);
+    int terminalPrefixLen = (int)D.size() - (W + 1);
+    std::set<int> Dset(D.begin(), D.end());
+
+    struct MergeRecordBB {
+        int rank = -1; // 2 = definitive (REFUTED/FOUND), 1 = SKIPPED_OTHER_SHARD, 0 = RESOURCE_DECLINED/unknown
+        ProvenClassBB cls = ProvenClassBB::UNFINISHED; // meaningful only when rank == 2
+        std::vector<int> digits; // FOUND only
+    };
+
+    std::unordered_map<std::string, MergeRecordBB> byPrefix;
+    std::unordered_map<long long, int> counterBestRank;
+    long long maxCounter = -1, linesTotal = 0;
+
+    for (const std::string &path : inputs) {
+        FILE *f = fopen(path.c_str(), "r");
+        if (!f) {
+            fprintf(stderr, "[certbb-merge] FATAL: cannot open input manifest %s\n", path.c_str());
+            return 1;
+        }
+        long long fileLines = 0;
+        char *lineBuf = nullptr; size_t lineCap = 0; ssize_t n;
+        while ((n = getline(&lineBuf, &lineCap, f)) != -1) {
+            std::string line(lineBuf, (size_t)n);
+            std::string disp;
+            if (!parseStringFieldBB(line, "disposition", disp)) continue;
+            if (disp == "DISCOVERY_SEED_FOUND") continue; // not a DFS branch record
+            std::vector<int> prefix;
+            if (!parseIntArrayBB(line, "prefix", prefix)) continue;
+            fileLines++; linesTotal++;
+
+            if ((int)prefix.size() != terminalPrefixLen) {
+                fprintf(stderr, "[certbb-merge] FATAL: %s has a record with prefix length %zu != expected "
+                                "terminalPrefixLen=%d for base=%d (this drop set) -- mismatched shard/drop-set "
+                                "input, refusing to merge.\n", path.c_str(), prefix.size(), terminalPrefixLen, B);
+                fclose(f); free(lineBuf);
+                return 5;
+            }
+            bool digitsOk = true;
+            for (int d : prefix) if (!Dset.count(d)) digitsOk = false;
+            if (!digitsOk) {
+                fprintf(stderr, "[certbb-merge] FATAL: %s has a prefix digit outside this run's digit set -- "
+                                "mismatched drop set, refusing to merge.\n", path.c_str());
+                fclose(f); free(lineBuf);
+                return 5;
+            }
+
+            long long counter = parseLongLongFieldBB(line, "counter", -1);
+            std::vector<int> digits;
+            bool hasDigits = parseIntArrayBB(line, "maxSurvivorDigits", digits) && !digits.empty();
+
+            MergeRecordBB rec;
+            if (disp == "EXACT_TERMINAL_REFUTED") {
+                rec.rank = 2; rec.cls = ProvenClassBB::REFUTED;
+            } else if (disp == "EXACT_TERMINAL_FOUND" && hasDigits) {
+                if ((int)digits.size() != (int)D.size()) {
+                    fprintf(stderr, "[certbb-merge] FATAL: %s FOUND record's digit array length %zu != |D|=%zu\n",
+                            path.c_str(), digits.size(), D.size());
+                    fclose(f); free(lineBuf);
+                    return 5;
+                }
+                bool ok = true;
+                for (int d : digits) if (!Dset.count(d)) ok = false;
+                if (!ok) {
+                    fprintf(stderr, "[certbb-merge] FATAL: %s FOUND record has a survivor digit outside this "
+                                    "run's digit set\n", path.c_str());
+                    fclose(f); free(lineBuf);
+                    return 5;
+                }
+                rec.rank = 2; rec.cls = ProvenClassBB::FOUND; rec.digits = digits;
+            } else if (disp == "SKIPPED_OTHER_SHARD") {
+                rec.rank = 1;
+            } else {
+                rec.rank = 0; // RESOURCE_DECLINED, or an unrecognized/legacy line -- never proof-bearing
+            }
+
+            std::string key = prefixKeyBB(prefix);
+            auto it = byPrefix.find(key);
+            if (it == byPrefix.end()) {
+                byPrefix.emplace(key, rec);
+            } else {
+                if (it->second.rank == 2 && rec.rank == 2 && it->second.cls != rec.cls) {
+                    fprintf(stderr, "[certbb-merge] FATAL manifest contradiction for prefix [%s]: %s vs %s -- "
+                                    "REFUTED and FOUND for the identical branch across shard inputs is impossible "
+                                    "unless something is unsound; aborting.\n", key.c_str(),
+                            it->second.cls == ProvenClassBB::REFUTED ? "REFUTED" : "FOUND",
+                            rec.cls == ProvenClassBB::REFUTED ? "REFUTED" : "FOUND");
+                    fclose(f); free(lineBuf);
+                    return 5;
+                }
+                if (rec.rank > it->second.rank) it->second = rec;
+            }
+
+            if (counter >= 0) {
+                if (counter > maxCounter) maxCounter = counter;
+                auto cit = counterBestRank.find(counter);
+                if (cit == counterBestRank.end() || rec.rank > cit->second) counterBestRank[counter] = rec.rank;
+            }
+        }
+        free(lineBuf);
+        fclose(f);
+        fprintf(stderr, "[certbb-merge] read %s: %lld lines\n", path.c_str(), fileLines);
+    }
+
+    // Coverage check (design point 3): every counter value 0..maxCounter
+    // must have a definitive winner (rank==2) SOMEWHERE in the union.
+    std::vector<long long> uncovered;
+    for (long long k = 0; k <= maxCounter; k++) {
+        auto it = counterBestRank.find(k);
+        if (it == counterBestRank.end() || it->second < 2) uncovered.push_back(k);
+    }
+    if (!uncovered.empty()) {
+        fprintf(stderr, "[certbb-merge] FATAL: %zu of %lld terminal-branch counter value(s) lack a definitive "
+                        "(REFUTED/FOUND) disposition anywhere in the union -- incomplete shard split. First up to "
+                        "20 uncovered counters:", uncovered.size(), maxCounter + 1);
+        for (size_t i = 0; i < uncovered.size() && i < 20; i++) fprintf(stderr, " %lld", uncovered[i]);
+        fprintf(stderr, "\n");
+        return 4;
+    }
+
+    FILE *out = fopen(outPath.c_str(), "w");
+    if (!out) {
+        fprintf(stderr, "[certbb-merge] FATAL: cannot open output %s for writing\n", outPath.c_str());
+        return 1;
+    }
+    long long nRefuted = 0, nFound = 0;
+    for (auto &kv : byPrefix) {
+        if (kv.second.rank != 2) continue; // SKIPPED_OTHER_SHARD/RESOURCE_DECLINED are not proof-bearing -- dropped
+        std::vector<int> px;
+        { std::string tmp; for (char ch : kv.first) { if (ch == ',') { px.push_back(atoi(tmp.c_str())); tmp.clear(); } else tmp += ch; } if (!tmp.empty()) px.push_back(atoi(tmp.c_str())); }
+        fprintf(out, "{\"prefix\":[");
+        for (size_t i = 0; i < px.size(); i++) fprintf(out, "%s%d", i ? "," : "", px[i]);
+        if (kv.second.cls == ProvenClassBB::REFUTED) {
+            fprintf(out, "],\"disposition\":\"EXACT_TERMINAL_REFUTED\",\"survivors\":0,\"wall\":0.000,"
+                        "\"note\":\"certbb-merge\",\"maxSurvivor\":\"\",\"maxSurvivorDigits\":[]}\n");
+            nRefuted++;
+        } else {
+            std::string dec = decimalFromDigitsMSBfirstBB(B, kv.second.digits);
+            fprintf(out, "],\"disposition\":\"EXACT_TERMINAL_FOUND\",\"survivors\":0,\"wall\":0.000,"
+                        "\"note\":\"certbb-merge\",\"maxSurvivor\":\"%s\",\"maxSurvivorDigits\":[", dec.c_str());
+            for (size_t i = 0; i < kv.second.digits.size(); i++) fprintf(out, "%s%d", i ? "," : "", kv.second.digits[i]);
+            fprintf(out, "]}\n");
+            nFound++;
+        }
+    }
+    fclose(out);
+    fprintf(stderr, "[certbb-merge] base=%d wrote %s: %lld distinct branches (refuted=%lld found=%lld); "
+                    "terminal counters 0..%lld ALL COVERED with a definitive disposition; %lld total input lines "
+                    "across %zu file(s)\n", B, outPath.c_str(), nRefuted + nFound, nRefuted, nFound, maxCounter,
+            linesTotal, inputs.size());
+    return 0;
 }
 
 } // namespace certdrv
@@ -6218,6 +6567,19 @@ int main(int argc, char **argv) {
         // (and any explicit positional capSeconds) with an operator-chosen
         // internal hard cap; validated >= 60s. External timeout(1) remains
         // the operator's own belt-and-suspenders bound.
+        //
+        // SHARD-PARALLEL (this task):
+        //   CERTBB_SHARD="i/N" (0-indexed): only execute terminals whose
+        //   deterministic terminal-branch counter satisfies counter % N ==
+        //   i; every other terminal-shaped node gets a SKIPPED_OTHER_SHARD
+        //   manifest record instead of being executed. No env set (the
+        //   default) => shard mode off, behavior BYTE-IDENTICAL to before
+        //   this task (obligation 4).
+        //   CERTBB_MANIFEST=<path>: overrides the output manifest path
+        //   (append target). Resume-loading always reads the DEFAULT
+        //   certbb_<base>_manifest.jsonl as a read-only shared baseline --
+        //   it is never appended to when CERTBB_MANIFEST is set to a
+        //   different path.
         if (argc < 4) { fprintf(stderr, "certbb requires <base> <comma-separated-dropped-digits>\n"); return 1; }
         int base = atoi(argv[2]);
         std::vector<int> drops = certdrv::parseDropListBB(argv[3]);
@@ -6239,12 +6601,51 @@ int main(int argc, char **argv) {
             }
             capSeconds = v; // env wins over any positional capSeconds when set (documented precedence)
         }
+        bool shardMode = false;
+        long long shardIdx = 0, shardN = 1;
+        if (const char *sh = getenv("CERTBB_SHARD")) {
+            long long i = -1, n = -1;
+            if (sscanf(sh, "%lld/%lld", &i, &n) != 2 || n < 1 || i < 0 || i >= n) {
+                fprintf(stderr, "[certbb] FATAL: CERTBB_SHARD=\"%s\" invalid -- expected \"i/N\" with 0<=i<N, N>=1\n", sh);
+                return 1;
+            }
+            shardMode = true; shardIdx = i; shardN = n;
+        }
+        const char *manifestOverride = getenv("CERTBB_MANIFEST");
         fprintf(stderr, "[certbb] base=%d dropsArg=%s rssBudgetKB=%ld capSeconds=%.0f resume=%s "
-                        "(CERTBB_CAP_S=%s CERTBB_RESUME=%s)\n",
+                        "(CERTBB_CAP_S=%s CERTBB_RESUME=%s CERTBB_SHARD=%s CERTBB_MANIFEST=%s)\n",
                 base, argv[3], rssBudgetKB, capSeconds, resumeMode ? "on" : "off",
                 getenv("CERTBB_CAP_S") ? getenv("CERTBB_CAP_S") : "(unset)",
-                getenv("CERTBB_RESUME") ? getenv("CERTBB_RESUME") : "(unset)");
-        certdrv::runCertBB(base, drops, rssBudgetKB, capSeconds, resumeMode);
+                getenv("CERTBB_RESUME") ? getenv("CERTBB_RESUME") : "(unset)",
+                getenv("CERTBB_SHARD") ? getenv("CERTBB_SHARD") : "(unset)",
+                manifestOverride ? manifestOverride : "(unset)");
+        certdrv::runCertBB(base, drops, rssBudgetKB, capSeconds, resumeMode, shardMode, shardIdx, shardN, manifestOverride);
+    } else if (mode == "certbb-merge") {
+        // Shard-parallel merge+verify (this task, design point 3):
+        // certbb-merge <base> <comma-separated-dropped-digits> <out> <file1> <file2> ...
+        // Concatenates all input shard manifests, applies the existing
+        // strongest-disposition dedup (REFUTED/FOUND > SKIPPED_OTHER_SHARD
+        // > RESOURCE_DECLINED; a REFUTED-vs-FOUND conflict for the same
+        // prefix is a loud abort, same rule as classifyManifestBB), then
+        // verifies every terminal-branch counter value 0..max appears with
+        // a definitive (REFUTED/FOUND) disposition somewhere in the union
+        // -- a counter covered only by SKIPPED_OTHER_SHARD/RESOURCE_DECLINED
+        // is an incomplete shard split. Writes the merged, deduped,
+        // proven-only manifest to <out>. A plain `certbb ... resume` pass
+        // against <out> (copied/moved to the default
+        // certbb_<base>_manifest.jsonl path, or referenced directly via
+        // CERTBB_MANIFEST as the shared baseline for a final check) is the
+        // aggregate certification step.
+        if (argc < 6) {
+            fprintf(stderr, "certbb-merge requires <base> <comma-separated-dropped-digits> <out> <file1> [file2 ...]\n");
+            return 1;
+        }
+        int base = atoi(argv[2]);
+        std::vector<int> drops = certdrv::parseDropListBB(argv[3]);
+        std::string outPath = argv[4];
+        std::vector<std::string> inputs;
+        for (int i = 5; i < argc; i++) inputs.push_back(argv[i]);
+        return certdrv::runCertBBMerge(base, drops, outPath, inputs);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 1;
