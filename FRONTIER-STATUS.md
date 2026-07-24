@@ -125,6 +125,23 @@ postcal2 6/6 char-exact, b52/b60 at baseline walls, and **b58 8× faster
 pathological K=2 plan; the disqualifier re-planned it to full-modulus
 NX=3/NY=5/K=3, same value char-exact. The K=2 misplan class is closed.
 
+## Honest negative: grouped cyclotomic DPs (band-depth plan Phase 2, 2026-07-24)
+
+Built per the plan's §2.2 with the review-note corrections (equal-order-only
+grouping, Q_e ≤ 2^24 with sound splitting, per-subset derivation excluding
+p|B, and a permanent contradiction oracle that aborts if a precheck ever
+disagrees with the exact search). Verdict from 14 gated runs: **sound but
+valueless** — zero contradiction firings ever (soundness ✓), and zero
+subsets filtered / zero candidates pruned on all 6 known bases AND both
+deep probes (b54: still no verdict at a 40-min cap; b61: identical value,
+identical exit-4, wall within noise of baseline). The existing order-1/2
+filters plus the divergence structure already exhaust what these
+necessary conditions can see on real instances. Disposition: module stays
+compiled with its oracle, **default GROUPDP=off**; joins the honest-negative
+ledger (with the MITM-α and cheap-conditions arcs). The band-depth open
+problem stands unmoved; priority passes to the 128-bit-mask extension
+(bases > 64) per jes's directive.
+
 ## Deferred engine fixes (distinct remedies for distinct modes)
 
 - **Band/window depth (b54, b59):** the CERTPOS widen ladder (autowiden.sh),

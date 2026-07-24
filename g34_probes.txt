@@ -1,0 +1,3 @@
+b54: rc=124 wall=2400s  0 contradictions 
+b61: rc=4 wall=1378s FOUND with |D|=58 (dropped 2 digit(s)) family=peeled NX=2 NY=5 K=3 winningCandidate=22 wrongTurnsRefuted=0 survivors=1 ( 0 contradictions site1_active_filtered=0
+=== g34 done 2026-07-24T02:30:42Z ===

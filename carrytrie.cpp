@@ -3212,6 +3212,51 @@ struct AttemptResult {
     u64 totalRoots = 0, totalLookups = 0, totalScans = 0;
 };
 
+// ---------------------------------------------------------------------
+// BAND-DEPTH-CERTIFICATION.md Phase 2 (GroupedCyclotomicDP), Site 2 forward
+// declarations. The real definitions live in `namespace subsetdisc` below
+// (after this point in the file, since subsetdisc's per-subset PPsub state
+// -- SB_pps/SB_npps/SB_LCM -- is what the grouped moduli are derived from),
+// but runWrongTurnSearch/runWrongTurnSearchFM (defined here, above
+// subsetdisc) need to call into it for the Site-2 candidate-window
+// precheck. Forward-declaring into the SAME already-open `certdrv`
+// namespace's `subsetdisc` sub-namespace is standard C++ (multiple
+// namespace-opening blocks referring to the same namespace); the
+// definitions below must match these signatures exactly.
+namespace subsetdisc {
+    // shadow|active|off, cached from GROUPDP env var after first call.
+    int SB_groupDPMode();
+    // True once SB_buildGroupedGroups() has populated SB_gdpGroups for the
+    // CURRENT subset (set by SB_subset_filters(), which always runs before
+    // any search call for that subset -- see SB_checkAndLogOrder call sites).
+    bool SB_gdpGroupsAvailable();
+    // Mirrors buildSuffixBranchGen's / runWrongTurnSearchFM's own C
+    // computation EXACTLY (prefix + candidate contribution at position
+    // certPos(), reduced mod `modulus`) -- never re-derived independently,
+    // per C2-iv. Callers pass their own c.Lc (peeled) or c.L (FM) as
+    // `modulus`; the returned C is later reduced further mod each Q_e | Lc
+    // | L by SB_site2GroupedFeasible itself (valid by CRT since Q_e divides
+    // `modulus`).
+    u128 SB_computePrefixCandidateC(int B, const std::vector<int> &prefix, int candidate, u128 modulus);
+    // Necessary-condition precheck over the CURRENT subset's grouped Q_e's
+    // (built once per subset, reused here -- see C2-iv "highest risk line"):
+    // tests whether ANY assignment of `restAvailMask`'s digits to the
+    // certPosVal positions 0..certPosVal-1 (below the fixed prefix+
+    // candidate) can satisfy total===0 (mod L) for EVERY grouped Q_e | L.
+    // Returns 1 (feasible / declined-to-decide) or 0 (PROVEN infeasible).
+    // Logs every INFEASIBLE verdict to stderr tagged by `tag` ("peeled" /
+    // "fm") and `candidate`. Does NOT itself decide shadow-vs-active
+    // behavior -- callers do that (shadow: log + continue; active: skip +
+    // continue, treating the candidate as a wrong turn).
+    int SB_site2GroupedFeasible(u128 modulus, u128 Cfixed, uint64_t restAvailMask,
+                                 int certPosVal, const char *tag, int candidate);
+    // C3 contradiction-oracle counters, incremented here, read/reported by
+    // the certPos()-window search call sites and by runCert/FM/Auto's final
+    // summary prints.
+    void SB_gdpSite2NoteResult(bool shadowSaidInfeasible, u64 totalSurvivorsForCandidate,
+                                const char *tag, int candidate);
+}
+
 // The core wrong-turn-refutation search: given a fully-specified D, a
 // derived ConstantsGen, and a prefix, try candidate digits at the
 // window-top position in descending order. Each refuted candidate is a
@@ -3233,6 +3278,33 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
     for (int candidate : candidates) {
         std::vector<int> restPool;
         for (int d : pool) if (d != candidate) restPool.push_back(d);
+
+        // BAND-DEPTH-CERTIFICATION.md Phase 2, Site 2 (C2-iv "highest risk
+        // line"): grouped-DP precheck over restPool's certPos() positions
+        // (T suffix + Pc+NX+NY free -- restPool covers ALL of them jointly;
+        // the suffix/free split hasn't happened yet at this point, which is
+        // fine, this is a coarser-but-still-sound necessary condition), mod
+        // Lc (this is the peeled path -- Lc excludes B-nilpotent primes,
+        // exactly the primes SB_pps groups). Modulus/positions/candidate
+        // residue are all derived the SAME way buildSuffixBranchGen derives
+        // its own C below (mirrored via SB_computePrefixCandidateC, never
+        // independently re-derived).
+        int gdpMode = subsetdisc::SB_groupDPMode();
+        bool site2ShadowInfeasible = false;
+        if (gdpMode != 0 && subsetdisc::SB_gdpGroupsAvailable()) {
+            uint64_t restAvailMask = 0; for (int d : restPool) restAvailMask |= bit(d);
+            u128 Cfixed = subsetdisc::SB_computePrefixCandidateC(c.B, prefix, candidate, c.Lc);
+            int feas = subsetdisc::SB_site2GroupedFeasible(c.Lc, Cfixed, restAvailMask,
+                                                             (int)restPool.size(), "peeled", candidate);
+            if (!feas) {
+                if (gdpMode == 2) { // active: sound skip, never build the expensive suffix/index machinery
+                    res.wrongTurnsRefuted++;
+                    subsetdisc::SB_gdpSite2NoteResult(true, 0, "peeled-active-skip", candidate);
+                    continue;
+                }
+                site2ShadowInfeasible = true; // shadow: fall through, run the real search, compare after
+            }
+        }
 
         std::vector<std::vector<int>> tuples;
         int nTuples = countAdmissibleSuffixTuplesGen(restPool, c.T, c.B, c.Lnil, &tuples);
@@ -3287,6 +3359,24 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
             res.totalRoots += stats.roots; res.totalLookups += stats.lookups; res.totalScans += stats.scans;
             checkRssBudget(rssBudgetKB, "certdrv-per-suffix-tuple");
             long kb = peakRssKB(); if (kb > res.peakRssKBSeen) res.peakRssKBSeen = kb;
+        }
+
+        // C3 contradiction oracle (mandatory, must never be silent): the
+        // shadow precheck said this candidate's window is infeasible mod
+        // some grouped Q_e | Lc; if the EXACT search just found a real
+        // survivor anyway, the DP (or its wiring) is unsound -- abort
+        // loudly rather than let a false-negative feasibility gate ever
+        // reach active mode undetected.
+        subsetdisc::SB_gdpSite2NoteResult(site2ShadowInfeasible, totalSurvivors, "peeled", candidate);
+        if (site2ShadowInfeasible && totalSurvivors > 0) {
+            fprintf(stderr, "[GROUPDP-CONTRADICTION] site=2 path=peeled base=B%d candidate=%d "
+                            "restPoolSize=%zu certPos=%d totalSurvivors=%llu -- grouped-DP precheck said "
+                            "INFEASIBLE but the exact search found survivor(s). This is a PROVEN "
+                            "unsoundness in the grouped-DP precheck (or its position/modulus wiring). "
+                            "Aborting.\n",
+                    c.B, candidate, restPool.size(), certPos(), (unsigned long long)totalSurvivors);
+            fflush(stderr);
+            abort();
         }
 
         if (totalSurvivors == 0) {
@@ -3366,6 +3456,25 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
         C = (C + mulmod_u128((u128)candidate, powmod_u128((u128)c.B, (u128)certPos(), c.L), c.L)) % c.L;
         u128 target = (c.L - (C % c.L)) % c.L;
 
+        // BAND-DEPTH-CERTIFICATION.md Phase 2, Site 2 (C2-iv "highest risk
+        // line"), FM analogue of the peeled-path precheck above: SAME `C`
+        // (computed two lines up, not re-derived independently) and SAME
+        // restPool/Amask this function already built for the real join,
+        // reduced mod L instead of Lc (no suffix to exclude here).
+        int gdpModeFM = subsetdisc::SB_groupDPMode();
+        bool site2ShadowInfeasibleFM = false;
+        if (gdpModeFM != 0 && subsetdisc::SB_gdpGroupsAvailable()) {
+            int feas = subsetdisc::SB_site2GroupedFeasible(c.L, C, Amask, (int)restPool.size(), "fm", candidate);
+            if (!feas) {
+                if (gdpModeFM == 2) {
+                    res.wrongTurnsRefuted++;
+                    subsetdisc::SB_gdpSite2NoteResult(true, 0, "fm-active-skip", candidate);
+                    continue;
+                }
+                site2ShadowInfeasibleFM = true;
+            }
+        }
+
         u64 yCount = 0;
         BucketIndexFM idx = buildBucketIndexFM(restPool, NY, K, c.B, P, c.L, yCount, rssBudgetKB, useCurrentRssForAvailable);
         u128 Bexp = powmod_u128((u128)c.B, (u128)(P + NY), c.L);
@@ -3411,6 +3520,19 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
         res.totalRoots += stats.roots; res.totalLookups += stats.lookups; res.totalScans += stats.scans;
         checkRssBudget(rssBudgetKB, "certdrv-fm-per-candidate");
         long kb = peakRssKB(); if (kb > res.peakRssKBSeen) res.peakRssKBSeen = kb;
+
+        // C3 contradiction oracle (mandatory): see peeled-path twin above.
+        subsetdisc::SB_gdpSite2NoteResult(site2ShadowInfeasibleFM, totalSurvivors, "fm", candidate);
+        if (site2ShadowInfeasibleFM && totalSurvivors > 0) {
+            fprintf(stderr, "[GROUPDP-CONTRADICTION] site=2 path=fm base=B%d candidate=%d "
+                            "restPoolSize=%zu certPos=%d totalSurvivors=%llu -- grouped-DP precheck said "
+                            "INFEASIBLE but the exact search found survivor(s). This is a PROVEN "
+                            "unsoundness in the grouped-DP precheck (or its position/modulus wiring). "
+                            "Aborting.\n",
+                    c.B, candidate, restPool.size(), certPos(), (unsigned long long)totalSurvivors);
+            fflush(stderr);
+            abort();
+        }
 
         if (totalSurvivors == 0) {
             res.wrongTurnsRefuted++;
@@ -3971,6 +4093,225 @@ static int SB_order_e_check(u64 q, int e) {
     return SB_order_e_check_m(q, e, SB_setmask, SB_k, 0);
 }
 
+// ---------------------------------------------------------------------
+// BAND-DEPTH-CERTIFICATION.md Phase 2: GroupedCyclotomicDP.
+//
+// Correctness argument (also required by the doc's Sec 2.2 / Sec 3, and
+// C2 of the review note):
+//
+// For subset D with lcm L (SB_LCM), a completion is a bijection of D's
+// k=SB_k digits onto positions 0..k-1 (position 0 = least-significant),
+// value == sum_i digit(i) * B^i. B is invertible mod every non-nilpotent
+// prime power q | L (SB_pps[j].is_nil == 0 entries -- primes NOT dividing
+// B; nilpotent primes have no multiplicative order and are excluded from
+// this module entirely, same scope as the existing per-prime qe[e]
+// checks). Fix a set of such prime powers {q_1..q_r} that ALL share the
+// SAME exact multiplicative order e := ord_{q_i}(B) (checked individually
+// per prime -- see SB_trueOrderOfPP below; C2-i: primes of DIFFERING
+// order are never combined, because B^i mod (q_1*q_2) would then have
+// period lcm(ord(q_1), ord(q_2)) != e, misaligning which positions belong
+// to which weight-class and silently turning a sound per-class-count
+// argument into an unsound one). Let Q_e := q_1*q_2*...*q_r (CRT product,
+// capped -- C2-ii). Since each q_i has order EXACTLY e mod itself, and
+// CRT order is the lcm of component orders, ord_{Q_e}(B) = e exactly, so
+// B^i mod Q_e depends ONLY on (i mod e): positions split into e disjoint
+// weight-classes, and any two positions in the same class are
+// interchangeable (permuting digits within one weight-class does not
+// change the total mod Q_e). Hence: total ≡ target (mod Q_e) is
+// achievable by SOME bijection of D's digits onto 0..k-1 iff it is
+// achievable by SOME digit-per-class *multiset* partition matching the
+// class sizes {c_0..c_{e-1}} implied by k and e (c_j = #{i in 0..k-1 :
+// i mod e == j}) -- exactly the state SB_order_e_check_m's existing DP
+// already explores (it was written for a single prime power's own qe[e];
+// nothing in its logic depends on q being a prime power, so it is reused
+// UNCHANGED here with q := Q_e). Q_e | L by construction, so "no bijection
+// achieves total ≡ 0 mod L" is refuted by "some bijection achieves total
+// ≡ 0 mod Q_e" being provably impossible -- this is therefore a proven
+// NECESSARY condition on D, sound to prune on (never a sufficient one; it
+// never CERTIFIES a subset, only rejects some).
+//
+// Site 2 (candidate-window precheck) reuses the identical DP with a
+// shifted target and restricted position range (see SB_site2GroupedFeasible
+// below) -- same class-invariance argument, just applied to the k'=certPos()
+// positions below a FIXED prefix+candidate contribution instead of all k
+// positions of the whole subset.
+
+struct SB_GDPGroup { u64 Qe; int e; int nPrimes; };
+static std::vector<SB_GDPGroup> SB_gdpGroups;
+static bool SB_gdpGroupsValid = false; // true once built for the CURRENT subset
+
+// Q_e cap (C2-ii): keeps SB_order_e_check_m's own internal state-space
+// gate (OE_MAXSTATES2) meaningful and prevents u64 product overflow across
+// many same-order primes. A single prime power already exceeding the cap
+// is left out of any group (not combined with anything) -- still exactly
+// covered by the EXISTING per-prime qe[e] checks elsewhere in this file,
+// so nothing is lost, only the (unsound-if-mixed) grouping is skipped.
+static constexpr u64 SB_GDP_QE_CAP = 1ULL << 24;
+
+// Exact multiplicative order of B mod the FULL prime power pp.q (not any
+// sub-power) -- derived PROGRAMMATICALLY from pp's own q1/q2/qe[3..6]
+// fields, which SB_build_pps computes fresh from SB_LCM every single call
+// (never hardcoded/precomputed/cached across subsets -- the b39 wrong-
+// Q=3120-vs-correct-80 incident, 2026-07-22, was exactly a hardcoded/stale-Q
+// bug of this class; see C2-iii). Returns 0 (not groupable by this module)
+// if the order is 1 (handled elsewhere via q1/digit-sum) or doesn't divide
+// 6 (order > 6, or an order strictly between the checked divisors that
+// this file's per-prime infrastructure doesn't track at all).
+static int SB_trueOrderOfPP(const PPsub &pp) {
+    if (pp.is_nil) return 0;
+    if (pp.q1 == pp.q) return 0; // order 1: already handled by the digit-sum / q1 check, not this module
+    if (pp.q2 == pp.q) return 2;
+    if (pp.qe[3] == pp.q) return 3;
+    if (pp.qe[4] == pp.q) return 4;
+    if (pp.qe[5] == pp.q) return 5;
+    if (pp.qe[6] == pp.q) return 6;
+    return 0;
+}
+
+// Builds SB_gdpGroups for the CURRENT subset (SB_pps/SB_npps, populated by
+// SB_build_pps -- called once per subset, always before this). Called from
+// SB_subset_filters() whenever GROUPDP != off, and reused verbatim by the
+// Site-2 precheck for the SAME subset's search calls (never rebuilt with a
+// different/stale source -- C2-iii applies here too).
+static void SB_buildGroupedGroups() {
+    SB_gdpGroups.clear();
+    for (int e = 2; e <= 6; e++) {
+        u64 curQ = 1; int curN = 0;
+        for (int j = 0; j < SB_npps; j++) {
+            const PPsub &pp = SB_pps[j];
+            if (SB_trueOrderOfPP(pp) != e) continue;
+            if (pp.q > SB_GDP_QE_CAP) continue; // too big alone to ever combine soundly; skip (see cap note)
+            if (curN > 0 && curQ > SB_GDP_QE_CAP / pp.q) {
+                // Adding this prime would exceed the cap: close out the
+                // current group and start a new one for the SAME order e.
+                // Splitting is sound -- each resulting Q_e is still an
+                // exact-CRT-product of same-order primes, still a proper
+                // divisor of L, still a valid necessary-condition modulus.
+                SB_gdpGroups.push_back({curQ, e, curN});
+                curQ = 1; curN = 0;
+            }
+            curQ *= pp.q; curN++;
+        }
+        if (curN >= 1) SB_gdpGroups.push_back({curQ, e, curN});
+    }
+    SB_gdpGroupsValid = true;
+}
+
+// GROUPDP env var, cached: 0=off (default) 1=shadow 2=active.
+static int SB_gdpModeCache = -1;
+int SB_groupDPMode() {
+    if (SB_gdpModeCache < 0) {
+        const char *e = getenv("GROUPDP");
+        std::string v = e ? e : "off";
+        if (v == "off" || v.empty()) SB_gdpModeCache = 0;
+        else if (v == "shadow") SB_gdpModeCache = 1;
+        else if (v == "active") SB_gdpModeCache = 2;
+        else {
+            fprintf(stderr, "[groupdp] FATAL: GROUPDP=\"%s\" invalid; must be shadow|active|off\n", e);
+            exit(1);
+        }
+    }
+    return SB_gdpModeCache;
+}
+
+bool SB_gdpGroupsAvailable() { return SB_gdpGroupsValid; }
+
+// Mirrors buildSuffixBranchGen's / runWrongTurnSearchFM's own prefix+
+// candidate contribution C EXACTLY (same loop, same powmod convention,
+// same certPos()+prefix.size() starting position) -- see those two call
+// sites; this is intentionally a byte-for-byte copy of that arithmetic,
+// not a "clever" reformulation, per C2-iv's do-not-re-derive-independently
+// requirement.
+u128 SB_computePrefixCandidateC(int B, const std::vector<int> &prefix, int candidate, u128 modulus) {
+    u128 C = 0;
+    int pos = certPos() + (int)prefix.size();
+    for (int dd : prefix) {
+        u128 term = mulmod_u128((u128)dd, powmod_u128((u128)B, (u128)pos, modulus), modulus);
+        C = (C + term) % modulus;
+        pos--;
+    }
+    C = (C + mulmod_u128((u128)candidate, powmod_u128((u128)B, (u128)certPos(), modulus), modulus)) % modulus;
+    return C;
+}
+
+// Per-run counters (summary lines only -- per-subset/per-candidate spam
+// would be enormous on bases with 10^8+ subsetsChecked, e.g. b56).
+static u64 SB_gdpSite1FeasibleCount = 0, SB_gdpSite1InfeasibleCount = 0, SB_gdpSite1ActiveFiltered = 0;
+static u64 SB_gdpSite2FeasibleCount = 0, SB_gdpSite2InfeasibleCount = 0, SB_gdpSite2ActiveSkipped = 0;
+static u64 SB_gdpContradictionCount = 0; // stays 0 forever if sound; any nonzero value means abort() already fired
+
+// C3: whenever site-2's shadow flagged a candidate infeasible, the caller
+// reports the ACTUAL search outcome here for counting/telemetry (the
+// caller itself performs the abort() on contradiction -- see the two
+// [GROUPDP-CONTRADICTION] sites in runWrongTurnSearch/FM -- this function
+// only updates counters, so it is safe to call unconditionally).
+void SB_gdpSite2NoteResult(bool shadowSaidInfeasible, u64 totalSurvivorsForCandidate,
+                            const char *tag, int candidate) {
+    if (std::string(tag).find("active-skip") != std::string::npos) { SB_gdpSite2ActiveSkipped++; return; }
+    if (shadowSaidInfeasible) {
+        SB_gdpSite2InfeasibleCount++;
+        if (totalSurvivorsForCandidate > 0) SB_gdpContradictionCount++; // caller already abort()s; belt-and-suspenders count
+    } else {
+        SB_gdpSite2FeasibleCount++;
+    }
+}
+
+// Site 2 grouped-DP feasibility precheck (C2-iv). See the module-level
+// comment above for the soundness argument; this just evaluates it: for
+// EVERY grouped Q_e built for the current subset, reduce the caller's
+// already-correctly-derived Cfixed (mod `modulus`, itself a multiple of
+// every Q_e, so further reduction mod Q_e is valid by CRT) down to a
+// per-Q_e target and run the SAME per-position-class DP
+// (SB_order_e_check_m) used at Site 1, just with m=certPosVal positions
+// and avail=restAvailMask instead of the whole-subset SB_k/SB_setmask.
+int SB_site2GroupedFeasible(u128 modulus, u128 Cfixed, uint64_t restAvailMask,
+                             int certPosVal, const char *tag, int candidate) {
+    (void)modulus;
+    int mode = SB_groupDPMode();
+    int feasible = 1;
+    for (const SB_GDPGroup &g : SB_gdpGroups) {
+        u64 qe = g.Qe;
+        u64 cmod = (u64)(Cfixed % (u128)qe);
+        u64 target = (qe - cmod) % qe;
+        int f = SB_order_e_check_m(qe, g.e, restAvailMask, certPosVal, target);
+        if (!f) {
+            feasible = 0;
+            fprintf(stderr, "[groupdp-site2-%s] mode=%s cand=%d Qe=%llu e=%d nPrimes=%d certPos=%d verdict=INFEASIBLE\n",
+                    tag, mode == 1 ? "shadow" : "active", candidate, (unsigned long long)qe, g.e,
+                    g.nPrimes, certPosVal);
+        }
+    }
+    return feasible;
+}
+
+// Site 1 contradiction-oracle state (C1 + C3): set by SB_subset_filters()
+// whenever shadow mode found a grouped-DP verdict of INFEASIBLE for the
+// subset currently being filtered (which, in shadow mode, is NOT actually
+// rejected -- augment, don't filter, task item 2). If THIS SAME subset's
+// search subsequently succeeds (produces the certified/candidate winner),
+// that is a proof the grouped-DP subset-level filter is unsound; the
+// runCert/runCertFM/runCertAuto call sites check this flag right where
+// they determine `certified` and abort() if it is set.
+bool SB_lastShadowSubsetRejected = false;
+u64 SB_lastShadowRejectQe = 0;
+int SB_lastShadowRejectE = 0;
+
+// G1/G2 gate reporting (task REPORT item "shadow logs showing verdict
+// counts per base"): one summary line per terminal point of a cert run,
+// not per-subset (which would be enormous -- e.g. b56 has 1.6e8
+// subsetsChecked).
+void SB_printGroupDPSummary(const char *tag, int B) {
+    if (SB_groupDPMode() == 0) return; // off: nothing to report
+    fprintf(stderr, "[groupdp-summary] %s base=%d mode=%s site1_feasible=%llu site1_infeasible=%llu "
+                    "site1_active_filtered=%llu site2_feasible=%llu site2_infeasible=%llu "
+                    "site2_active_skipped=%llu contradictions=%llu\n",
+            tag, B, SB_groupDPMode() == 1 ? "shadow" : "active",
+            (unsigned long long)SB_gdpSite1FeasibleCount, (unsigned long long)SB_gdpSite1InfeasibleCount,
+            (unsigned long long)SB_gdpSite1ActiveFiltered, (unsigned long long)SB_gdpSite2FeasibleCount,
+            (unsigned long long)SB_gdpSite2InfeasibleCount, (unsigned long long)SB_gdpSite2ActiveSkipped,
+            (unsigned long long)SB_gdpContradictionCount);
+}
+
 // Ported verbatim from subset_filters().
 static int SB_subset_filters() {
     u64 T = 0; for (int i = 0; i < SB_k; i++) T += SB_S[i];
@@ -3997,6 +4338,36 @@ static int SB_subset_filters() {
             if (!SB_order_e_check(qe5, 5)) return 0;
         if (qe6 > q1 && qe6 > q2 && qe6 > qe3)
             if (!SB_order_e_check(qe6, 6)) return 0;
+    }
+
+    // BAND-DEPTH-CERTIFICATION.md Phase 2, Site 1: grouped-DP subset filter.
+    // AUGMENTS the checks above (never replaces them, task item 2) -- this
+    // subset has already passed every existing per-prime-power test by the
+    // time we get here. See the GroupedCyclotomicDP module comment above
+    // for the soundness argument.
+    SB_gdpGroupsValid = false;
+    SB_lastShadowSubsetRejected = false;
+    int gdpMode = SB_groupDPMode();
+    if (gdpMode != 0) {
+        SB_buildGroupedGroups();
+        for (const SB_GDPGroup &g : SB_gdpGroups) {
+            if (g.nPrimes < 2) continue; // no NEW CRT coupling beyond the existing per-prime qe[e] checks above
+            int feas = SB_order_e_check_m(g.Qe, g.e, SB_setmask, SB_k, 0);
+            if (!feas) {
+                SB_gdpSite1InfeasibleCount++;
+                fprintf(stderr, "[groupdp-site1] mode=%s k=%d Qe=%llu e=%d nPrimes=%d verdict=INFEASIBLE\n",
+                        gdpMode == 1 ? "shadow" : "active", SB_k, (unsigned long long)g.Qe, g.e, g.nPrimes);
+                if (gdpMode == 2) { // active: sound filter, this subset never reaches search
+                    SB_gdpSite1ActiveFiltered++;
+                    return 0;
+                }
+                // shadow: augment-don't-filter -- keep going, remember for the C3 oracle
+                SB_lastShadowSubsetRejected = true;
+                SB_lastShadowRejectQe = g.Qe; SB_lastShadowRejectE = g.e;
+            } else {
+                SB_gdpSite1FeasibleCount++;
+            }
+        }
     }
     return 1;
 }
@@ -4349,6 +4720,19 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
                         // through to the next surviving subset instead of reporting a
                         // bogus (empty-decimal) FOUND.
                         bool certified = ar.success && ar.verifiedOk >= 1 && ar.verifiedBad == 0;
+                        // C1/C3 contradiction oracle: this subset was shadow-flagged
+                        // by the Site-1 grouped-DP filter as infeasible, yet its own
+                        // search just produced a certified completion -- proof the
+                        // filter (or its wiring) is unsound. Never silent.
+                        if (certified && subsetdisc::SB_lastShadowSubsetRejected) {
+                            fprintf(stderr, "[GROUPDP-CONTRADICTION] site=1 path=cert base=%d k=%d Qe=%llu e=%d "
+                                            "-- shadow-mode Site-1 grouped-DP filter said this subset was "
+                                            "INFEASIBLE, but its search just produced a certified completion. "
+                                            "Aborting.\n",
+                                    B, k, (unsigned long long)subsetdisc::SB_lastShadowRejectQe, subsetdisc::SB_lastShadowRejectE);
+                            fflush(stderr);
+                            abort();
+                        }
                         if (ar.success && !certified && getenv("DEBUG_SUBSETDISC")) {
                             fprintf(stderr, "[cert] base=%d: subset |D|=%d had %llu survivor(s) but NONE "
                                             "direct-verified true (verified %llu OK / %llu FAILED) -- not a "
@@ -4384,6 +4768,7 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
                                                 "audit)\n", B, subsetsScanned - 1, CANDIDATE_POS + 1);
                                 double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
                                 fprintf(stderr, "[cert] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                                subsetdisc::SB_printGroupDPSummary("cert", B);
                                 exit(4); // CANDIDATE_ONLY: direct-verified but not proven maximal
                             }
                             bool exact = expectedDecimalOrNull && ar.maxDecimal == expectedDecimalOrNull;
@@ -4396,6 +4781,7 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
                             }
                             double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
                             fprintf(stderr, "[cert] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                            subsetdisc::SB_printGroupDPSummary("cert", B);
                             return;
                         }
                         // Certifier proved (via exhaustive wrong-turn refutation over
@@ -4410,6 +4796,7 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
     }
     fprintf(stderr, "[cert] base=%d: FAILED to find a working (subset, prefix) hypothesis within bounded search "
                     "[subsetsChecked=%lld subsetsScanned=%lld]\n", B, subsetsChecked, subsetsScanned);
+    subsetdisc::SB_printGroupDPSummary("cert", B);
 }
 
 // Full-modulus driver (BASE-50-FULL-MODULUS-BUCKET.md Sec 9 Phase A): exact
@@ -4500,6 +4887,16 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
                             // discipline as runCert (RADIX-BUCKET-ADMISSION-CONTROL.md
                             // Sec 9): success alone is not sufficient.
                             bool certified = ar.success && ar.verifiedOk >= 1 && ar.verifiedBad == 0;
+                            // C1/C3 contradiction oracle: see runCert's identical comment.
+                            if (certified && subsetdisc::SB_lastShadowSubsetRejected) {
+                                fprintf(stderr, "[GROUPDP-CONTRADICTION] site=1 path=certfm base=%d k=%d Qe=%llu e=%d "
+                                                "-- shadow-mode Site-1 grouped-DP filter said this subset was "
+                                                "INFEASIBLE, but its search just produced a certified completion. "
+                                                "Aborting.\n",
+                                        B, k, (unsigned long long)subsetdisc::SB_lastShadowRejectQe, subsetdisc::SB_lastShadowRejectE);
+                                fflush(stderr);
+                                abort();
+                            }
                             if (ar.success && !certified && getenv("DEBUG_SUBSETDISC")) {
                                 fprintf(stderr, "[certfm] base=%d: subset |D|=%d had %llu survivor(s) but NONE "
                                                 "direct-verified true (verified %llu OK / %llu FAILED) -- not a "
@@ -4527,6 +4924,7 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
                                                     "audit)\n", B, subsetsScanned - 1, CANDIDATE_POS + 1);
                                     double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
                                     fprintf(stderr, "[certfm] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                                    subsetdisc::SB_printGroupDPSummary("certfm", B);
                                     exit(4); // CANDIDATE_ONLY: direct-verified but not proven maximal
                                 }
                                 bool exact = expectedDecimalOrNull && ar.maxDecimal == expectedDecimalOrNull;
@@ -4539,6 +4937,7 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
                                 }
                                 double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
                                 fprintf(stderr, "[certfm] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                                subsetdisc::SB_printGroupDPSummary("certfm", B);
                                 return;
                             }
                         }
@@ -4549,6 +4948,7 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
     }
     fprintf(stderr, "[certfm] base=%d: FAILED to find a working (subset, prefix) hypothesis within bounded search "
                     "[subsetsChecked=%lld subsetsScanned=%lld]\n", B, subsetsChecked, subsetsScanned);
+    subsetdisc::SB_printGroupDPSummary("certfm", B);
 }
 
 // Autonomous planner-driven driver (BASE-50-FULL-MODULUS-BUCKET.md Sec 9
@@ -4693,6 +5093,7 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
                         double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
                         fprintf(stderr, "[certauto] base=%d total autonomous-search wall=%.3fs [subsetsChecked=%lld subsetsScanned=%lld]\n",
                                 B, totalWall, subsetsChecked, subsetsScanned);
+                        subsetdisc::SB_printGroupDPSummary("certauto", B);
                         exit(3);
                     }
 
@@ -4730,6 +5131,16 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
                     }
 
                     bool certified = ar.success && ar.verifiedOk >= 1 && ar.verifiedBad == 0;
+                    // C1/C3 contradiction oracle: see runCert's identical comment.
+                    if (certified && subsetdisc::SB_lastShadowSubsetRejected) {
+                        fprintf(stderr, "[GROUPDP-CONTRADICTION] site=1 path=certauto base=%d k=%d Qe=%llu e=%d "
+                                        "-- shadow-mode Site-1 grouped-DP filter said this subset was "
+                                        "INFEASIBLE, but its search just produced a certified completion. "
+                                        "Aborting.\n",
+                                B, k, (unsigned long long)subsetdisc::SB_lastShadowRejectQe, subsetdisc::SB_lastShadowRejectE);
+                        fflush(stderr);
+                        abort();
+                    }
                     if (ar.success && !certified && getenv("DEBUG_SUBSETDISC")) {
                         fprintf(stderr, "[certauto] base=%d: subset |D|=%d had %llu survivor(s) but NONE "
                                         "direct-verified true (verified %llu OK / %llu FAILED) -- not a "
@@ -4757,6 +5168,7 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
                                             "audit)\n", B, subsetsScanned - 1, CANDIDATE_POS + 1);
                             double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
                             fprintf(stderr, "[certauto] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                            subsetdisc::SB_printGroupDPSummary("certauto", B);
                             exit(4); // CANDIDATE_ONLY: direct-verified but not proven maximal
                         }
                         bool exact = expectedDecimalOrNull && ar.maxDecimal == expectedDecimalOrNull;
@@ -4769,6 +5181,7 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
                         }
                         double totalWall = std::chrono::duration<double>(clock::now() - tAll0).count();
                         fprintf(stderr, "[certauto] base=%d total autonomous-search wall=%.3fs\n", B, totalWall);
+                        subsetdisc::SB_printGroupDPSummary("certauto", B);
                         return;
                     }
                 }
@@ -4777,6 +5190,7 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
     }
     fprintf(stderr, "[certauto] base=%d: FAILED to find a working (subset, prefix) hypothesis within bounded search "
                     "[subsetsChecked=%lld subsetsScanned=%lld]\n", B, subsetsChecked, subsetsScanned);
+    subsetdisc::SB_printGroupDPSummary("certauto", B);
 }
 
 } // namespace certdrv
