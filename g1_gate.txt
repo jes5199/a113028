@@ -1,0 +1,3 @@
+b58: rc=124 wall=5400s   
+b60: rc=0 wall=30s DFS DONE: nodesVisited=25 found=1 refuted=0 pruned=24 unfinished(declined)=0 wall=30.709s incumbent (84 decimal digits): 374096795553866901593729675694543662806191148614834420420657978999648347496776816352 CERTIFIED (zero unfinished branches)
+=== g1 rest done 2026-07-24T07:35:51Z ===

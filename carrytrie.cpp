@@ -31,6 +31,7 @@
 #include <optional>
 #include <ctime>
 #include <cerrno>
+#include <cassert>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -64,6 +65,43 @@ static u128 gcd_u128(u128 a, u128 b) {
 static u128 lcm_u128(u128 a, u128 b) {
     u128 g = gcd_u128(a, b);
     return (a / g) * b;
+}
+
+// C1 (Fable review, MASK-WIDENING-128BIT.md): overflow-CHECKED lcm
+// accumulation. A plain lcm_u128 wrap is a silent mod-2^128 value that can
+// land ANYWHERE in [1,2^128) -- post-hoc range inspection of the result
+// cannot detect it. This checks for overflow AT the multiplication step
+// (the same (a/g)*b lcm_u128 performs), before it happens, and never lets a
+// wrapped value survive to be inspected.
+static bool lcmStepOverflows_u128(u128 L, u128 d, u128 *outNewL) {
+    u128 g = gcd_u128(L, d);
+    u128 a = L / g;
+    static const u128 kU128Max = ~(u128)0;
+    if (d != 0 && a > kU128Max / d) return true;
+    *outNewL = a * d;
+    return false;
+}
+
+// Startup guard (review C1): compute checked lcm(1..maxDigit) ONCE. Since
+// every subset D subsetdisc ever searches is a SUBSET of {1..B-1}, and
+// lcm(subset) always divides (hence is <=) lcm(full range), this single
+// full-range check upper-bounds every subsequent per-subset lcm_u128 call
+// -- no per-subset re-checking is needed. Fatal-exits with a clear message
+// on overflow (bases ~89+); NEVER returns a wrapped value.
+static u128 checkedLcmUpToOrDie(int maxDigit) {
+    u128 L = 1;
+    for (int d = 1; d <= maxDigit; d++) {
+        u128 next;
+        if (lcmStepOverflows_u128(L, (u128)d, &next)) {
+            fprintf(stderr,
+                "FATAL: arithmetic ceiling exceeded -- bases >=~89 need the u256 epic "
+                "(checked lcm(1..%d) overflows unsigned __int128 at d=%d; L so far=%s)\n",
+                maxDigit, d, u128_to_string(L).c_str());
+            exit(1);
+        }
+        L = next;
+    }
+    return L;
 }
 
 // ---------- extended gcd on i128, for modular inverse ----------
@@ -498,7 +536,31 @@ static inline uint64_t maskOf(const std::vector<int> &digits) {
     return m;
 }
 
-static inline uint64_t bit(int d) { return (uint64_t)1 << d; }
+// Widened to unsigned __int128 (MASK-WIDENING-128BIT.md Sec 2/3): a single
+// shared bit(d) is called from every arm (fixed-B49, fixed-B48, patricia,
+// and the runtime-B Gen/FM certauto arms). The fixed-B arms only ever call
+// this with d<49/48 (dead region above bit 63 for them; their local mask
+// variables stay uint64_t and the implicit narrowing on assignment is a
+// no-op there -- see MASK-WIDENING-128BIT.md report for the audit). The
+// Gen/FM arms (certauto, arbitrary B) are the ones that actually need
+// d up to 127; assert(d<128) catches any B>128 caller before UB.
+static inline unsigned __int128 bit(int d) {
+    assert(d >= 0 && d < 128);
+    return (unsigned __int128)1 << d;
+}
+
+// Two-limb ctz for unsigned __int128, needed wherever a digit-set mask can
+// now have bits set at position >=64 (the Gen/FM arms' `allowed`/`used`/
+// `available` masks) -- __builtin_ctzll silently truncates a u128 argument
+// to its low 64 bits, which is exactly the C1-style silent-bug risk this
+// epic is about. Caller must ensure x != 0 (matches __builtin_ctzll's own
+// UB-on-zero contract).
+static inline int ctz128(unsigned __int128 x) {
+    uint64_t lo = (uint64_t)x;
+    if (lo) return __builtin_ctzll(lo);
+    uint64_t hi = (uint64_t)(x >> 64);
+    return 64 + __builtin_ctzll(hi);
+}
 
 // Sum of the k smallest / k largest set-bit positions (=digit values) in mask.
 // mask has at most 19 bits set (digits from A19), so k <= 12 always terminates
@@ -2481,15 +2543,38 @@ namespace certdrv {
 // of those sites now derives from this single value instead of repeating
 // the literal, so widening the window is a one-env-var change instead of a
 // silent-mismatch risk.
+// MASK-WIDENING-128BIT.md Sec 4 (formula only, per review C3 minor note --
+// the per-range table is documentation, not a second mechanism):
+// configureCertPosForBase() must be called once, by each of
+// runCert/runCertFM/runCertAuto, BEFORE certPos() is first invoked for that
+// run (certPos()'s default/validation-range are latched on first call and
+// never re-read). B<=64 leaves g_certPosDefault/-Max at their unconfigured
+// sentinel (-1), so certPos() falls back to the exact literal 20/[20,24]
+// every prior run used -- byte-identical for the whole regression suite.
+static int g_certPosDefaultOverride = -1;
+static int g_certPosMaxOverride = -1;
+static void configureCertPosForBase(int B, int P_full) {
+    int def, maxV;
+    if (B <= 64) { def = 20; maxV = 24; }
+    else { def = std::min(28, P_full + 8); maxV = std::max(24, P_full + 10); }
+    g_certPosDefaultOverride = def;
+    g_certPosMaxOverride = maxV;
+    fprintf(stderr, "[setup] base=%d P_full=%d CERTPOS_default=%d CERTPOS_validrange=[20,%d]\n",
+            B, P_full, def, maxV);
+}
+
 static int certPos() {
     static int pos = [] {
+        int lo = 20;
+        int hi = (g_certPosMaxOverride > 0) ? g_certPosMaxOverride : 24;
+        int def = (g_certPosDefaultOverride > 0) ? g_certPosDefaultOverride : 20;
         const char *env = getenv("CERTPOS");
-        int p = 20;
+        int p = def;
         if (env && *env) {
             char *end = nullptr;
             long v = strtol(env, &end, 10);
-            if (end == env || *end != '\0' || v < 20 || v > 24) {
-                fprintf(stderr, "[certdrv] FATAL: CERTPOS=\"%s\" invalid; must be an integer in [20,24]\n", env);
+            if (end == env || *end != '\0' || v < lo || v > hi) {
+                fprintf(stderr, "[certdrv] FATAL: CERTPOS=\"%s\" invalid; must be an integer in [%d,%d]\n", env, lo, hi);
                 exit(1);
             }
             p = (int)v;
@@ -2701,16 +2786,21 @@ static std::array<uint8_t, 16> digitsLSDofGen(u128 n, int B, int ndig) {
     return out;
 }
 struct LeafEnvelopeGen { u128 lo, hi; };
-static LeafEnvelopeGen leafEnvelopeGen(uint64_t available, int B, int count) {
-    int digs[24]; int nd = 0;
-    uint64_t av = available;
-    while (av) { digs[nd++] = __builtin_ctzll(av); av &= av - 1; }
+// `available` is a digit-SET mask (widened per MASK-WIDENING-128BIT.md);
+// digs[] must hold every set bit, i.e. up to the free-window size, which
+// scales with dynamic CERTPOS (Sec 4, max 28) -- 32 keeps headroom above
+// that without materially growing the stack frame. Uses ctz128 (not
+// __builtin_ctzll) so digits >=64 are found instead of silently truncated.
+static LeafEnvelopeGen leafEnvelopeGen(unsigned __int128 available, int B, int count) {
+    int digs[32]; int nd = 0;
+    unsigned __int128 av = available;
+    while (av) { assert(nd < 32); digs[nd++] = ctz128(av); av &= av - 1; }
     LeafEnvelopeGen out{0, 0};
     for (int i = 0; i < count; i++) out.lo = out.lo * (u128)B + (u128)digs[i];
     for (int i = 0; i < count; i++) out.hi = out.hi * (u128)B + (u128)digs[nd - 1 - i];
     return out;
 }
-struct BucketRecordGen { u128 u; uint64_t yMask; };
+struct BucketRecordGen { u128 u; unsigned __int128 yMask; };
 struct BucketIndexGen {
     std::vector<uint32_t> offsets;
     std::vector<BucketRecordGen> records;
@@ -2916,7 +3006,7 @@ static BucketIndexGen buildBucketIndexGen(const std::vector<int> &A, int NY, int
         u128 y_val = 0, Bpow = 1;
         for (int i = 0; i < NY; i++) { y_val += (u128)ydigits[i] * Bpow; Bpow *= (u128)B; }
         u128 u_y = mulmod_u128(BPcModLc, y_val % Lc, Lc);
-        uint64_t m = 0; for (int d : ydigits) m |= bit(d);
+        unsigned __int128 m = 0; for (int d : ydigits) m |= bit(d);
         raw.push_back({u_y, m});
         uint32_t k = (uint32_t)(u_y % bucketMod);
         key.push_back(k);
@@ -2937,12 +3027,12 @@ static BucketIndexGen buildBucketIndexGen(const std::vector<int> &A, int NY, int
 }
 
 template <typename CB>
-static void enumLeafPrefixGen(int depth, int K, int B, int borrow, uint64_t used, uint64_t key, uint64_t keyMul,
-                               const std::array<uint8_t,16> &Wdig, uint64_t allowed, CB &&cb) {
+static void enumLeafPrefixGen(int depth, int K, int B, int borrow, unsigned __int128 used, uint64_t key, uint64_t keyMul,
+                               const std::array<uint8_t,16> &Wdig, unsigned __int128 allowed, CB &&cb) {
     if (depth == K) { cb(key, used); return; }
-    uint64_t rem = allowed & ~used;
+    unsigned __int128 rem = allowed & ~used;
     while (rem) {
-        int l = __builtin_ctzll(rem);
+        int l = ctz128(rem);
         rem &= rem - 1;
         int raw = (int)Wdig[depth] - borrow - l;
         int u_i, nb;
@@ -2951,13 +3041,13 @@ static void enumLeafPrefixGen(int depth, int K, int B, int borrow, uint64_t used
                           Wdig, allowed, cb);
     }
 }
-static inline bool decodeDistinctLeafGen(u128 leaf, uint64_t allowed, int B, int Pc, uint64_t &outMask) {
-    uint64_t mask = 0;
+static inline bool decodeDistinctLeafGen(u128 leaf, unsigned __int128 allowed, int B, int Pc, unsigned __int128 &outMask) {
+    unsigned __int128 mask = 0;
     for (int i = 0; i < Pc; i++) {
         int d = (int)(leaf % (u128)B);
         leaf /= (u128)B;
         if (d == 0) return false;
-        uint64_t db = bit(d);
+        unsigned __int128 db = bit(d);
         if (!(allowed & db)) return false;
         if (mask & db) return false;
         mask |= db;
@@ -2969,9 +3059,9 @@ struct BucketStatsGen { u64 roots = 0, rootsRejected = 0, lookups = 0, scans = 0
 
 template <typename OnSurvivor>
 static void bucketSearchXGen(const BucketIndexGen &idx, u128 c_x, u128 Lc, int lifts, int B, int Pc,
-                              uint64_t xmask, uint64_t Amask, int K, BucketStatsGen &stats,
+                              unsigned __int128 xmask, unsigned __int128 Amask, int K, BucketStatsGen &stats,
                               const std::vector<u128> &Bpow, OnSurvivor &&onSurvivor) {
-    uint64_t allowed = Amask & ~xmask;
+    unsigned __int128 allowed = Amask & ~xmask;
     LeafEnvelopeGen env{};
     if (SIEVE_LEVEL & 1) env = leafEnvelopeGen(allowed, B, Pc);
     for (int j = 0; j < lifts; j++) {
@@ -2984,7 +3074,7 @@ static void bucketSearchXGen(const BucketIndexGen &idx, u128 c_x, u128 Lc, int l
         } else stats.roots++;
         auto Wdig = digitsLSDofGen(W, B, K > Pc ? K : Pc);
         enumLeafPrefixGen(0, K, B, 0, 0, 0, 1, Wdig, allowed,
-            [&](uint64_t key, uint64_t lowLeafMask) {
+            [&](uint64_t key, unsigned __int128 lowLeafMask) {
                 stats.lookups++;
                 uint32_t lo = idx.offsets[key], hi = idx.offsets[key + 1];
                 for (uint32_t p = lo; p < hi; p++) {
@@ -2994,9 +3084,9 @@ static void bucketSearchXGen(const BucketIndexGen &idx, u128 c_x, u128 Lc, int l
                     if (W < r.u) continue;
                     u128 leaf = W - r.u;
                     if (leaf >= Bpow[Pc]) continue;
-                    uint64_t decodedMask;
+                    unsigned __int128 decodedMask;
                     if (!decodeDistinctLeafGen(leaf, allowed, B, Pc, decodedMask)) continue;
-                    uint64_t required = Amask & ~xmask & ~r.yMask;
+                    unsigned __int128 required = Amask & ~xmask & ~r.yMask;
                     if (decodedMask != required) continue;
                     stats.survivors++;
                     onSurvivor(r, leaf, decodedMask);
@@ -3048,7 +3138,9 @@ static inline void unpackDigitsLSD(uint64_t packed, int count, std::vector<int> 
     for (int i = 0; i < count; i++) out[i] = (int)((packed >> (6 * i)) & 0x3F);
 }
 
-struct BucketRecordFM { u128 u; uint64_t yMask; uint64_t yDigitsPacked; };
+// yDigitsPacked stays uint64_t (packed ORDERED digits, 6 bits each -- not a
+// digit-SET mask; see MASK-WIDENING-128BIT.md report, "leave alone").
+struct BucketRecordFM { u128 u; unsigned __int128 yMask; uint64_t yDigitsPacked; };
 struct BucketIndexFM {
     std::vector<uint32_t> offsets;
     std::vector<BucketRecordFM> records;
@@ -3076,7 +3168,7 @@ static BucketIndexFM buildBucketIndexFM(const std::vector<int> &A, int NY, int K
         u128 y_val = 0, Bpow = 1;
         for (int i = 0; i < NY; i++) { y_val += (u128)ydigits[i] * Bpow; Bpow *= (u128)B; }
         u128 u_y = mulmod_u128(BPmodM, y_val % M, M);
-        uint64_t m = 0; for (int d : ydigits) m |= bit(d);
+        unsigned __int128 m = 0; for (int d : ydigits) m |= bit(d);
         uint64_t packed = packDigitsLSD(ydigits);
         raw.push_back({u_y, m, packed});
         uint32_t k = (uint32_t)(u_y % bucketMod);
@@ -3110,9 +3202,9 @@ static BucketIndexFM buildBucketIndexFM(const std::vector<int> &A, int NY, int K
 // fixed count.
 template <typename OnSurvivor>
 static void bucketSearchXFM(const BucketIndexFM &idx, u128 c_x, u128 M, int liftsFull, int B, int P,
-                             uint64_t xmask, uint64_t Amask, int K, BucketStatsGen &stats,
+                             unsigned __int128 xmask, unsigned __int128 Amask, int K, BucketStatsGen &stats,
                              const std::vector<u128> &Bpow, OnSurvivor &&onSurvivor) {
-    uint64_t allowed = Amask & ~xmask;
+    unsigned __int128 allowed = Amask & ~xmask;
     LeafEnvelopeGen env{};
     if (SIEVE_LEVEL & 1) env = leafEnvelopeGen(allowed, B, P);
     for (int j = 0; j < liftsFull; j++) {
@@ -3125,7 +3217,7 @@ static void bucketSearchXFM(const BucketIndexFM &idx, u128 c_x, u128 M, int lift
         } else stats.roots++;
         auto Wdig = digitsLSDofGen(W, B, K > P ? K : P);
         enumLeafPrefixGen(0, K, B, 0, 0, 0, 1, Wdig, allowed,
-            [&](uint64_t key, uint64_t lowLeafMask) {
+            [&](uint64_t key, unsigned __int128 lowLeafMask) {
                 stats.lookups++;
                 uint32_t lo = idx.offsets[key], hi = idx.offsets[key + 1];
                 for (uint32_t p = lo; p < hi; p++) {
@@ -3135,9 +3227,9 @@ static void bucketSearchXFM(const BucketIndexFM &idx, u128 c_x, u128 M, int lift
                     if (W < r.u) continue;
                     u128 leaf = W - r.u;
                     if (leaf >= Bpow[P]) continue;
-                    uint64_t decodedMask;
+                    unsigned __int128 decodedMask;
                     if (!decodeDistinctLeafGen(leaf, allowed, B, P, decodedMask)) continue;
-                    uint64_t required = Amask & ~xmask & ~r.yMask;
+                    unsigned __int128 required = Amask & ~xmask & ~r.yMask;
                     if (decodedMask != required) continue;
                     stats.survivors++;
                     onSurvivor(r, leaf, decodedMask);
@@ -3148,12 +3240,14 @@ static void bucketSearchXFM(const BucketIndexFM &idx, u128 c_x, u128 M, int lift
 
 static bool verifySurvivorDirectGen(const ConstantsGen &c, const std::vector<int> &prefix, int candidate,
                                      const std::vector<int> &suffix /*LSD..MSD i.e. suffix[0]=d0*/,
-                                     const std::vector<int> &freeDigitsMSBfirst) {
+                                     const std::vector<int> &freeDigitsMSBfirst,
+                                     std::vector<int> *outDigitsMSBfirst = nullptr) {
     std::vector<int> digitsMSBfirst;
     for (int dd : prefix) digitsMSBfirst.push_back(dd);
     digitsMSBfirst.push_back(candidate);
     for (int d : freeDigitsMSBfirst) digitsMSBfirst.push_back(d);
     for (int i = (int)suffix.size() - 1; i >= 0; i--) digitsMSBfirst.push_back(suffix[i]);
+    if (outDigitsMSBfirst) *outDigitsMSBfirst = digitsMSBfirst;
     if ((int)digitsMSBfirst.size() != (int)c.D.size()) return false;
     // Distinctness + range sanity (defense in depth, per the lead's explicit
     // "sanity-verify divisibility+distinctness in-code" instruction).
@@ -3210,6 +3304,19 @@ struct AttemptResult {
     // estimate. Not populated by cert/certfm's call sites' callers (they
     // never read these fields), so this is purely additive.
     u64 totalRoots = 0, totalLookups = 0, totalScans = 0;
+    // HIGHER-BASE-CERTIFICATION-STRATEGY.md Sec3+8 outer-DFS support
+    // (obligation I1): the winning survivor's full digit array, MSD-first,
+    // fixed length == |D| always -- the ONLY thing certbb's incumbent
+    // comparisons touch (never maxDecimal, never any integer). Populated
+    // alongside maxDecimal wherever runWrongTurnSearch updates bestDecimal.
+    std::vector<int> maxDigitsMSBfirst;
+    // Set when a caller-supplied deadline (obligation I4: any terminal that
+    // times out is UNFINISHED, never a refutation) was reached before the
+    // candidate loop exhausted every pool digit. When true, `success` is
+    // guaranteed false (the loop breaks before evaluating the timed-out
+    // candidate), so callers must check timedOut BEFORE treating
+    // !success as a refutation.
+    bool timedOut = false;
 };
 
 // ---------------------------------------------------------------------
@@ -3248,7 +3355,7 @@ namespace subsetdisc {
     // "fm") and `candidate`. Does NOT itself decide shadow-vs-active
     // behavior -- callers do that (shadow: log + continue; active: skip +
     // continue, treating the candidate as a wrong turn).
-    int SB_site2GroupedFeasible(u128 modulus, u128 Cfixed, uint64_t restAvailMask,
+    int SB_site2GroupedFeasible(u128 modulus, u128 Cfixed, unsigned __int128 restAvailMask,
                                  int certPosVal, const char *tag, int candidate);
     // C3 contradiction-oracle counters, incremented here, read/reported by
     // the certPos()-window search call sites and by runCert/FM/Auto's final
@@ -3264,10 +3371,23 @@ namespace subsetdisc {
 // admissible suffix families).
 static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector<int> &prefix,
                                          const std::vector<int> &pool, int NX, int NY, int K,
-                                         long rssBudgetKB, bool useCurrentRssForAvailable = false) {
+                                         long rssBudgetKB, bool useCurrentRssForAvailable = false,
+                                         std::chrono::steady_clock::time_point deadline =
+                                             std::chrono::steady_clock::time_point::max()) {
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
     AttemptResult res;
+
+    // MASK-WIDENING-128BIT.md Sec 4: NX+NY<2 means the join has degenerated
+    // to nothing (CERTPOS starvation risk at high bases) -- a resource-limit
+    // decline, never a refutation. exit(3) matches certauto's own
+    // resource-policy-decline convention (see the planner-declined exit(3)
+    // just above runCertAuto's search dispatch).
+    if (NX + NY < 2) {
+        fprintf(stderr, "[certdrv] FATAL: NX+NY=%d < 2 before join search (base=%d) -- resource-policy "
+                        "decline (CERTPOS window starved), not a refutation.\n", NX + NY, c.B);
+        exit(3);
+    }
 
     std::vector<int> candidates = pool; // try largest-first
     std::sort(candidates.begin(), candidates.end(), std::greater<int>());
@@ -3276,6 +3396,14 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
     for (int i = 1; i <= c.Pc; i++) Bpow[i] = Bpow[i-1] * (u128)c.B;
 
     for (int candidate : candidates) {
+        // HIGHER-BASE-CERTIFICATION-STRATEGY.md Sec8/I4: a caller-supplied
+        // deadline (certbb's per-terminal budget) reached before every pool
+        // digit has been tried is a RESOURCE_DECLINED terminal, never a
+        // refutation -- stop trying further candidates and report timedOut
+        // with whatever wrongTurnsRefuted/totalSurvivors were accumulated so
+        // far (success is guaranteed false here: had a survivor already been
+        // found the loop would already have broken above via `break`).
+        if (clock::now() >= deadline) { res.timedOut = true; break; }
         std::vector<int> restPool;
         for (int d : pool) if (d != candidate) restPool.push_back(d);
 
@@ -3292,7 +3420,7 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
         int gdpMode = subsetdisc::SB_groupDPMode();
         bool site2ShadowInfeasible = false;
         if (gdpMode != 0 && subsetdisc::SB_gdpGroupsAvailable()) {
-            uint64_t restAvailMask = 0; for (int d : restPool) restAvailMask |= bit(d);
+            unsigned __int128 restAvailMask = 0; for (int d : restPool) restAvailMask |= bit(d);
             u128 Cfixed = subsetdisc::SB_computePrefixCandidateC(c.B, prefix, candidate, c.Lc);
             int feas = subsetdisc::SB_site2GroupedFeasible(c.Lc, Cfixed, restAvailMask,
                                                              (int)restPool.size(), "peeled", candidate);
@@ -3312,12 +3440,13 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
 
         u64 totalSurvivors = 0, verifiedOk = 0, verifiedBad = 0;
         std::string bestDecimal;
+        std::vector<int> bestDigits; // MSD-first, mirrors bestDecimal (I1 support)
 
         for (auto &suffix : tuples) {
             SuffixBranchGen sb = buildSuffixBranchGen(c, prefix, candidate, restPool, suffix);
             if ((int)sb.freeDigits.size() != c.Pc + NX + NY) continue; // shouldn't happen; skip defensively
 
-            uint64_t Amask = 0; for (int d : sb.freeDigits) Amask |= bit(d);
+            unsigned __int128 Amask = 0; for (int d : sb.freeDigits) Amask |= bit(d);
             u64 yCount = 0;
             BucketIndexGen idx = buildBucketIndexGen(sb.freeDigits, NY, K, c.B, c.Pc, c.Lc, yCount, rssBudgetKB, useCurrentRssForAvailable);
             u128 Bexp = powmod_u128((u128)c.B, (u128)(c.Pc + NY), c.Lc);
@@ -3327,9 +3456,9 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
                 for (int i = 0; i < NX; i++) { x_val += (u128)xdigits[i] * Bp; Bp *= (u128)c.B; }
                 u128 term = mulmod_u128(Bexp, x_val % c.Lc, c.Lc);
                 u128 c_x = (sb.T_target + c.Lc - (term % c.Lc)) % c.Lc;
-                uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
+                unsigned __int128 xmask = 0; for (int d : xdigits) xmask |= bit(d);
                 bucketSearchXGen(idx, c_x, c.Lc, c.lifts, c.B, c.Pc, xmask, Amask, K, stats, Bpow,
-                    [&](const BucketRecordGen &r, u128 leaf, uint64_t decodedMask) {
+                    [&](const BucketRecordGen &r, u128 leaf, unsigned __int128 decodedMask) {
                         std::vector<int> leafDigits(c.Pc);
                         u128 lv = leaf;
                         for (int i = 0; i < c.Pc; i++) { leafDigits[i] = (int)(lv % (u128)c.B); lv /= (u128)c.B; }
@@ -3345,13 +3474,31 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
                         for (int i = NY - 1; i >= 0; i--) freeMSB.push_back(ydigits[i]);
                         for (int i = c.Pc - 1; i >= 0; i--) freeMSB.push_back(leafDigits[i]);
 
-                        bool ok = verifySurvivorDirectGen(c, prefix, candidate, suffix, freeMSB);
+                        std::vector<int> fullDigits;
+                        bool ok = verifySurvivorDirectGen(c, prefix, candidate, suffix, freeMSB, &fullDigits);
                         if (ok) verifiedOk++; else verifiedBad++;
                         if (ok) {
                             std::string dec = reconstructDecimalGen(c.B, prefix, candidate, suffix, freeMSB);
                             if (bestDecimal.empty() || dec.size() > bestDecimal.size() ||
                                 (dec.size() == bestDecimal.size() && dec > bestDecimal))
                                 bestDecimal = dec;
+                            // I1: bestDigits tracked by its OWN fixed-length
+                            // array lex comparison, independent of the
+                            // decimal-string logic just above (kept for
+                            // byte-identical legacy behavior/output).
+                            if (bestDigits.empty()) bestDigits = fullDigits;
+                            else {
+                                size_t n = std::min(bestDigits.size(), fullDigits.size());
+                                bool greater = false;
+                                for (size_t i = 0; i < n; i++) {
+                                    if (fullDigits[i] != bestDigits[i]) { greater = fullDigits[i] > bestDigits[i]; break; }
+                                }
+                                if (fullDigits.size() != bestDigits.size() && !greater) {
+                                    // shouldn't happen (both always length |D|), but stay defensive/honest
+                                    greater = fullDigits.size() > bestDigits.size();
+                                }
+                                if (greater) bestDigits = fullDigits;
+                            }
                         }
                     });
             });
@@ -3389,6 +3536,7 @@ static AttemptResult runWrongTurnSearch(const ConstantsGen &c, const std::vector
         res.totalSurvivors = totalSurvivors;
         res.verifiedOk = verifiedOk; res.verifiedBad = verifiedBad;
         res.maxDecimal = bestDecimal;
+        res.maxDigitsMSBfirst = bestDigits;
         res.winningCandidate = candidate;
         break;
     }
@@ -3419,6 +3567,11 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
                 P, NX, NY, P + NX + NY, certPos());
         exit(1);
     }
+    if (NX + NY < 2) {
+        fprintf(stderr, "[certdrv] FATAL: NX+NY=%d < 2 before join search (base=%d) -- resource-policy "
+                        "decline (CERTPOS window starved), not a refutation.\n", NX + NY, c.B);
+        exit(3);
+    }
 
     std::vector<int> candidates = pool; // try largest-first
     std::sort(candidates.begin(), candidates.end(), std::greater<int>());
@@ -3439,7 +3592,7 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
         for (int d : pool) if (d != candidate) restPool.push_back(d);
         if ((int)restPool.size() != P + NX + NY) continue; // shouldn't happen; defensive
 
-        uint64_t Amask = 0; for (int d : restPool) Amask |= bit(d);
+        unsigned __int128 Amask = 0; for (int d : restPool) Amask |= bit(d);
 
         // C: contribution of the fixed prefix and this candidate mod L
         // (mirrors buildSuffixBranchGen's C computation, but with NO suffix
@@ -3487,9 +3640,9 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
             for (int i = 0; i < NX; i++) { x_val += (u128)xdigits[i] * Bp; Bp *= (u128)c.B; }
             u128 term = mulmod_u128(Bexp, x_val % c.L, c.L);
             u128 c_x = (target + c.L - (term % c.L)) % c.L;
-            uint64_t xmask = 0; for (int d : xdigits) xmask |= bit(d);
+            unsigned __int128 xmask = 0; for (int d : xdigits) xmask |= bit(d);
             bucketSearchXFM(idx, c_x, c.L, liftsFull, c.B, P, xmask, Amask, K, stats, Bpow,
-                [&](const BucketRecordFM &r, u128 leaf, uint64_t decodedMask) {
+                [&](const BucketRecordFM &r, u128 leaf, unsigned __int128 decodedMask) {
                     std::vector<int> leafDigits(P);
                     u128 lv = leaf;
                     for (int i = 0; i < P; i++) { leafDigits[i] = (int)(lv % (u128)c.B); lv /= (u128)c.B; }
@@ -3944,7 +4097,11 @@ static PlanResult planBucket(int B, int T, int Pc, int lifts, int P_full, uint64
 // maximum.
 namespace subsetdisc {
 
-constexpr int MAXB2 = 64;
+// Bumped 64->128 (MASK-WIDENING-128BIT.md): SB_S holds up to k=|D| digit
+// values, which can approach B-1 (up to 87 for the in-scope base-88
+// ceiling); this is a pure capacity bump (array sizing only, see grep of
+// MAXB2 below), harmless for any B<=64 already in the regression suite.
+constexpr int MAXB2 = 128;
 constexpr int OE_MAXSTATES2 = 2000000;
 
 struct PPsub { u64 q; int is_nil; int t; int e; u64 q1, q2; u64 qe[7]; };
@@ -3955,7 +4112,10 @@ static int    SB_B = 0;
 static int    SB_S[MAXB2];
 static int    SB_k = 0;
 static u128   SB_LCM = 1;
-static u64    SB_setmask = 0;
+// SB_setmask: digit-SET mask (subset membership), widened per
+// MASK-WIDENING-128BIT.md Sec 1.1 -- the explicitly-flagged
+// "1ULL << SB_S[i]" silent-bug-risk site.
+static u128   SB_setmask = 0;
 static u64    SB_D1 = 1;
 static PPsub  SB_pps[32];
 static int    SB_npps = 0;
@@ -4013,32 +4173,45 @@ static int SB_build_pps() {
 }
 
 // Order-2 CRT partition-feasibility DP, ported verbatim from e2_check().
-static int SB_e2_check(u64 q, u64 avail, int m, u64 r) {
+// C3 audit (MASK-WIDENING-128BIT.md): `avail` is a digit-SET mask (widened,
+// fixes the `avail >> d` UB for d>=64 that a u64 avail would hit). `q` is a
+// prime-power MODULUS, not a digit -- but this DP represents "which
+// residues mod q are reachable" as a q-bit rotate-shift bitmask (dp[]/
+// full/mm), which is ALSO silently bounded to 64 bits in the original code
+// (the `q>=64` fallback disables the mask instead of representing it). For
+// B up to the ~88 ceiling this epic targets, q (a prime power <= B-1) can
+// exceed 64 (e.g. q=81=3^4 is a valid digit-derived modulus at B near 88,
+// and B=65 itself makes q=64=2^6 the boundary case) -- so this residue
+// bitmask is widened to u128 and the fallback threshold raised to 128 (q
+// remains < B <= 88 << 128 throughout this epic's scope, so the fallback
+// branch is not expected to ever trigger in-scope, but is kept as a
+// defensive decline rather than removed).
+static int SB_e2_check(u64 q, u128 avail, int m, u64 r) {
     int co = m / 2;
     u64 Bq = (u64)SB_B % q;
     u64 bm = (m & 1) ? Bq : 1;
     u64 target = ((u64)(SB_TARGET_ % q) + q - (r * bm) % q) % q;
     u64 R = 0;
-    for (int d = 1; d < SB_B; d++) if (avail >> d & 1) R = (R + d) % q;
+    for (int d = 1; d < SB_B; d++) if ((avail >> d) & 1) R = (R + d) % q;
     u64 Bm1 = ((u64)SB_B - 1) % q;
     u64 need = (target + q - R) % q;
-    u64 dp[MAXB2 / 2 + 2]; memset(dp, 0, sizeof(u64) * (co + 2));
+    u128 dp[MAXB2 / 2 + 2]; memset(dp, 0, sizeof(u128) * (co + 2));
     dp[0] = 1;
-    u64 full = (q >= 64) ? ~0ULL : ((1ULL << q) - 1);
+    u128 full = (q >= 128) ? ~(u128)0 : (((u128)1 << q) - 1);
     int seen = 0;
     for (int d = SB_B - 1; d >= 1; d--) {
-        if (!(avail >> d & 1)) continue;
+        if (!((avail >> d) & 1)) continue;
         seen++;
         int dd = d % (int)q;
         int hi = (seen < co) ? seen : co;
         for (int c = hi; c >= 1; c--) {
-            u64 mm = dp[c - 1];
+            u128 mm = dp[c - 1];
             dp[c] |= dd ? (((mm << dd) | (mm >> (q - dd))) & full) : mm;
         }
     }
-    u64 mask = dp[co];
+    u128 mask = dp[co];
     while (mask) {
-        int so = __builtin_ctzll(mask); mask &= mask - 1;
+        int so = ctz128(mask); mask &= mask - 1;
         if ((Bm1 * (u64)so) % q == need) return 1;
     }
     return 0;
@@ -4046,7 +4219,7 @@ static int SB_e2_check(u64 q, u64 avail, int m, u64 r) {
 
 // Order-e (e=3..6) CRT partition-feasibility DP, ported verbatim from
 // order_e_check_m().
-static int SB_order_e_check_m(u64 q, int e, u64 avail, int m, u64 target) {
+static int SB_order_e_check_m(u64 q, int e, u128 avail, int m, u64 target) {
     if (q <= 1) return 1;
     int c[8]; for (int j = 0; j < e; j++) c[j] = 0;
     for (int i = 0; i < m; i++) c[i % e]++;
@@ -4061,7 +4234,7 @@ static int SB_order_e_check_m(u64 q, int e, u64 avail, int m, u64 target) {
     uint8_t *cur = SB_oe_cur, *nxt = SB_oe_nxt;
     int processed = 0;
     for (int d = 1; d < SB_B; d++) {
-        if (!(avail >> d & 1ULL)) continue;
+        if (!((avail >> d) & 1)) continue;
         memset(nxt, 0, (size_t)total);
         u64 dm = (u64)d % q;
         for (u64 idx = 0; idx < total; idx++) {
@@ -4264,7 +4437,7 @@ void SB_gdpSite2NoteResult(bool shadowSaidInfeasible, u64 totalSurvivorsForCandi
 // per-Q_e target and run the SAME per-position-class DP
 // (SB_order_e_check_m) used at Site 1, just with m=certPosVal positions
 // and avail=restAvailMask instead of the whole-subset SB_k/SB_setmask.
-int SB_site2GroupedFeasible(u128 modulus, u128 Cfixed, uint64_t restAvailMask,
+int SB_site2GroupedFeasible(u128 modulus, u128 Cfixed, unsigned __int128 restAvailMask,
                              int certPosVal, const char *tag, int candidate) {
     (void)modulus;
     int mode = SB_groupDPMode();
@@ -4469,7 +4642,7 @@ private:
         if (!oldPending_) return false;
         for (int i = 0; i < k_; i++) SB_S[i] = (B_ - 1) - comb_[i];
         SB_setmask = 0;
-        for (int i = 0; i < k_; i++) SB_setmask |= 1ULL << SB_S[i];
+        for (int i = 0; i < k_; i++) SB_setmask |= (u128)1 << SB_S[i];
         int i = k_ - 1;
         while (i >= 0 && comb_[i] == n_ - k_ + i) i--;
         if (i < 0) oldPending_ = false;
@@ -4546,7 +4719,7 @@ private:
         if (bestIdx < 0) return false;
         for (int i = 0; i < k_; i++) SB_S[i] = (B_ - 1) - best[i];
         SB_setmask = 0;
-        for (int i = 0; i < k_; i++) SB_setmask |= 1ULL << SB_S[i];
+        for (int i = 0; i < k_; i++) SB_setmask |= (u128)1 << SB_S[i];
         // Dedup: advance every family currently AT the emitted tuple (a
         // subset can eliminate more than one prime power at once).
         for (auto &fs : fams_) {
@@ -4618,6 +4791,27 @@ static int SB_checkAndLogOrder(int k) {
 
 } // namespace subsetdisc
 
+// MASK-WIDENING-128BIT.md startup guard, shared by runCert/runCertFM/
+// runCertAuto (task item 3/4/5): computes the C1 checked lcm(1..B-1) once
+// (fatal-exits cleanly, never returns a wrapped value, upper-bounds every
+// subset's own L for the rest of the run), derives P_full = ceil(log_B L)
+// from it, configures dynamic CERTPOS (Sec 4), and prints the one-time
+// record-size confirmation (task item 5).
+static void certStartupGuard(int B) {
+    static bool sizeofPrinted = false;
+    u128 Lfull = checkedLcmUpToOrDie(B - 1);
+    int P_full = 0;
+    { u128 v = 1; while (v < Lfull) { v *= (u128)B; P_full++; } }
+    configureCertPosForBase(B, P_full);
+    if (!sizeofPrinted) {
+        fprintf(stderr, "[setup] sizeof(BucketRecordGen)=%zu sizeof(BucketRecordFM)=%zu\n",
+                sizeof(BucketRecordGen), sizeof(BucketRecordFM));
+        assert(sizeof(BucketRecordGen) == 32);
+        assert(sizeof(BucketRecordFM) == 48);
+        sizeofPrinted = true;
+    }
+}
+
 // Top-level: find a working (D, prefix, WY) hypothesis and run the
 // wrong-turn search. Subset DISCOVERY is delegated to subsetdisc's
 // descending-lex enumeration (ported from a113028_v13.c's solve_base),
@@ -4628,6 +4822,7 @@ static void runCert(int B, const char *expectedDecimalOrNull, long rssBudgetKB, 
     using clock = std::chrono::steady_clock;
     auto tAll0 = clock::now();
     int n = B - 1;
+    certStartupGuard(B);
     fprintf(stderr, "[cert] base=%d, n=%d, autonomous subset+divergence discovery starting "
                      "(subsetdisc: solve_base-style descending-lex enumeration)\n", B, n);
 
@@ -4810,6 +5005,7 @@ static void runCertFM(int B, const char *expectedDecimalOrNull, long rssBudgetKB
     using clock = std::chrono::steady_clock;
     auto tAll0 = clock::now();
     int n = B - 1;
+    certStartupGuard(B);
     fprintf(stderr, "[certfm] base=%d, n=%d, autonomous subset+divergence discovery starting "
                      "(full-modulus bucket join, subsetdisc: solve_base-style descending-lex enumeration)\n", B, n);
 
@@ -5013,6 +5209,7 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
     using clock = std::chrono::steady_clock;
     auto tAll0 = clock::now();
     int n = B - 1;
+    certStartupGuard(B);
     fprintf(stderr, "[certauto] base=%d, n=%d, autonomous subset+divergence+PLAN discovery starting "
                      "(subsetdisc: solve_base-style descending-lex enumeration; planner: BASE-50-FULL-MODULUS-BUCKET.md Sec 9 Phase B)\n", B, n);
 
@@ -5193,6 +5390,401 @@ static void runCertAuto(int B, const char *expectedDecimalOrNull, long rssBudget
     subsetdisc::SB_printGroupDPSummary("certauto", B);
 }
 
+// =====================================================================
+// HIGHER-BASE-CERTIFICATION-STRATEGY.md Sec3+8: outer lexicographic
+// branch-and-bound certification mode.
+//
+// Sec8.1: `certset` -- explicit digit set D = {1..B-1}\drops, single
+// subset, never enumerates/descends to any other subset.
+// Sec8.2: exact terminal entry taking an EXPLICIT (possibly
+// non-descending) prefix + remaining pool (obligation I3): the prefix
+// contribution C is computed by runWrongTurnSearch/buildSuffixBranchGen's
+// EXISTING position arithmetic (pos = certPos() + prefix.size(), stepping
+// down by 1 per prefix digit in the order given) -- never re-derived here,
+// so the historic bug class (wrong position/modulus arithmetic) cannot
+// recur: this file simply calls the same trusted function with a
+// caller-fixed prefix instead of buildFeasiblePrefix's invented one.
+// Sec8.3: `certbb` -- incumbent-guided outer DFS with dispositions
+// PROVED_BELOW_INCUMBENT / EXACT_TERMINAL(REFUTED|FOUND) /
+// RESOURCE_DECLINED (obligation I4).
+// Sec8.4-lite: append-only certbb_<base>_manifest.jsonl.
+// =====================================================================
+
+// Obligation I1: ALL outer-search value comparisons are fixed-length
+// digit-sequence lexicographic comparisons on arrays of ints (base-B
+// digits, MSD-first), NEVER integer arithmetic -- full values run to
+// ~64^63 ~= 2^378, far beyond any fixed-width integer. Every array
+// compared here has the SAME fixed length |D| (a full arrangement is
+// always a permutation of D), so lexicographic array order == numeric
+// order exactly, with no bignum step required at all for comparisons
+// (bignum decimal reconstruction is used ONLY for human-readable output,
+// via decimalFromDigitsMSBfirstBB below, never for a decision).
+static int lexCompareDigitsBB(const std::vector<int> &a, const std::vector<int> &b) {
+    size_t n = std::min(a.size(), b.size());
+    for (size_t i = 0; i < n; i++) {
+        if (a[i] != b[i]) return a[i] < b[i] ? -1 : 1;
+    }
+    if (a.size() != b.size()) return a.size() < b.size() ? -1 : 1; // shouldn't happen (fixed |D|); stay honest
+    return 0;
+}
+
+static std::vector<int> sortedDescBB(const std::vector<int> &v) {
+    std::vector<int> r = v;
+    std::sort(r.begin(), r.end(), std::greater<int>());
+    return r;
+}
+
+// upper = prefix ++ sort_descending(remaining) (doc Sec3.2's `upper`):
+// the lexicographically largest digit array reachable from this node,
+// used ONLY for pruning (I1: array compare, never integer).
+static std::vector<int> upperBoundArrayBB(const std::vector<int> &prefix, const std::vector<int> &remaining) {
+    std::vector<int> u = prefix;
+    std::vector<int> rd = sortedDescBB(remaining);
+    u.insert(u.end(), rd.begin(), rd.end());
+    return u;
+}
+
+// Human-readable decimal reconstruction of a full digit array (MSD-first,
+// arbitrary-precision via uint32 limbs, no overflow) -- used ONLY for
+// display/manifest/final-report output, never for any certbb decision.
+static std::string decimalFromDigitsMSBfirstBB(int B, const std::vector<int> &digitsMSBfirst) {
+    std::vector<uint32_t> limbs(1, 0);
+    const uint64_t BASE = 1000000000ULL;
+    for (int d : digitsMSBfirst) {
+        uint64_t carry = (uint64_t)d;
+        for (size_t i = 0; i < limbs.size(); i++) {
+            uint64_t v = (uint64_t)limbs[i] * (uint64_t)B + carry;
+            limbs[i] = (uint32_t)(v % BASE); carry = v / BASE;
+        }
+        while (carry) { limbs.push_back((uint32_t)(carry % BASE)); carry /= BASE; }
+    }
+    while (limbs.size() > 1 && limbs.back() == 0) limbs.pop_back();
+    std::string s = std::to_string(limbs.back());
+    for (int i = (int)limbs.size() - 2; i >= 0; i--) { char buf[16]; snprintf(buf, sizeof(buf), "%09u", limbs[i]); s += buf; }
+    return s;
+}
+
+// Comma-separated digit list parser, shared by certset/certbb's <drops> arg.
+static std::vector<int> parseDropListBB(const char *s) {
+    std::vector<int> out;
+    if (!s) return out;
+    std::string str(s);
+    size_t pos = 0;
+    while (pos < str.size()) {
+        size_t comma = str.find(',', pos);
+        std::string tok = str.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+        if (!tok.empty()) out.push_back(atoi(tok.c_str()));
+        if (comma == std::string::npos) break;
+        pos = comma + 1;
+    }
+    return out;
+}
+
+// One-time setup shared by certset/certbb: computes P_full/CERTPOS range
+// exactly like certStartupGuard(), then latches CERTPOS's own env var (and
+// thus certPos()'s own [20,max] validation -- doc's "validation reuses
+// certPos()-style range checks") from CERTSET_W (default 22), so
+// certPos() below IS W_terminal for the rest of this run. MUST be called
+// before the first certPos() call of the process.
+static int certSetupWBB(int B) {
+    u128 Lfull = checkedLcmUpToOrDie(B - 1);
+    int P_full = 0; { u128 v = 1; while (v < Lfull) { v *= (u128)B; P_full++; } }
+    configureCertPosForBase(B, P_full);
+    const char *w = getenv("CERTSET_W");
+    std::string wStr = (w && *w) ? std::string(w) : std::string("22");
+    setenv("CERTPOS", wStr.c_str(), 1); // certPos() below validates this against [20, g_certPosMaxOverride]
+    certStartupGuard(B); // sizeof asserts + (idempotent) configureCertPosForBase; does not itself call certPos()
+    int W = certPos(); // first real call anywhere in the process for this run -- latches now
+    fprintf(stderr, "[certset/bb] base=%d W_terminal=%d (CERTSET_W env, default 22; validated range [20,%d])\n",
+            B, W, g_certPosMaxOverride);
+    return W;
+}
+
+// Sec8.2: exact terminal disposition. FOUND/REFUTED are exhaustive over
+// the ENTIRE remaining pool at this node (every pool digit was tried as
+// candidate, descending, by the existing wrong-turn engine -- see
+// runWrongTurnSearch's own header comment). DECLINED covers both the
+// NX+NY<2 window-starvation case (checked here, BEFORE calling
+// runWrongTurnSearch, so its own exit(3) path is never reached from
+// certbb) and a deadline reached mid-search (ar.timedOut).
+struct TerminalOutcomeBB {
+    enum Disposition { REFUTED, FOUND, DECLINED } disposition = DECLINED;
+    AttemptResult ar;
+    const char *declineReason = "";
+};
+
+static TerminalOutcomeBB runExactTerminalBB(const ConstantsGen &c, const std::vector<int> &prefix,
+                                             const std::vector<int> &pool, long rssBudgetKB,
+                                             std::chrono::steady_clock::time_point deadline) {
+    TerminalOutcomeBB out;
+    int W = certPos();
+    if ((int)pool.size() != W + 1) {
+        fprintf(stderr, "[certbb] FATAL: exact terminal called with |remaining|=%zu != W_terminal+1=%d "
+                        "(obligation I2 violated)\n", pool.size(), W + 1);
+        exit(1);
+    }
+    // Same chooseWY derivation as runCert (Sec3.2: "the required
+    // architectural change is to call it with the prefix fixed by the
+    // outer recursion" -- NX/NY selection itself is unchanged).
+    int NX = 2;
+    int NY = W - c.T - c.Pc - NX;
+    if (NY < 1) { NX = 1; NY = W - c.T - c.Pc - NX; }
+    if (NY < 1) { NX = 0; NY = W - c.T - c.Pc - NX; }
+    if (NX + NY < 2) {
+        out.disposition = TerminalOutcomeBB::DECLINED;
+        out.declineReason = "NX+NY<2 (CERTPOS/W_terminal window starved for this D's T+Pc)";
+        return out;
+    }
+    if (std::chrono::steady_clock::now() >= deadline) {
+        out.disposition = TerminalOutcomeBB::DECLINED;
+        out.declineReason = "deadline already reached before terminal started";
+        return out;
+    }
+    AttemptResult ar = runWrongTurnSearch(c, prefix, pool, NX, NY, 3, rssBudgetKB,
+                                           /*useCurrentRssForAvailable=*/true, deadline);
+    out.ar = ar;
+    if (ar.timedOut) {
+        out.disposition = TerminalOutcomeBB::DECLINED;
+        out.declineReason = "deadline reached mid-search (timedOut)";
+        return out;
+    }
+    bool certified = ar.success && ar.verifiedOk >= 1 && ar.verifiedBad == 0;
+    out.disposition = certified ? TerminalOutcomeBB::FOUND : TerminalOutcomeBB::REFUTED;
+    return out;
+}
+
+// Sec8.1: `certset` -- single EXPLICIT digit set, discovery-heuristic
+// prefix (buildFeasiblePrefix, per Sec3.4: legitimate for discovery, never
+// for a NO), one exact-terminal call. Never enumerates or descends to any
+// other subset -- there is only ever one D here.
+static void runCertSet(int B, const std::vector<int> &drops, long rssBudgetKB) {
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+    int W = certSetupWBB(B);
+    std::vector<int> D;
+    for (int d = 1; d < B; d++) if (std::find(drops.begin(), drops.end(), d) == drops.end()) D.push_back(d);
+    fprintf(stderr, "[certset] base=%d |D|=%zu dropped=%zu W_terminal=%d\n", B, D.size(), drops.size(), W);
+    ConstantsGen c = deriveConstantsGen(B, D);
+    if (!c.ok) {
+        fprintf(stderr, "[certset] base=%d: deriveConstantsGen FAILED for this EXPLICIT digit set "
+                        "(arithmetically infeasible -- not a search failure)\n", B);
+        exit(2);
+    }
+    int targetWY = W - c.T - c.Pc;
+    if (targetWY < 1) {
+        fprintf(stderr, "[certset] base=%d FATAL: W_terminal=%d too small for T=%d+Pc=%d -- widen CERTSET_W\n",
+                B, W, c.T, c.Pc);
+        exit(3);
+    }
+    std::vector<int> prefix, pool;
+    bool feas = buildFeasiblePrefix(c, targetWY, 3, prefix, pool);
+    if (!feas) {
+        fprintf(stderr, "[certset] base=%d: buildFeasiblePrefix found no feasible heuristic top prefix at "
+                        "W_terminal=%d -- INCONCLUSIVE (not a refutation of D); try a larger CERTSET_W or use "
+                        "certbb for the full outer proof.\n", B, W);
+        exit(3);
+    }
+    TerminalOutcomeBB outc = runExactTerminalBB(c, prefix, pool, rssBudgetKB, clock::time_point::max());
+    double wall = std::chrono::duration<double>(clock::now() - t0).count();
+    if (outc.disposition == TerminalOutcomeBB::FOUND) {
+        fprintf(stderr, "[certset] base=%d FOUND: winningCandidate=%d survivors=%llu (verified %llu OK / %llu "
+                        "FAILED) wall=%.3fs\n", B, outc.ar.winningCandidate, (unsigned long long)outc.ar.totalSurvivors,
+                (unsigned long long)outc.ar.verifiedOk, (unsigned long long)outc.ar.verifiedBad, wall);
+        fprintf(stderr, "[certset] base=%d: maximum value (%zu digits): %s\n",
+                B, outc.ar.maxDecimal.size(), outc.ar.maxDecimal.c_str());
+        fprintf(stderr, "[certset] base=%d CERTIFIED for this explicit digit set (heuristic-prefix search "
+                        "exhaustive at W_terminal=%d; use certbb for the full outer-prefix proof)\n", B, W);
+    } else if (outc.disposition == TerminalOutcomeBB::REFUTED) {
+        fprintf(stderr, "[certset] base=%d REFUTED at the heuristic prefix (wall=%.3fs) -- this does NOT prove D "
+                        "has no completion (only this one prefix's window is exhausted); use certbb for the "
+                        "full outer proof.\n", B, wall);
+        exit(4);
+    } else {
+        fprintf(stderr, "[certset] base=%d DECLINED: %s (wall=%.3fs)\n", B, outc.declineReason, wall);
+        exit(3);
+    }
+}
+
+// Sec8.3+8.4-lite: incumbent-guided outer DFS state + manifest.
+struct CertBBContext {
+    ConstantsGen c;
+    int W = 0;
+    long rssBudgetKB = -1;
+    std::chrono::steady_clock::time_point deadline;
+    FILE *manifest = nullptr;
+    std::vector<int> incumbent; // MSD-first digit array; valid iff incumbentSet
+    bool incumbentSet = false;
+    long long nodesVisited = 0;
+    long long nFound = 0, nRefuted = 0, nPruned = 0, nDeclined = 0;
+    bool anyUnfinished = false;
+};
+
+static void writeManifestLineBB(CertBBContext &ctx, const std::vector<int> &prefix, const char *disposition,
+                                 unsigned long long survivors, double wall, const char *note = "") {
+    if (!ctx.manifest) return;
+    fprintf(ctx.manifest, "{\"prefix\":[");
+    for (size_t i = 0; i < prefix.size(); i++) fprintf(ctx.manifest, "%s%d", i ? "," : "", prefix[i]);
+    fprintf(ctx.manifest, "],\"disposition\":\"%s\",\"survivors\":%llu,\"wall\":%.3f,\"note\":\"%s\"}\n",
+            disposition, survivors, wall, note);
+    fflush(ctx.manifest);
+}
+
+// Sec3.2 recurrence, obligation I1 (array compares only), I4 (RESOURCE_DECLINED
+// stays unfinished, never folded into a refutation). Returns true iff this
+// entire subtree is fully accounted for (no unfinished descendant).
+static bool certBBProve(CertBBContext &ctx, const std::vector<int> &prefix, const std::vector<int> &remaining) {
+    ctx.nodesVisited++;
+    if (std::chrono::steady_clock::now() >= ctx.deadline) {
+        ctx.nDeclined++;
+        ctx.anyUnfinished = true;
+        writeManifestLineBB(ctx, prefix, "RESOURCE_DECLINED", 0, 0, "global deadline reached before this node");
+        return false;
+    }
+
+    std::vector<int> upper = upperBoundArrayBB(prefix, remaining);
+    if (ctx.incumbentSet && lexCompareDigitsBB(upper, ctx.incumbent) <= 0) {
+        ctx.nPruned++;
+        return true; // PROVED_BELOW_INCUMBENT
+    }
+
+    if ((int)remaining.size() == ctx.W + 1) {
+        auto t0 = std::chrono::steady_clock::now();
+        TerminalOutcomeBB outc = runExactTerminalBB(ctx.c, prefix, remaining, ctx.rssBudgetKB, ctx.deadline);
+        double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        if (outc.disposition == TerminalOutcomeBB::DECLINED) {
+            ctx.nDeclined++;
+            ctx.anyUnfinished = true;
+            writeManifestLineBB(ctx, prefix, "RESOURCE_DECLINED", (unsigned long long)outc.ar.totalSurvivors,
+                                 wall, outc.declineReason);
+            return false;
+        }
+        if (outc.disposition == TerminalOutcomeBB::FOUND) {
+            ctx.nFound++;
+            writeManifestLineBB(ctx, prefix, "EXACT_TERMINAL_FOUND", (unsigned long long)outc.ar.totalSurvivors, wall);
+            // Obligation I3 of doc Sec4 (direct verification already exists):
+            // incumbent updates take the terminal's max survivor, compared by
+            // fixed-length array lex order only (I1).
+            if (!ctx.incumbentSet || lexCompareDigitsBB(outc.ar.maxDigitsMSBfirst, ctx.incumbent) > 0) {
+                ctx.incumbent = outc.ar.maxDigitsMSBfirst;
+                ctx.incumbentSet = true;
+                fprintf(stderr, "[certbb] NEW INCUMBENT (prefixLen=%zu wall=%.3fs): %s\n", prefix.size(), wall,
+                        decimalFromDigitsMSBfirstBB(ctx.c.B, ctx.incumbent).c_str());
+            }
+        } else {
+            ctx.nRefuted++;
+            writeManifestLineBB(ctx, prefix, "EXACT_TERMINAL_REFUTED", 0, wall);
+        }
+        return true;
+    }
+
+    // Internal node: descend, digit choices tried strictly descending
+    // (doc Sec3.2's `for digit in remaining, descending`). Bound is
+    // strictly lexicographically monotonic in the branch digit (same
+    // prefix, differing only at this position, arrays of equal fixed
+    // length) so the first child whose bound fails to beat the incumbent
+    // proves every smaller digit's child also fails -- safe to break
+    // rather than continue.
+    std::vector<int> sorted = sortedDescBB(remaining);
+    bool allFinished = true;
+    for (int d : sorted) {
+        std::vector<int> childPrefix = prefix; childPrefix.push_back(d);
+        std::vector<int> childRemaining;
+        childRemaining.reserve(remaining.size() - 1);
+        for (int x : remaining) if (x != d) childRemaining.push_back(x);
+        std::vector<int> childUpper = upperBoundArrayBB(childPrefix, childRemaining);
+        if (ctx.incumbentSet && lexCompareDigitsBB(childUpper, ctx.incumbent) <= 0) {
+            ctx.nPruned++;
+            break; // monotonic: every remaining (smaller) digit choice also fails
+        }
+        bool finished = certBBProve(ctx, childPrefix, childRemaining);
+        allFinished = allFinished && finished;
+    }
+    return allFinished;
+}
+
+static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, double capSecondsGlobal) {
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+    int W = certSetupWBB(B);
+    std::vector<int> D;
+    for (int d = 1; d < B; d++) if (std::find(drops.begin(), drops.end(), d) == drops.end()) D.push_back(d);
+    fprintf(stderr, "[certbb] base=%d |D|=%zu dropped=%zu W_terminal=%d capSeconds=%.0f\n",
+            B, D.size(), drops.size(), W, capSecondsGlobal);
+
+    ConstantsGen c = deriveConstantsGen(B, D);
+    if (!c.ok) {
+        fprintf(stderr, "[certbb] base=%d: deriveConstantsGen FAILED for this EXPLICIT digit set "
+                        "(arithmetically infeasible -- not a search failure)\n", B);
+        exit(2);
+    }
+    if (W + 1 > (int)D.size()) {
+        fprintf(stderr, "[certbb] base=%d FATAL: W_terminal+1=%d exceeds |D|=%zu\n", B, W + 1, D.size());
+        exit(1);
+    }
+
+    char manifestPath[128];
+    snprintf(manifestPath, sizeof(manifestPath), "certbb_%d_manifest.jsonl", B);
+    FILE *manifest = fopen(manifestPath, "w"); // fresh manifest each run (Sec8.4-lite: rerun-from-scratch OK)
+    if (!manifest) fprintf(stderr, "[certbb] WARNING: could not open %s for writing (errno=%d)\n", manifestPath, errno);
+    else fprintf(stderr, "[certbb] base=%d manifest: %s\n", B, manifestPath);
+
+    CertBBContext ctx;
+    ctx.c = c; ctx.W = W; ctx.rssBudgetKB = rssBudgetKB;
+    ctx.deadline = t0 + std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(capSecondsGlobal));
+    ctx.manifest = manifest;
+
+    // Discovery seed (doc Sec3.4): buildFeasiblePrefix + one terminal call
+    // at the FULL digit set's own heuristic top prefix, purely to seed the
+    // incumbent for faster pruning. A DECLINED/REFUTED seed is NOT treated
+    // as any kind of refutation of D -- the DFS below covers the entire
+    // tree regardless of whether this seed found anything.
+    {
+        int targetWY = W - c.T - c.Pc;
+        if (targetWY >= 1) {
+            std::vector<int> seedPrefix, seedPool;
+            if (buildFeasiblePrefix(c, targetWY, 3, seedPrefix, seedPool)) {
+                TerminalOutcomeBB seedOut = runExactTerminalBB(c, seedPrefix, seedPool, rssBudgetKB, ctx.deadline);
+                if (seedOut.disposition == TerminalOutcomeBB::FOUND) {
+                    ctx.incumbent = seedOut.ar.maxDigitsMSBfirst;
+                    ctx.incumbentSet = true;
+                    fprintf(stderr, "[certbb] base=%d discovery seed incumbent: %s\n", B,
+                            decimalFromDigitsMSBfirstBB(B, ctx.incumbent).c_str());
+                    writeManifestLineBB(ctx, seedPrefix, "DISCOVERY_SEED_FOUND",
+                                         (unsigned long long)seedOut.ar.totalSurvivors, 0, "not part of the DFS proof itself");
+                } else {
+                    fprintf(stderr, "[certbb] base=%d discovery seed: no immediate completion at the heuristic "
+                                    "prefix (disposition=%s) -- DFS proceeds unseeded (this is NOT a refutation)\n",
+                            B, seedOut.disposition == TerminalOutcomeBB::REFUTED ? "REFUTED" : "DECLINED");
+                }
+            }
+        }
+    }
+
+    bool finished = certBBProve(ctx, {}, D);
+
+    double wall = std::chrono::duration<double>(clock::now() - t0).count();
+    fprintf(stderr, "[certbb] base=%d DFS DONE: nodesVisited=%lld found=%lld refuted=%lld pruned=%lld "
+                    "unfinished(declined)=%lld wall=%.3fs\n",
+            B, ctx.nodesVisited, ctx.nFound, ctx.nRefuted, ctx.nPruned, ctx.nDeclined, wall);
+    if (ctx.incumbentSet) {
+        std::string dec = decimalFromDigitsMSBfirstBB(B, ctx.incumbent);
+        fprintf(stderr, "[certbb] base=%d incumbent (%zu decimal digits): %s\n", B, dec.size(), dec.c_str());
+    } else {
+        fprintf(stderr, "[certbb] base=%d: NO SURVIVOR FOUND ANYWHERE in this digit set\n", B);
+    }
+    if (manifest) fclose(manifest);
+
+    bool allAccounted = finished && !ctx.anyUnfinished;
+    if (allAccounted) {
+        fprintf(stderr, "[certbb] base=%d CERTIFIED (zero unfinished branches)%s\n", B,
+                ctx.incumbentSet ? "" : " -- and NO valid arrangement exists for this digit set");
+    } else {
+        fprintf(stderr, "[certbb] base=%d INCOMPLETE: %lld branches unfinished -- best incumbent is a LOWER "
+                        "BOUND\n", B, ctx.nDeclined);
+        exit(4);
+    }
+}
+
 } // namespace certdrv
 
 int main(int argc, char **argv) {
@@ -5327,6 +5919,36 @@ int main(int argc, char **argv) {
         if (argc >= 5) rssBudgetKB = atol(argv[4]);
         fprintf(stderr, "[certauto] base=%d rssBudgetKB=%ld expected=%s\n", base, rssBudgetKB, expected ? expected : "(none)");
         certdrv::runCertAuto(base, expected, rssBudgetKB, 1800.0, 5400.0);
+    } else if (mode == "certset") {
+        // HIGHER-BASE-CERTIFICATION-STRATEGY.md Sec8.1:
+        // certset <base> <comma-separated-dropped-digits> [rssBudgetKB]
+        // Runs on the EXPLICIT digit set D={1..B-1}\drops only -- never
+        // enumerates other subsets, never descends to a smaller set on
+        // failure. CERTSET_W env (default 22) sets W_terminal.
+        if (argc < 4) { fprintf(stderr, "certset requires <base> <comma-separated-dropped-digits>\n"); return 1; }
+        int base = atoi(argv[2]);
+        std::vector<int> drops = certdrv::parseDropListBB(argv[3]);
+        long rssBudgetKB = -1;
+        if (argc >= 5) rssBudgetKB = atol(argv[4]);
+        fprintf(stderr, "[certset] base=%d dropsArg=%s rssBudgetKB=%ld\n", base, argv[3], rssBudgetKB);
+        certdrv::runCertSet(base, drops, rssBudgetKB);
+    } else if (mode == "certbb") {
+        // HIGHER-BASE-CERTIFICATION-STRATEGY.md Sec8.3:
+        // certbb <base> <comma-separated-dropped-digits> [rssBudgetKB] [capSeconds]
+        // Incumbent-guided outer lexicographic branch-and-bound over the
+        // EXPLICIT digit set D={1..B-1}\drops. CERTSET_W env (default 22)
+        // sets W_terminal. capSeconds (default 5400) is the GLOBAL wall
+        // budget for the whole DFS (per-terminal deadline == same clock).
+        if (argc < 4) { fprintf(stderr, "certbb requires <base> <comma-separated-dropped-digits>\n"); return 1; }
+        int base = atoi(argv[2]);
+        std::vector<int> drops = certdrv::parseDropListBB(argv[3]);
+        long rssBudgetKB = -1;
+        if (argc >= 5) rssBudgetKB = atol(argv[4]);
+        double capSeconds = 5400.0;
+        if (argc >= 6) capSeconds = atof(argv[5]);
+        fprintf(stderr, "[certbb] base=%d dropsArg=%s rssBudgetKB=%ld capSeconds=%.0f\n",
+                base, argv[3], rssBudgetKB, capSeconds);
+        certdrv::runCertBB(base, drops, rssBudgetKB, capSeconds);
     } else {
         fprintf(stderr, "unknown mode %s\n", mode.c_str());
         return 1;

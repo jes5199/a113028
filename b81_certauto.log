@@ -1,0 +1,80 @@
+[guard] L = 442720643463713815200  (assert OK)
+[guard] L_c = 63245806209101973600
+[guard] gcd(L_c mod 49, 49) = 1  (assert OK)
+[guard] lifts = ceil(B^12 / L_c) = 4  (assert OK, target ~4)
+[guard] fixed prefix digit count = 26 (24 + 2 = 26, assert OK)
+[guard] digit count: 26 fixed + 1 candidate + 19 free + 1 suffix = 47  (assert OK)
+
+=== Guard-rail summary ===
+B=49, |D|=47, L=442720643463713815200
+L_nil=7, L_c=63245806209101973600
+P=12, lifts=4
+===========================
+
+[sieve] SIEVE_LEVEL=0 (bit0=root bit1=every-node bit2=depth3-joint)
+[certauto] base=81 rssBudgetKB=3000000 expected=(none)
+[setup] base=81 P_full=19 CERTPOS_default=27 CERTPOS_validrange=[20,29]
+[setup] sizeof(BucketRecordGen)=32 sizeof(BucketRecordFM)=48
+[certauto] base=81, n=80, autonomous subset+divergence+PLAN discovery starting (subsetdisc: solve_base-style descending-lex enumeration; planner: BASE-50-FULL-MODULUS-BUCKET.md Sec 9 Phase B)
+[selftest-suffixdp] doc#23-Sec3.2-b50-cand21: DP=11552 brute=11552 expect=11552 -> OK
+[selftest-suffixdp] b48-shape-T3-Lnil216: DP=0 brute=0 -> OK
+[selftest-suffixdp] b49-shape-T1-Lnil7: DP=1 brute=1 -> OK
+[selftest-suffixdp] misc-T2: DP=0 brute=0 -> OK
+[bucket-plan] B=81 T=1 Pc=18 lifts=19 P_full=19 suffixMult=1 budget=3000000KB
+[bucket-plan] reject peeled NX=0 NY=8 K=2: Y=62990928000 Q=6561 reason=Y_exceeds_uint32
+[bucket-plan] reject peeled NX=0 NY=8 K=3: Y=62990928000 Q=531441 reason=Y_exceeds_uint32
+[bucket-plan] reject peeled NX=0 NY=8 K=4: Y=62990928000 Q=43046721 reason=Y_exceeds_uint32
+[bucket-plan] reject peeled NX=1 NY=7 K=2: Y=3315312000 Q=6561 reason=insufficient_budget
+[bucket-plan] reject peeled NX=1 NY=7 K=3: Y=3315312000 Q=531441 reason=insufficient_budget
+[bucket-plan] reject peeled NX=1 NY=7 K=4: Y=3315312000 Q=43046721 reason=insufficient_budget
+[bucket-plan] reject peeled NX=2 NY=6 K=2: Y=165765600 Q=6561 reason=insufficient_budget
+[bucket-plan] reject peeled NX=2 NY=6 K=3: Y=165765600 Q=531441 reason=insufficient_budget
+[bucket-plan] reject peeled NX=2 NY=6 K=4: Y=165765600 Q=43046721 reason=insufficient_budget
+[bucket-plan] admit peeled NX=3 NY=5 K=2: Y=7893600 Q=6561 suffixMult=1 projectedPeak=0.52GiB lookups=1.5e+08 scans=1.804e+11 score=4.688e+16
+[bucket-plan] admit peeled NX=3 NY=5 K=3: Y=7893600 Q=531441 suffixMult=1 projectedPeak=0.52GiB lookups=3.15e+09 scans=4.678e+10 score=8.91e+10
+[bucket-plan] admit peeled NX=3 NY=5 K=4: Y=7893600 Q=43046721 suffixMult=1 projectedPeak=1.00GiB lookups=6.299e+10 scans=1.155e+10 score=3.953e+11
+[bucket-plan] admit peeled NX=4 NY=4 K=2: Y=358800 Q=6561 suffixMult=1 projectedPeak=0.03GiB lookups=3.15e+09 scans=1.722e+11 score=4.787e+16
+[bucket-plan] admit peeled NX=4 NY=4 K=3: Y=358800 Q=531441 suffixMult=1 projectedPeak=0.03GiB lookups=6.299e+10 scans=4.253e+10 score=4.417e+11
+[bucket-plan] admit peeled NX=4 NY=4 K=4: Y=358800 Q=43046721 suffixMult=1 projectedPeak=0.51GiB lookups=1.197e+12 scans=9.976e+09 score=7.196e+12
+[bucket-plan] admit peeled NX=5 NY=3 K=2: Y=15600 Q=6561 suffixMult=1 projectedPeak=0.00GiB lookups=6.299e+10 scans=1.498e+11 score=1.04e+17
+[bucket-plan] admit peeled NX=5 NY=3 K=3: Y=15600 Q=531441 suffixMult=1 projectedPeak=0.01GiB lookups=1.197e+12 scans=3.513e+10 score=7.234e+12
+[bucket-plan] admit peeled NX=5 NY=3 K=4: Y=15600 Q=43046721 suffixMult=1 projectedPeak=0.48GiB lookups=2.154e+13 scans=7.807e+09 score=1.293e+14
+[bucket-plan] admit peeled NX=6 NY=2 K=2: Y=650 Q=6561 suffixMult=1 projectedPeak=0.00GiB lookups=1.197e+12 scans=1.186e+11 score=1.271e+18
+[bucket-plan] admit peeled NX=6 NY=2 K=3: Y=650 Q=531441 suffixMult=1 projectedPeak=0.01GiB lookups=2.154e+13 scans=2.635e+10 score=1.293e+14
+[bucket-plan] admit peeled NX=6 NY=2 K=4: Y=650 Q=43046721 suffixMult=1 projectedPeak=0.48GiB lookups=3.662e+14 scans=5.53e+09 score=2.197e+15
+[bucket-plan] admit peeled NX=7 NY=1 K=2: Y=26 Q=6561 suffixMult=1 projectedPeak=0.00GiB lookups=2.154e+13 scans=8.537e+10 score=2.234e+19
+[bucket-plan] admit peeled NX=7 NY=1 K=3: Y=26 Q=531441 suffixMult=1 projectedPeak=0.01GiB lookups=3.662e+14 scans=1.792e+10 score=2.197e+15
+[bucket-plan] admit peeled NX=7 NY=1 K=4: Y=26 Q=43046721 suffixMult=1 projectedPeak=0.48GiB lookups=5.86e+15 scans=3.539e+09 score=3.516e+16
+[bucket-plan] reject full-modulus NX=0 NY=8 K=2: Y=89513424000 Q=6561 reason=Y_exceeds_uint32
+[bucket-plan] reject full-modulus NX=0 NY=8 K=3: Y=89513424000 Q=531441 reason=Y_exceeds_uint32
+[bucket-plan] reject full-modulus NX=0 NY=8 K=4: Y=89513424000 Q=43046721 reason=Y_exceeds_uint32
+[bucket-plan] reject full-modulus NX=1 NY=7 K=2: Y=4475671200 Q=6561 reason=Y_exceeds_uint32
+[bucket-plan] reject full-modulus NX=1 NY=7 K=3: Y=4475671200 Q=531441 reason=Y_exceeds_uint32
+[bucket-plan] reject full-modulus NX=1 NY=7 K=4: Y=4475671200 Q=43046721 reason=Y_exceeds_uint32
+[bucket-plan] reject full-modulus NX=2 NY=6 K=2: Y=213127200 Q=6561 reason=insufficient_budget
+[bucket-plan] reject full-modulus NX=2 NY=6 K=3: Y=213127200 Q=531441 reason=insufficient_budget
+[bucket-plan] reject full-modulus NX=2 NY=6 K=4: Y=213127200 Q=43046721 reason=insufficient_budget
+[bucket-plan] admit full-modulus NX=3 NY=5 K=2: Y=9687600 Q=6561 projectedPeak=1.25GiB lookups=5.619e+08 scans=8.296e+11 score=2.154e+17
+[bucket-plan] admit full-modulus NX=3 NY=5 K=3: Y=9687600 Q=531441 projectedPeak=1.25GiB lookups=1.236e+10 scans=2.253e+11 score=4.122e+11
+[bucket-plan] admit full-modulus NX=3 NY=5 K=4: Y=9687600 Q=43046721 projectedPeak=1.73GiB lookups=2.596e+11 scans=5.842e+10 score=1.645e+12
+[bucket-plan] admit full-modulus NX=4 NY=4 K=2: Y=421200 Q=6561 projectedPeak=0.04GiB lookups=1.236e+10 scans=7.936e+11 score=2.183e+17
+[bucket-plan] admit full-modulus NX=4 NY=4 K=3: Y=421200 Q=531441 projectedPeak=0.05GiB lookups=2.596e+11 scans=2.057e+11 score=1.866e+12
+[bucket-plan] admit full-modulus NX=4 NY=4 K=4: Y=421200 Q=43046721 projectedPeak=0.53GiB lookups=5.192e+12 scans=5.08e+10 score=3.123e+13
+[bucket-plan] admit full-modulus NX=5 NY=3 K=2: Y=17550 Q=6561 projectedPeak=0.00GiB lookups=2.596e+11 scans=6.944e+11 score=4.487e+17
+[bucket-plan] admit full-modulus NX=5 NY=3 K=3: Y=17550 Q=531441 projectedPeak=0.01GiB lookups=5.192e+12 scans=1.715e+11 score=3.141e+13
+[bucket-plan] admit full-modulus NX=5 NY=3 K=4: Y=17550 Q=43046721 projectedPeak=0.48GiB lookups=9.864e+13 scans=4.022e+10 score=5.919e+14
+[bucket-plan] admit full-modulus NX=6 NY=2 K=2: Y=702 Q=6561 projectedPeak=0.00GiB lookups=5.192e+12 scans=5.555e+11 score=5.522e+18
+[bucket-plan] admit full-modulus NX=6 NY=2 K=3: Y=702 Q=531441 projectedPeak=0.01GiB lookups=9.864e+13 scans=1.303e+11 score=5.921e+14
+[bucket-plan] admit full-modulus NX=6 NY=2 K=4: Y=702 Q=43046721 projectedPeak=0.48GiB lookups=1.776e+15 scans=2.896e+10 score=1.065e+16
+[bucket-plan] admit full-modulus NX=7 NY=1 K=2: Y=27 Q=6561 projectedPeak=0.00GiB lookups=9.864e+13 scans=4.059e+11 score=1.023e+20
+[bucket-plan] admit full-modulus NX=7 NY=1 K=3: Y=27 Q=531441 projectedPeak=0.01GiB lookups=1.776e+15 scans=9.021e+10 score=1.065e+16
+[bucket-plan] admit full-modulus NX=7 NY=1 K=4: Y=27 Q=43046721 projectedPeak=0.48GiB lookups=3.019e+16 scans=1.893e+10 score=1.811e+17
+[bucket-plan] decision=ADMIT family=peeled NX=3 NY=5 K=3 P=18 Y=7893600 Q=531441 suffixMult=1 projectedPeak=0.52GiB projectedLookups=3.15e+09 projectedScans=4.678e+10 score=8.91e+10
+[bucket-plan] B=81 a=26 NY=5 K=3 Y=7893600 Q=531441 projectedPeak=0.52GiB availableForIndex=2.61GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=81 a=26 NY=5 K=3 Y=7893600 Q=531441 projectedPeak=0.52GiB availableForIndex=2.60GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=81 a=26 NY=5 K=3 Y=7893600 Q=531441 projectedPeak=0.52GiB availableForIndex=2.60GiB
+[bucket-plan] decision=ADMIT
+[bucket-plan] B=81 a=26 NY=5 K=3 Y=7893600 Q=531441 projectedPeak=0.52GiB availableForIndex=2.60GiB
+[bucket-plan] decision=ADMIT

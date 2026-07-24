@@ -125,6 +125,28 @@ postcal2 6/6 char-exact, b52/b60 at baseline walls, and **b58 8× faster
 pathological K=2 plan; the disqualifier re-planned it to full-modulus
 NX=3/NY=5/K=3, same value char-exact. The K=2 misplan class is closed.
 
+## The mask range 65–89 and the outer proof engine (2026-07-24)
+
+The u128 mask widening is live (validated byte-identical + exact counts on
+all six known bases; ~3× constant-factor cost where subset churn is hot —
+b51 46→156s — is the known price). The checked-lcm guard pins the exact
+arithmetic ceiling: **bases ≤ 89 attemptable, ≥ 90 refuse cleanly**
+(lcm(1..89) overflows u128 at d=89). Fast-pass stepping stones all came
+back honest NO-VALUE at 90-min caps (b65, b73, b81 — band cost at the
+auto-scaled windows W=23–25, machinery sane throughout): the mask range
+will be won by the proof engine, not fast passes.
+
+**The outer lexicographic branch-and-bound (HIGHER-BASE-CERTIFICATION-
+STRATEGY.md) is now validated in practice**: it reproduced and PROVED
+a(56) (314s: 1 found / 25 refuted terminals / 25 pruned / 0 unfinished) and
+a(60) (30.7s: 1 found / 24 pruned) char-exact — complementary disposition
+mixes, valid aggregates, zero declined-refuted conflation. **b56 and b60
+are hereby 2-method certified** (original engine + outer proof). b58's
+outer proof is performance-bound (90-min cap insufficient; 6h rerun in
+flight). Window width is now provably a performance knob, not a soundness
+boundary — the fixed-window era's WEAK labels are attackable branch by
+branch.
+
 ## Honest negative: grouped cyclotomic DPs (band-depth plan Phase 2, 2026-07-24)
 
 Built per the plan's §2.2 with the review-note corrections (equal-order-only
