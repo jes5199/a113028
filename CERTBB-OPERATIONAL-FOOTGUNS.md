@@ -259,3 +259,59 @@ reports without re-measuring. **A stale measurement asserted as current is a
 wrong measurement.** Re-measure before every status claim, especially while
 deep in analysis work — that is exactly when it feels safe to reuse the last
 number and exactly when the box has changed underneath you.
+
+## 11. When you relabel a job's purpose, re-read its invocation
+
+A running job's *label* lives in your head; its *behaviour* lives in its
+argv. Those drift apart whenever the plan changes underneath a job that is
+still running — and the plan changing is exactly when you are most likely to
+act on the label.
+
+**What it nearly cost.** On 2026-07-25 two `certset` runs were launched to
+measure per-terminal cost for a release-axis sweep. The plan then changed:
+the sweep was abandoned in favour of a width ladder, and the jobs were
+described — by me, in my own status report — as "single-terminal probes for a
+sweep I'm no longer proposing," slated to be killed for their cores. Reading
+the actual invocation first:
+
+```
+certset base=59 dropsArg=29  W_terminal=22
+certset base=61 dropsArg=30  W_terminal=22
+```
+
+They *were* the width ladder's W=22 rung. Killing them would have discarded
+8½ minutes of precisely the computation the new plan needed, then relaunched
+it identically from zero.
+
+**The rule:** before acting on a running job — killing, renicing, reasoning
+about its output — read `/proc/<pid>/cmdline` or `ps -o args`, not your
+memory of why you started it. Same family as §10's stale measurement: **the
+thing you believe is running is not always the thing that is running.**
+
+## 12. b64 is a systematic outlier: distrust anything measured there
+
+Four separate quantities measured on b64 failed to transfer to other bases,
+all in the same direction (b64 cheaper/stronger), and all from **one root
+cause: `T = 1`**.
+
+| quantity | b64 | elsewhere |
+|---|---|---|
+| feasibility-census cost | 0.015s | 404s (b54, `T=5`) |
+| filter strength | 92.7% eliminated | **0.0%** (b54/b59/b61) |
+| release axis vs width axis | release cheaper (907s vs 1788s) | release ≥4.4 days vs width ~hours |
+| one W=22 terminal | 46.8s | **≥533s** (b59/b61) — ≥11× |
+
+`T = 1` pins the nilpotent suffix to a **single forced digit**, which
+simultaneously makes the feasibility filter a razor, makes it cheap to
+evaluate, makes the release axis affordable, and prunes the terminal search
+itself. One cause, four symptoms.
+
+**The predictive form of the rule:**
+
+> **Anything downstream of the nilpotent constraint does not transfer from
+> b64.** Check `T` before reusing any b64-derived measurement, and re-measure
+> locally when `T > 1`.
+
+This is not "b64 is weird" — it says *in advance* which measurements to
+distrust and why, and it is testable: compute `L_nil` and `T` for the target
+base first (see A64-MAXIMALITY.md's table).
