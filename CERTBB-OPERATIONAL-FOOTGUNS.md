@@ -227,3 +227,35 @@ A later `pkill -f "until ! pgrep"`, aimed at some dead waiter loops, matched
 the very shell issuing it and killed the session's own command (exit 144).
 Harmless that time. The same carelessness pointed at a busier pattern is how
 an unrelated production process gets killed by a maintenance command.
+
+## 10. Nice the binary, not the launcher — script children outlive their parents
+
+`nice -n 19 ./driver.sh` niceness applies to the shell; a compute binary it
+spawns inherits that, but a binary spawned by a *Python* or *shell* driver
+that was itself started unniced runs at **ni 0** — and killing the driver does
+not kill the child. It is reparented to PID 1 and keeps running, unniced,
+against whatever else is on the box.
+
+**What it cost.** On 2026-07-25 a `certdisc` child of a killed control driver
+ran **34 minutes at ni 0**, competing with a live-money `beam.smp`, while the
+status reports for that window said the box was idle. Nobody noticed because
+the *launcher* had been dealt with and the *process* had not.
+
+**The rule:** apply `nice` to the compute binary itself, at the innermost
+invocation — not to the wrapper that launches it. And after killing any
+driver, re-check for surviving children:
+
+```sh
+ps -eo pid,ni,etimes,comm | grep <binary> | grep -v grep
+```
+
+Same family as §9: **the thing you think you controlled is not always the
+thing that is actually running.** §9 is about signalling the wrong process;
+this is about a process you forgot exists.
+
+**Corollary for status reporting.** The orphan was invisible because "box
+idle" had been measured earlier and then *carried forward* across later
+reports without re-measuring. **A stale measurement asserted as current is a
+wrong measurement.** Re-measure before every status claim, especially while
+deep in analysis work — that is exactly when it feels safe to reuse the last
+number and exactly when the box has changed underneath you.
