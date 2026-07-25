@@ -11,11 +11,28 @@ because the cost is the part that makes it stick. Entries are marked
 **[MECHANISM]** where something now enforces them automatically, and
 **[VIGILANCE]** where they still depend on somebody remembering.
 
-Most of these were learned on **2026-07-25**, a single day in which four
-first-ever values were computed and roughly a dozen wrong beliefs were
-retracted. The errors below belong to both the agent doing the work and the
-agent reviewing it; they are attributed, because a lessons file containing
-only one party's mistakes would be a dishonest document and a less useful one.
+**Provenance: twelve of the thirteen entries below come from a single day —
+2026-07-25** — during which four first-ever values were computed and roughly a
+dozen wrong beliefs were retracted. The errors belong to both the agent doing
+the work and the agent reviewing it; they are attributed, because a lessons
+file containing only one party's mistakes would be a dishonest document and a
+less useful one.
+
+That concentration is worth stating explicitly, because a reader three months
+from now will otherwise assume these accumulated slowly. They did not. **The
+rate is a property of how the work was being run, not of the difficulty of the
+mathematics**: fast iteration, an adversarial review layer that re-derived
+claims independently rather than accepting them, and a standing expectation
+that any result could be retracted. Most of these errors were caught within
+minutes or hours of being made, several by mechanisms built earlier the same
+day. A slower or less contested process would not have produced fewer
+mistakes — it would have produced the same mistakes, found later, in the
+published record.
+
+**How to read the tags.** Each entry is marked [MECHANISM] or [VIGILANCE].
+The [VIGILANCE] entries are a **worklist, not a settled state**: if one of
+them recurs, that recurrence is the signal to build the thing that retires it
+(lesson 1, applied to this file).
 
 ---
 
@@ -357,3 +374,9 @@ unsolved cases — and one of them found a previously unknown answer.
 after a disappointing one.
 
 **[VIGILANCE]** — but cheap, and it has never not been worth it.
+
+---
+
+*All incidents recorded here occurred on 2026-07-25 unless stated otherwise.
+Entries are added when a lesson is learned, not when it is resolved — a
+[VIGILANCE] tag means the failure can still happen.*
