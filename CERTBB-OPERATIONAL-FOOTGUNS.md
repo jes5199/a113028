@@ -557,3 +557,45 @@ arrives.
 configurations, timings, anything enumerated — that table is already the
 durable artefact. Commit it then, marked in progress, before knowing what it
 shows.
+
+## 19. A validation sample from one regime cannot detect regime-dependence
+
+Confirmations only count if the sample could have *disconfirmed*. A rule
+validated entirely inside one regime is untested against the possibility that
+it is regime-dependent — and the confirmations feel exactly as convincing as
+real ones.
+
+**Worked example (2026-07-25).** `C(prefixLen, k)` was adopted as a predictor
+of release-layer prefix counts, verified 3/3 against b54, b59 and b61 —
+every count matching exactly.
+
+All three filter at **0.0 %**. In that regime *candidate* count and
+*enumerated* count coincide by construction, so the sample was structurally
+incapable of revealing that the formula predicts the former and costing needs
+the latter. The distinction it needed to test was invisible to it.
+
+The disconfirming case was not merely available, it was **adjacent**: the b64
+census table printed both numbers side by side —
+
+| | |
+|---|---:|
+| `C(P,1..3)+1` candidates | 10,701 |
+| enumerated (feasible) | **781** |
+| filtered | 92.7 % |
+
+— and that 92.7 % figure was quoted repeatedly, from that table, while the
+formula was being validated on three bases where the filter is vacuous. The
+falsifier had been read aloud and not recognised.
+
+It surfaced only when b81 (`r0 = 0`, filter strongly active) enumerated
+**2 prefixes where `C(56,1)` predicts 56**.
+
+**The rule:** before trusting a validated predictor, ask *what regimes does my
+sample span?* — and specifically, **could any member of the sample have
+failed?** Three confirmations drawn from inside one regime buy nothing about
+the others. Deliberately include a case from the opposite regime, or state the
+scope limit explicitly.
+
+Sibling of §17: that entry is about verification sharing a *premise*; this one
+is about validation sharing a *regime*. Both produce agreement that is not
+evidence.
