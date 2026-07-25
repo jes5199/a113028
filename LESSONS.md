@@ -312,14 +312,46 @@ class, one exact partition. Three of the 23 completed:
 mean 1636.0 s, spread 7.2 s = 0.44 %
 ```
 
-Projecting the remaining 20 from those three is **interpolation, not
-forecasting**: the sample and the target are members of one population that
-differs in no parameter. That projection was trusted, and it is the only
-runtime claim made all day that carried no hedge.
+That projection was made, and quoted without a hedge, on the strength of the
+0.44 % spread.
 
-The practical test: *is my sample drawn from the same population as my target,
-or merely from something that resembles it?* Resemblance has failed seven
-times out of seven.
+**It was wrong, and the way it was wrong is the most useful part of this
+entry.** The next three children came in at 1454.086 s, 1456.756 s and
+1452.132 s — again a 0.32 % spread *within* the group, but **11.1 % below the
+first group**. Full spread across all six: **12.2 %**, not 0.44 %.
+
+The three "independent" samples were not a sample of the population at all.
+They were a **cluster**: launched simultaneously, running under identical
+concurrent load, finishing within seven seconds of each other. **Batch
+identity was a variable being held fixed by someone who did not know they were
+holding it** — the three children differed in every parameter being tracked,
+so they looked independent, and the hidden shared factor was simply *what else
+the machine was doing*.
+
+Two corollaries, and the first is the reflex worth keeping:
+
+> **An implausibly tight measurement is evidence of a hidden shared factor,
+> not evidence of precision.** Three separate computations agreeing to seven
+> seconds is not natural variation. The right response to a suspiciously tight
+> number is to hunt for what the samples have in common, not to project from
+> it.
+
+> **"Same configuration" must include the conditions of execution**, not only
+> the mathematical parameters. Same base, same width, same partition, same
+> binary — and still 11 % apart depending on concurrent load.
+
+The claim of this lesson survives: cross-configuration extrapolation failed
+7/7, within-configuration interpolation works. But the licensed case is
+narrower than it first appeared, and the practical test needs both halves:
+
+*Is my sample drawn from the same population as my target — including how it
+was run — or merely from something that resembles it?* Resemblance has failed
+every time. And note the error direction here was **favourable** (it ran
+faster than predicted), which is exactly when unearned confidence goes
+unexamined.
+
+**Default from here:** quote a band, not a point, for anything derived from
+fewer than two independently-conditioned groups.
 
 **What it cost.** A budget mis-estimated by 7×, and one width-ladder cap set
 so low that a resource timeout would have been indistinguishable from a
