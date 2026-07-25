@@ -407,3 +407,35 @@ digit set cannot produce a false negative through that path, because the path
 has no way to express one. That is the strongest argument yet for keeping
 resource outcomes and mathematical outcomes rigidly separate — **it defends
 against mistakes nobody anticipated**, which is the only kind that matters.
+
+## 15. `r0 = 1` predicts the cost of a hit, never the existence of one
+
+These are separate claims and it is easy to conflate them after a run of
+negatives.
+
+`r0 = 1` says the naive descending prefix passes the **feasibility**
+test — a *necessary* condition (its pool admits at least one admissible
+suffix tuple). From that it follows that `buildFeasiblePrefix` returns the
+descending top-N prefix, which is the lexicographically greatest prefix
+available, so **if a completion is found there it is immediately maximal**:
+zero lex-greater prefixes, no census, no proof run.
+
+What it does **not** say is that a completion exists there at all. Passing a
+necessary condition is not passing a sufficient one.
+
+**Why this needs stating.** By 2026-07-25 the framework had held 3-for-3
+out-of-sample on maximality (b59, b62; b54 retrodicted), and then seven
+consecutive bases in 65–89 refuted at their descending prefix despite
+`r0 = 1`. The natural misreading is *"the r0 prediction stopped working."* It
+did not: those seven negatives are about **existence**, which `r0` never
+claimed, and the maximality prediction remains untested-and-unfalsified there
+because no hit occurred to test it.
+
+| claim | status |
+|---|---|
+| `r0=1` ⇒ a hit at the descending prefix is maximal for free | 3/3 out-of-sample, unfalsified |
+| `r0=1` ⇒ a completion exists at the descending prefix | **never claimed**; 0/7 in 65–89 |
+
+**The rule:** when a predictor produces a run of apparent failures, check
+first that the failures are of the thing it predicted. A necessary-condition
+test cannot be refuted by absence.
