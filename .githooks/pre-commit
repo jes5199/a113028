@@ -1,0 +1,31 @@
+#!/bin/bash
+# Refuse oversized blobs at commit time.
+#
+# Why this exists: twice on 2026-07-25 a raw trace log was committed without
+# anyone looking at its size. The 585 MB one was caught by GitHub's 100 MB
+# hard limit AFTER the push failed; b54_certauto.log (97.26 MB) squeaked under
+# and is in the history permanently. A limit that happens to be 3 MB away from
+# firing is luck, not a mechanism.
+#
+# These files are raw planner traces: millions of [bucket-plan] lines around a
+# handful of signal lines. DISTIL AT WRITE TIME, COMMIT THE SUMMARY.
+# Override deliberately with GIT_ALLOW_LARGE=1.
+LIMIT_MB=${GIT_SIZE_LIMIT_MB:-20}
+fail=0
+while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    mb=$(( $(stat -c%s "$f") / 1048576 ))
+    if [ "$mb" -ge "$LIMIT_MB" ]; then
+        echo "pre-commit: REFUSING $f -- ${mb} MB, limit ${LIMIT_MB} MB"
+        fail=1
+    fi
+done < <(git diff --cached --name-only --diff-filter=AM)
+if [ "$fail" = 1 ]; then
+    echo
+    echo "  If this is a raw log: distil it. 'grep -v \"^\\[bucket-plan\\]\" big.log' is"
+    echo "  usually 99.99% of the reduction. Commit the summary, not the trace."
+    echo "  Deliberate override: GIT_ALLOW_LARGE=1 git commit ..."
+    [ -n "$GIT_ALLOW_LARGE" ] || exit 1
+    echo "  GIT_ALLOW_LARGE set -- proceeding."
+fi
+exit 0
