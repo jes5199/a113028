@@ -195,8 +195,16 @@ needed. The prefixes that could still win are therefore:
 - position 31 = 24 with position 32 ∈ {29,26,25,23,22,21,20,19,17} → 9
 - the incumbent's own prefix → 1
 
-**82 lex-relevant terminal prefixes**; the incumbent is terminal counter 81
-(0-indexed). Checking the union of the three shard manifests and the banked
+**82 lex-relevant terminal prefixes.** Note this is the *combinatorial*
+count, not an engine counter range: in the current shard run the engine
+assigned terminal counters only to the 40 of them it actually executed —
+counters 0..39 are exactly the prefixes lexicographically ≥ the incumbent,
+with **the incumbent at counter 39** — while the other 42 already carried
+definitive records from the earlier serial run and were skipped without
+being counted (the banked manifest's depth-32 records carry no `counter`
+field at all). The two runs share no counter space, so the union is sound
+only when keyed by exact prefix, which is how it is checked below.
+Checking the union of the three shard manifests and the banked
 manifest **by exact prefix** (aggregate counts prove nothing):
 
 | check | result |
@@ -215,9 +223,29 @@ is the maximality proof**, assembled from work already completed.
 
 **Honest boundary:** this independent verification checked the *coverage* and
 the *cutoff logic* from scratch; it trusts the engine-produced REFUTED
-records rather than re-running 81 exhaustive terminal searches. The engine's
-own merge + resume-verify is pending, and the row is promoted to CERTIFIED
-only once that lands. Method and credit: `FASTER-PROVISIONAL-MAXIMUM-VALIDATION.md`.
+records rather than re-running 81 exhaustive terminal searches. Two
+independent verifiers (boss-clod's and this session's, each derived from
+scratch) agree on the cutoff and the coverage; neither re-executed a
+terminal.
+
+**The engine-level check is not merely pending — it is not obtainable from
+the current binary**, for three separate reasons found on inspection:
+`certbb-merge` hard-refuses (exit 5) any record whose prefix length ≠ 32,
+and the banked manifest holds 2,416 sub-depth `RESOURCE_DECLINED` records
+from earlier capped passes; its coverage check demands a definitive
+disposition for *every* counter 0..max (currently 0..1256), i.e. it
+certifies the whole tree rather than the lex-relevant frontier; and the
+engine has **no lex-domination cutoff at all** — the live shards grinding
+past counter 1256, ~1,200 terminals all lexicographically below the
+incumbent, are the direct evidence of its absence. Supplying that cutoff is
+exactly Phase 1 of `FASTER-PROVISIONAL-MAXIMUM-VALIDATION.md`; the engine
+confirmation is a *deliverable* of that work, not a gate available today.
+
+Accordingly this row stays at **single-method exhaustive** on the project's
+own evidence ladder. Under that ladder CERTIFIED additionally requires
+concordance from an independent engine family (as b56/b58/b60 have); b63
+has one engine family only, so it is **not** promoted to CERTIFIED on this
+argument alone. Method and credit: `FASTER-PROVISIONAL-MAXIMUM-VALIDATION.md`.
 
 Note b63 sits strictly below b64 by construction: 55 base-63 digits cap it
 at 99 decimal digits, while b64 (which needs no forced drops, since no digit
