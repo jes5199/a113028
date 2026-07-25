@@ -493,6 +493,39 @@ Entries are added when a lesson is learned, not when it is resolved — a
 
 ---
 
+## 13b. What genuine independent confirmation looks like
+
+Three entries above catalogue ways to manufacture agreement that is not
+evidence (§2 shared configuration, §3 shared premise, §4 shared regime). It is
+worth recording one example of the real thing, because the contrast is what
+makes the failures recognisable.
+
+**Incident.** Mid-afternoon, two agents separately derived the effective
+modulus of a base's forced digit set — `L_eff = 9690712164777231700912800` —
+as part of *explaining why that base was resisting every technique*. No value
+existed for it at the time; the number was an explanation, not a prediction
+about any object.
+
+Hours later a search returned a candidate. Decoding it from its decimal
+representation and taking the lcm of its digits gave **exactly that modulus**.
+
+**Why this counts when the others didn't:**
+
+- the two computations were **causally disconnected** — one from the digit
+  set's structure, one from a number produced by an unrelated search;
+- they were made **hours apart, in different directions**, and neither was
+  configured using the other;
+- **the check could have failed.** A wrong value, a wrong digit set, or a
+  decoding error would all have produced a different lcm.
+
+> **Independent confirmation requires that the two paths could have
+> disagreed.** If a shared configuration, premise or regime makes disagreement
+> impossible, agreement is not information.
+
+The practical test is the same one that exposes the three failures, asked in
+the positive direction: *what would have had to be true for these two results
+to differ — and was that possible?*
+
 ## 14. A durability mechanism stored in ephemeral space is not a mechanism
 
 A ledger built so that results survive process death is worthless if the
