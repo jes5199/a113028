@@ -469,9 +469,26 @@ directory; the *record* does not have to live there.
 **A related near-miss worth recording.** During the same check, a completed
 base's verdict was reported as possibly lost — searched for by base label
 (`b66`) when the log recorded it as `base=66`. The result existed and was
-found immediately on a second look. **A search that fails to match is not
-evidence of absence** (lesson 7); before declaring a result lost, vary the
-query.
+found immediately on a second look.
+
+> **A query returning nothing is a fact about the query until proven
+> otherwise.** Before declaring a result lost, vary the search.
+
+**And the compounding effect, which is the interesting part.** The false
+report was plausible *because a genuine instance of the same class had been
+found an hour earlier* — a real gap where jobs launched outside the ledger
+left no trace. That finding was fresh, correct, and had just been praised. So
+when the next absence appeared, it was fitted to the same shape and the
+search stopped early.
+
+> **A fresh lesson raises the prior on its own pattern.** That is useful right
+up until it manufactures a false positive — and the more recently a pattern
+was confirmed, the more carefully the next instance should be checked rather
+than less.
+
+The report was correctly hedged as a question, which is why it cost nothing.
+But hedging is not the fix; the fix is not stopping at the first search that
+agrees with you.
 
 **[MECHANISM]** — ledgers and verdict tables now live in the repository
 (`run_ledgers/`, `b61_decomposition/ledger/`).
