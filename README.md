@@ -149,7 +149,7 @@ refuse cleanly and await a bignum arithmetic epic).
 | 56 | `ז‎ו‎ה‎ג‎ב‎א‎μλκιθηζδγβαZYXVUTRQPLCN5B967DA2JK4FMHE1I3S` | 677s · **certified, ×2 methods** (engine + outer-B&B maximality proof) | 22 | 11.3 |
 | 57 | `ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδβαZYXWVUTSQPONFB2DI1MK86GA349E7CH5L` | 46s · STRONG (single-method exhaustive) | 22 | 11.3 |
 | 58 | `ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVURQPONLCKADM763I9JFB85124HEG` | 236s · **certified, ×2 methods** (engine + outer-B&B proof; 8× via planner calibration) | 22 | 11.3 |
-| 59 | `י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSRQP91O728BNAG6HJCL3D4KIM5` | **WEAK lower bound** (window-bounded at W=21) | 23 | 11.5 |
+| 59 | `י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUSRQPOM1G76E9AB43I8KLNJ2HDF5C` | **STRONG** — |D|=57 (forced set), maximality: zero lex-greater prefixes | — | — |
 | 60 | `כ‎י‎ט‎ח‎ו‎ה‎ד‎ג‎א‎νμλιθηζδγβαYXWVTNB7Q19SI648RHEL23DGMJC` | 13.9s · **certified, ×2 methods** (engine + outer-B&B proof; post-churn-fix) | 23 | 11.5 |
 | 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νλκιηζεδγβαZYXWVUTSRQPONM56197GHKFCED834ILJ2AB` | **WEAK lower bound** (window-bounded at W=21; 1504s) | 22 | 11.3 |
 | 62 | `מ‎ל‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXUTSRQPONB9E8FCG15LID26A7H3J4MK` | **WEAK lower bound** (window-bounded at W=21; 4122s) | 23 | 12.6 |
@@ -273,6 +273,41 @@ Note b63 sits strictly below b64 by construction: 55 base-63 digits cap it
 at 99 decimal digits, while b64 (which needs no forced drops, since no digit
 ≤ 63 is divisible by 2⁶) keeps 60 digits and already has a valid 109-digit
 completion.
+
+### b59 — a(59), and the first *prediction* this framework made and cashed
+
+**Value (101 decimal digits, 57 base-59 digits; forced set = `{1,…,58}`
+minus `{29}`):**
+
+```
+86783176769582410820652763941251198601388207643947455481175050246380721520450704821249718313022861600
+```
+
+Supersedes the previous `|D|=56`, 100-digit WEAK value on both counts. Found
+by `certset` at **W=22 in 1774s**, the cheapest rung.
+
+**Maximality, same shape as b54.** At `W=22` the terminal prefix length is
+`57 − 23 = 34`, and the value's first 34 digits are exactly the **descending
+top-34** of the forced set — the lexicographically greatest prefix available.
+So there are **zero lex-greater prefixes** (confirmed computationally: 0
+sub-regions), the window of 23 positions covers the entire remainder
+(`57 − 34 = 23 = W+1`), and the case analysis collapses to the equal-prefix
+branch alone.
+
+**What makes this one methodologically different: it was predicted in
+advance.** Before the run returned, `r0 = 1` — a by-product of feasibility
+censuses that had *filtered nothing and were written off as wasted* — implied
+that `certset` would search the descending-top prefix, hence that any hit
+would be immediately maximal. The prediction was then strengthened to a
+guarantee: for b59, `gcd(lcm(D), 59) = 1`, so `L_nil = 1` and `T = 0`, the
+admissible-suffix DP has depth zero and returns 1 unconditionally, and
+therefore **`r0 = 1` holds at every width by construction** rather than by
+observation.
+
+It held. This is the framework's first genuine *prediction* — made before the
+result, on a base not yet solved — rather than a rule fitted to cases already
+known. See `CERTBB-OPERATIONAL-FOOTGUNS.md` §13 for the general lesson about
+measurements that fail at their stated purpose.
 
 ### b54 — a(54), maximal because there is nothing above it
 
