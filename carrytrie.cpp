@@ -35,6 +35,7 @@
 #include <cassert>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 
 using u64 = uint64_t;
 using u128 = __uint128_t;
@@ -5712,6 +5713,16 @@ struct CertBBContext {
     std::unordered_map<std::string, std::pair<ProvenClassBB, std::vector<int>>> proven;
     long long nSkippedRefuted = 0, nSkippedFound = 0; // this session's resume-skip counts (for G2's "loaded-as-proven" report)
 
+    // FREE-SPACE GUARD (CERTBB-OPERATIONAL-FOOTGUNS.md sec 8). An
+    // unpruned proof writes an unbounded manifest: the killed b64 run
+    // produced 2.2GB in 4.5 minutes. The danger is not the byte count, it
+    // is the byte count relative to what is LEFT on a volume that may be
+    // shared with a live trading process -- so this keys on absolute free
+    // space, never on bytes written.
+    std::string manifestPathGuard;
+    long long manifestRecords = 0;
+    unsigned long long minFreeBytes = 0;
+
     // ---------------------------------------------------------------
     // SHARD-PARALLEL support (CERTBB_SHARD=i/N).
     //
@@ -5780,10 +5791,54 @@ static inline const std::vector<int> *pruneIncumbentPtrBB(const CertBBContext &c
 // to one specific terminal-branch slot (e.g. an internal-node
 // RESOURCE_DECLINED, or DISCOVERY_SEED_FOUND) -- certbb-merge's
 // counter-coverage check only looks at counter >= 0 lines.
+// FREE-SPACE GUARD helper. Returns bytes available to an unprivileged
+// writer on the filesystem holding `path` (its directory if the file does
+// not exist yet), or UINT64_MAX if it cannot be determined -- in which case
+// the guard stays out of the way rather than blocking a legitimate run.
+static unsigned long long freeBytesForPathBB(const std::string &path) {
+    struct statvfs vfs;
+    std::string probe = path;
+    if (statvfs(probe.c_str(), &vfs) != 0) {
+        size_t slash = probe.find_last_of('/');
+        probe = (slash == std::string::npos) ? std::string(".") : probe.substr(0, slash);
+        if (probe.empty()) probe = "/";
+        if (statvfs(probe.c_str(), &vfs) != 0) return UINT64_MAX;
+    }
+    return (unsigned long long)vfs.f_bavail * (unsigned long long)vfs.f_frsize;
+}
+
 static void writeManifestLineBB(CertBBContext &ctx, const std::vector<int> &prefix, const char *disposition,
                                  unsigned long long survivors, double wall, const char *note = "",
                                  const std::vector<int> *maxSurvivorDigits = nullptr, long long counter = -1) {
     if (!ctx.manifest) return;
+    // Free-space guard: re-sample periodically, not per record (statvfs is a
+    // syscall and terminals can be sub-millisecond). Abort LOUDLY on
+    // crossing the floor -- never silently degrade, and never let a proof
+    // run fill a volume that may be shared with a live trading process.
+    if (ctx.minFreeBytes > 0 && (++ctx.manifestRecords % 4096) == 0) {
+        unsigned long long freeB = freeBytesForPathBB(ctx.manifestPathGuard);
+        if (freeB < ctx.minFreeBytes) {
+            fflush(ctx.manifest);
+            fprintf(stderr,
+                "[certbb] ******************************************************************\n"
+                "[certbb] ABORTING: free space on the manifest's filesystem fell to %.2f GiB,\n"
+                "[certbb]   below the floor of %.2f GiB, after %lld records written to %s.\n"
+                "[certbb]   An unpruned proof writes an UNBOUNDED manifest (see\n"
+                "[certbb]   CERTBB-OPERATIONAL-FOOTGUNS.md): if pruningActive is false in this\n"
+                "[certbb]   run's header record, that is the cause -- seed an incumbent.\n"
+                "[certbb]   Records already written remain valid and resumable.\n"
+                "[certbb]   Raise/lower the floor with CERTBB_MIN_FREE_GB, or bypass with\n"
+                "[certbb]   CERTBB_ALLOW_LOW_DISK=1 (deliberately, knowing the volume may be\n"
+                "[certbb]   shared).\n"
+                "[certbb] ******************************************************************\n",
+                (double)freeB / (1024.0*1024.0*1024.0),
+                (double)ctx.minFreeBytes / (1024.0*1024.0*1024.0),
+                ctx.manifestRecords, ctx.manifestPathGuard.c_str());
+            fclose(ctx.manifest);
+            ctx.manifest = nullptr;
+            exit(7);
+        }
+    }
     fprintf(ctx.manifest, "{\"prefix\":[");
     for (size_t i = 0; i < prefix.size(); i++) fprintf(ctx.manifest, "%s%d", i ? "," : "", prefix[i]);
     fprintf(ctx.manifest, "],\"disposition\":\"%s\",\"survivors\":%llu,\"wall\":%.3f,\"counter\":%lld,\"note\":\"%s\",\"maxSurvivor\":\"",
@@ -6170,6 +6225,47 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
     ctx.c = c; ctx.W = W; ctx.rssBudgetKB = rssBudgetKB;
     ctx.deadline = t0 + std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(capSecondsGlobal));
     ctx.manifest = manifest;
+    // FREE-SPACE GUARD setup + startup refusal. Keyed on absolute free space
+    // remaining, NOT on bytes written: 2.2GB is harmless with 200GB free and
+    // an emergency with 20GB free on a volume shared with a live trading
+    // process. Lands independently of any pruning consideration -- an
+    // unbounded manifest is a footgun on its own.
+    {
+        ctx.manifestPathGuard = manifestPath;
+        double floorGB = 5.0;
+        if (const char *e = getenv("CERTBB_MIN_FREE_GB")) { double v = atof(e); if (v >= 0.0) floorGB = v; }
+        const char *allowLow = getenv("CERTBB_ALLOW_LOW_DISK");
+        bool bypass = (allowLow && allowLow[0] && strcmp(allowLow, "0") != 0);
+        ctx.minFreeBytes = bypass ? 0ULL : (unsigned long long)(floorGB * 1024.0 * 1024.0 * 1024.0);
+        if (ctx.minFreeBytes > 0) {
+            unsigned long long freeB = freeBytesForPathBB(ctx.manifestPathGuard);
+            if (freeB == UINT64_MAX) {
+                // Undeterminable -- stay out of the way rather than block a
+                // legitimate run, but say so.
+                fprintf(stderr, "[certbb] free-space guard: cannot stat %s -- guard DISABLED for this run\n",
+                        ctx.manifestPathGuard.c_str());
+                ctx.minFreeBytes = 0;
+            } else if (freeB < ctx.minFreeBytes) {
+                fprintf(stderr,
+                    "[certbb] ******************************************************************\n"
+                    "[certbb] REFUSING TO START: only %.2f GiB free on the manifest's filesystem\n"
+                    "[certbb]   (%s), below the floor of %.2f GiB.\n"
+                    "[certbb]   A proof run with no incumbent writes an UNBOUNDED manifest -- the\n"
+                    "[certbb]   b64 run wrote 2.2 GiB in 4.5 minutes. Free space, lower the floor\n"
+                    "[certbb]   with CERTBB_MIN_FREE_GB, or bypass with CERTBB_ALLOW_LOW_DISK=1.\n"
+                    "[certbb] ******************************************************************\n",
+                    (double)freeB / (1024.0*1024.0*1024.0), ctx.manifestPathGuard.c_str(),
+                    (double)ctx.minFreeBytes / (1024.0*1024.0*1024.0));
+                if (manifest) fclose(manifest);
+                exit(7);
+            } else {
+                fprintf(stderr, "[certbb] free-space guard: %.2f GiB free, floor %.2f GiB (CERTBB_MIN_FREE_GB)\n",
+                        (double)freeB / (1024.0*1024.0*1024.0), (double)ctx.minFreeBytes / (1024.0*1024.0*1024.0));
+            }
+        } else {
+            fprintf(stderr, "[certbb] free-space guard: DISABLED (CERTBB_ALLOW_LOW_DISK) -- manifest growth is unbounded\n");
+        }
+    }
     ctx.shardMode = shardMode; ctx.shardIdx = shardIdx; ctx.shardN = shardN;
     // BUGFIX (found during G2 validation): ctx.proven must contain ONLY
     // proven branches (REFUTED/FOUND) -- an UNFINISHED (RESOURCE_DECLINED,

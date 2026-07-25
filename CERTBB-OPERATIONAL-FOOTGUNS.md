@@ -162,3 +162,39 @@ code: it does not prevent bugs, it converts invisible ones into visible ones.
 Keep it, and keep A/B-ing any change to a search path against the engine it
 replaces — the regression was invisible in every aggregate except the
 disposition mix.
+
+## 8. An unpruned proof writes an unbounded manifest
+
+`certbb` journals a record per terminal. With an incumbent that is a few
+thousand lines; **without** one nothing bound-prunes, the DFS enumerates the
+whole prefix space, and the manifest grows without limit.
+
+**What it cost.** The b64 outer proof (`|D|=63`, `terminalPrefixLen=40`, no
+known completion so no incumbent) wrote **2.2 GB in 4.5 minutes** — 7.9 M
+`EXACT_TERMINAL_REFUTED` records, every one at `wall=0.000`. Roughly
+30 GB/hour, against 20 GB free, on the volume that also hosts a live trading
+process. The 8-hour cap set for it would have exhausted the disk in well
+under an hour.
+
+The run header diagnosed it in line one — `"pruningActive":false` — which is
+what that field is for.
+
+**Guard (added 2026-07-25).** Keyed on **absolute free space remaining**, not
+bytes written: 2.2 GB is harmless with 200 GB free and an emergency with
+20 GB free on a shared volume.
+
+- Refuses to start (exit 7) when free space is below the floor.
+- Re-samples every 4096 records and **aborts loudly** (exit 7) on crossing
+  it. Records already written stay valid and resumable.
+- Floor default 5 GiB, `CERTBB_MIN_FREE_GB` to change it,
+  `CERTBB_ALLOW_LOW_DISK=1` to bypass deliberately.
+- If free space can't be determined the guard disables itself and says so,
+  rather than blocking a legitimate run.
+
+Verified end-to-end on the run that caused the incident: startup passed at
+21.17 GiB against a 20.87 GiB floor, then aborted at 20.86 GiB after 634,880
+records / 161 MB. The same b64 run, bounded.
+
+**Note the interaction:** hitting this guard usually means footgun #1 —
+you are proving without an incumbent. Check `pruningActive` in the header
+before raising the floor.
