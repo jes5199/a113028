@@ -298,6 +298,29 @@ over 2,081 cases.
 > once measured.** A projection is legitimate only when the measurement and
 > the prediction share every parameter.
 
+**The distinction, stated exactly.** Every one of the seven failures was a
+**cross-configuration extrapolation** — a different base, a different width,
+a different mode. The licensed case is narrower and rarer: **sampling from the
+very population you are projecting over.**
+
+The clearest instance came late the same day. A single long computation was
+decomposed into 23 independent children — same base, same width, same prefix
+class, one exact partition. Three of the 23 completed:
+
+```
+1635.249 s   1632.779 s   1639.988 s
+mean 1636.0 s, spread 7.2 s = 0.44 %
+```
+
+Projecting the remaining 20 from those three is **interpolation, not
+forecasting**: the sample and the target are members of one population that
+differs in no parameter. That projection was trusted, and it is the only
+runtime claim made all day that carried no hedge.
+
+The practical test: *is my sample drawn from the same population as my target,
+or merely from something that resembles it?* Resemblance has failed seven
+times out of seven.
+
 **What it cost.** A budget mis-estimated by 7×, and one width-ladder cap set
 so low that a resource timeout would have been indistinguishable from a
 mathematical refutation.
