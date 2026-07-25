@@ -228,41 +228,46 @@ independent verifiers (boss-clod's and this session's, each derived from
 scratch) agree on the cutoff and the coverage; neither re-executed a
 terminal.
 
-**The engine-level check is not merely pending — it is not obtainable from
-the current binary**, for three separate reasons found on inspection:
-`certbb-merge` hard-refuses (exit 5) any record whose prefix length ≠ 32,
-and the banked manifest holds 2,416 sub-depth `RESOURCE_DECLINED` records
-from earlier capped passes; its coverage check demands a definitive
-disposition for *every* counter 0..max (currently 0..1256), i.e. it
-certifies the whole tree rather than the lex-relevant frontier; and the
-engine has **no lex-domination cutoff at all** — the live shards grinding
-past counter 1256, ~1,200 terminals all lexicographically below the
-incumbent, are the direct evidence of its absence. Supplying that cutoff is
-exactly Phase 1 of `FASTER-PROVISIONAL-MAXIMUM-VALIDATION.md`; the engine
-confirmation is a *deliverable* of that work, not a gate available today.
+**ENGINE CONFIRMATION LANDED (2026-07-25).** An earlier revision of this
+section claimed the engine-level check was unobtainable from the current
+binary. That was wrong, and the correction matters: **the lex-domination
+cutoff already exists** (`carrytrie.cpp` ~L5897: `upperBoundArrayBB` compared
+against the pruning incumbent, returning `PROVED_BELOW_INCUMBENT`, plus a
+per-child monotonic `break`). It never fired during the 17-hour shard grind
+for a mundane reason — shard mode freezes the pruning incumbent once at
+startup, the banked manifest then held **zero** FOUND records, so it froze at
+`(none)` and pruning was disabled for the run's entire life. Discovering the
+incumbent at counter 39 did not tighten it, by design.
 
-This was then confirmed empirically rather than left as inspection. Three
-merge runs against the SHA256-pinned checkpoints: all four files → **exit 5**
-(`has a record with prefix length 31 != expected terminalPrefixLen=32`);
-the three shards alone → **exit 4** (`24 of 1260 terminal-branch counter
-value(s) lack a definitive disposition`); shards plus the manifest filtered
-to its 56 depth-32 records → **exit 4**, identical (proving the sub-32
-records were the only ingestion blocker). The decisive detail: those 24
-uncovered counters are **1193, 1196, 1199 … 1250 — every one ≥ 1193**, some
-1,150 branches *past* the incumbent at counter 39. The merge failure lies
-entirely inside the provably-dominated region and is the ragged tail where
-one shard stopped before another; **not one uncovered counter is
-lex-relevant.** The engine's refusal is therefore real, is about the whole
-tree, and is *orthogonal* to the maximality argument — the clearest possible
-demonstration that whole-tree coverage is the wrong instrument for this
-question. (The engine's own setup line independently confirms `base=63
-W_terminal=22`, the 55−23=32 prefix length the argument rests on.)
+Re-running plain `resume` against a manifest that actually contains the FOUND
+records (isolated directory, repo files untouched, input manifest hashed):
 
-Accordingly this row stays at **single-method exhaustive** on the project's
-own evidence ladder. Under that ladder CERTIFIED additionally requires
-concordance from an independent engine family (as b56/b58/b60 have); b63
-has one engine family only, so it is **not** promoted to CERTIFIED on this
-argument alone. Method and credit: `FASTER-PROVISIONAL-MAXIMUM-VALIDATION.md`.
+```
+resume: loaded 3767 lines -> 1246 proven-REFUTED (skip), 32 proven-FOUND (skip+seed)
+resume-seeded incumbent from manifest: 9196386715486424310834...81592800
+DFS DONE: nodesVisited=117 found=0 refuted=0 pruned=32 unfinished(declined)=0
+          resume-skipped(refuted=81 found=1) wall=136.073s
+base=63 CERTIFIED (zero unfinished branches)
+```
+
+**`found=0 refuted=0` — zero new terminal executions**, and
+`resume-skipped(refuted=81 found=1)` is exactly the 82-prefix frontier
+derived above, reached independently by the engine's own DFS. 32 bound-prunes,
+zero declined, 136 seconds. The 24 branches the union reports as unfinished
+are precisely the 24 counters `certbb-merge` flagged as uncovered (the ragged
+tail at counter ≥1193) — the DFS **prunes** them as dominated rather than
+needing them, so the merge's objection and the cutoff's answer are the same
+branches.
+
+Log: `b63_engine_confirmation/`.
+
+This row is therefore **STRONG — single-method exhaustive, engine-confirmed**.
+It is deliberately *not* labelled CERTIFIED: the project's ladder reserves
+that for concordance from an independent *engine family*, and the check above
+— however clean — is the same engine agreeing with itself. Two independent
+verifiers derived the cutoff and coverage by hand, and the engine's own DFS
+then reproduced the identical 81+1 frontier, which is strong evidence and not
+a second method. Method and credit: `FASTER-PROVISIONAL-MAXIMUM-VALIDATION.md`.
 
 Note b63 sits strictly below b64 by construction: 55 base-63 digits cap it
 at 99 decimal digits, while b64 (which needs no forced drops, since no digit
