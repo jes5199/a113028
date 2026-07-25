@@ -157,7 +157,7 @@ refuse cleanly and await a bignum arithmetic epic).
 | 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμκιηζεδγαZYXVUTSRQPONMHKADCLJ5F493EB1I2768GW` | **WEAK lower bound** (window-bounded at W=21; 3139s; mask ceiling) | 23 | 11.5 |
 
 
-### b63 — verified lower bound, maximality proof in progress
+### b63 — maximality proof covered by completed work (engine re-verify pending)
 
 Base 63 is the live frontier run. The forced digit set is uniquely
 determined — {1..62} minus {9,18,27,28,36,45,54}, so |D| = 55 — and the
@@ -175,12 +175,49 @@ decode matches, 55 distinct nonzero digits all in 1..62, digit set is
 exactly the forced complement, lcm(digits) | N, 63 ∤ lcm (gcd = 21),
 N ≡ digitsum (1736) mod 62.
 
-**This is a lower bound, not yet a certified maximum.** As of 17h into the
-run: 1164 branches exhaustively refuted (permanent), 31 survivors banked,
-this being the largest. Because verified survivors exist, the forced 55-set
-cannot fully refute — b63 will therefore yield a first-ever *value*; what
-remains open is only whether this survivor is the maximum. The row is
-promoted to certified only when the remaining branches close.
+Because verified survivors exist, the forced 55-set cannot fully refute — so
+b63 yields a first-ever *value*. What remained open was only whether this
+survivor is the maximum.
+
+#### The cutoff argument: the proof is already covered
+
+Exhaustively traversing the whole arrangement space is unnecessary. Only
+prefixes that could still produce a **larger** completion matter.
+
+At terminal width W = 22, terminals are entered after 55 − (22+1) = **32**
+prefix digits (confirmed: every manifest record carries a 32-digit prefix).
+The incumbent's first 30 digits are exactly the descending top-30 of the
+forced set, so any prefix deviating before position 31 is lexicographically
+smaller and every completion beneath it is dominated — no proof record
+needed. The prefixes that could still win are therefore:
+
+- position 31 ∈ {29, 26, 25}, each leaving 24 choices at position 32 → 72
+- position 31 = 24 with position 32 ∈ {29,26,25,23,22,21,20,19,17} → 9
+- the incumbent's own prefix → 1
+
+**82 lex-relevant terminal prefixes**; the incumbent is terminal counter 81
+(0-indexed). Checking the union of the three shard manifests and the banked
+manifest **by exact prefix** (aggregate counts prove nothing):
+
+| check | result |
+|---|---|
+| lex-relevant prefixes covered | **82 / 82**, 0 missing |
+| disposition mix | **81 REFUTED + 1 FOUND** |
+| the 1 FOUND | the incumbent's own branch, maxSurvivor = the incumbent |
+| conflicting duplicate records | 0 |
+| RESOURCE_DECLINED gaps | 0 — 8 of the 82 were once declined, **all later re-run to definitive** |
+| global max survivor, all records | equals the incumbent |
+| parameter compatibility | all 4 files: every prefix a distinct 32-subset of the forced 55-set |
+
+Every prefix that could lexicographically beat the incumbent is exhaustively
+refuted, and the incumbent's own branch has it as the branch maximum. **That
+is the maximality proof**, assembled from work already completed.
+
+**Honest boundary:** this independent verification checked the *coverage* and
+the *cutoff logic* from scratch; it trusts the engine-produced REFUTED
+records rather than re-running 81 exhaustive terminal searches. The engine's
+own merge + resume-verify is pending, and the row is promoted to CERTIFIED
+only once that lands. Method and credit: `FASTER-PROVISIONAL-MAXIMUM-VALIDATION.md`.
 
 Note b63 sits strictly below b64 by construction: 55 base-63 digits cap it
 at 99 decimal digits, while b64 (which needs no forced drops, since no digit
