@@ -5677,12 +5677,52 @@ static void runCertSet(int B, const std::vector<int> &drops, long rssBudgetKB) {
         exit(3);
     }
     std::vector<int> prefix, pool;
+    // EXPLICIT-PREFIX MODE (CERTSET_PREFIX="d1,d2,..."): run the terminal at a
+    // CALLER-SUPPLIED prefix instead of buildFeasiblePrefix's heuristic one.
+    //
+    // This is the primitive that makes any base checkpointable, shardable and
+    // resumable: a width-(W+1) terminal decomposes EXACTLY into the terminals
+    // obtained by fixing its prefix and letting the next position range over
+    // every remaining digit -- each child being a width-W terminal. The union
+    // of the children is the parent, with no approximation, so a long monolith
+    // can be replaced by independently checkpointed child jobs.
+    //
+    // The prefix must have exactly terminalPrefixLen digits, all distinct and
+    // all in D; the pool is then forced (D minus the prefix). Feasibility is
+    // NOT consulted -- the caller is asserting which branch to search, and an
+    // infeasible branch simply refutes immediately.
+    if (const char *ep = getenv("CERTSET_PREFIX")) {
+        int wantLen = (int)D.size() - (W + 1);
+        const char *q = ep;
+        while (*q) { prefix.push_back(atoi(q)); while (*q && *q != ',') q++; if (*q == ',') q++; }
+        if ((int)prefix.size() != wantLen) {
+            fprintf(stderr, "[certset] base=%d FATAL: CERTSET_PREFIX has %zu digits, need exactly "
+                            "terminalPrefixLen=%d at W_terminal=%d\n", B, prefix.size(), wantLen, W);
+            exit(1);
+        }
+        std::vector<bool> seen(B, false);
+        for (int d : prefix) {
+            if (d < 1 || d >= B || seen[d]) {
+                fprintf(stderr, "[certset] base=%d FATAL: CERTSET_PREFIX repeated/out-of-range digit %d\n", B, d);
+                exit(1);
+            }
+            if (std::find(D.begin(), D.end(), d) == D.end()) {
+                fprintf(stderr, "[certset] base=%d FATAL: CERTSET_PREFIX digit %d not in this digit set\n", B, d);
+                exit(1);
+            }
+            seen[d] = true;
+        }
+        for (int d : D) if (!seen[d]) pool.push_back(d);
+        fprintf(stderr, "[certset] base=%d EXPLICIT PREFIX: %zu digits supplied, pool=%zu, W_terminal=%d\n",
+                B, prefix.size(), pool.size(), W);
+    } else {
     bool feas = buildFeasiblePrefix(c, targetWY, 3, prefix, pool);
     if (!feas) {
         fprintf(stderr, "[certset] base=%d: buildFeasiblePrefix found no feasible heuristic top prefix at "
                         "W_terminal=%d -- INCONCLUSIVE (not a refutation of D); try a larger CERTSET_W or use "
                         "certbb for the full outer proof.\n", B, W);
         exit(3);
+    }
     }
     TerminalOutcomeBB outc = runExactTerminalBB(c, prefix, pool, rssBudgetKB, clock::time_point::max());
     double wall = std::chrono::duration<double>(clock::now() - t0).count();

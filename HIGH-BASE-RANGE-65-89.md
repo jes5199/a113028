@@ -210,6 +210,45 @@ a larger cap. Results so far:
 confirmed + 1 derived, 4 still open.** Every refutation is of that base's
 *descending prefix at one width* and is bounded on both axes.
 
+## Release-layer (r=1) sweep — complete, 10 bases, zero hits
+
+Run after the descending-prefix sweep, on the bases with the cheapest measured
+terminals. Enumerated counts, **not** `C(P,1)` — see the correction above:
+
+| base | feasible prefixes at r≤1 | outcome |
+|---|---:|---|
+| b80 | 1 | all refuted |
+| b81 | 2 | all refuted |
+| b72 | 41 | all refuted |
+| b77 | 47 | all refuted |
+| b75 | 49 | all refuted |
+| b79 | 55 | all refuted |
+| b88 | 57 | all refuted |
+| b85 | 57 | all refuted |
+| b83 | 59 | all refuted |
+| **b84** | 49 | **INCONCLUSIVE — 49/49 DECLINED** (run at W=22; b84 needs W≥23) |
+
+**b81 is now materially settled near descending:** its descending prefix
+refuted at W=22 in 0.192 s, and its entire r≤1 layer is **two prefixes**, both
+refuted. That matters because b81 is the range's only `T = 1` base — the sole
+structural analogue of b64 — and was our most promising candidate for a
+paper proof up here. Near-descending is exhausted for it.
+
+Note b84's row is **not a negative**: it was run at a width it cannot run at,
+which the engine correctly reported as DECLINED rather than REFUTED.
+
+## Round 2 — final
+
+| base | width | outcome |
+|---|---:|---|
+| b87 | 24 | REFUTED, 678.869 s |
+| b84 | 24 | REFUTED, 11.611 s |
+| b70 | 22 (7200 s cap) | REFUTED, 2318.039 s |
+| b74 | 24 | **INCONCLUSIVE** — timed out at 3600 s |
+| b82 | 24 | UNREACHABLE, confirmed by run |
+| b86 | 24 | UNREACHABLE, confirmed by run (`FATAL: too small for T=6+Pc=18`) |
+| b78 | 24 | running |
+
 ## Open, not concluded
 
 - Round 2 running: b74/b87 at W=24, b78/b84 at W≥23, b66/b70 at a 7200 s cap.
