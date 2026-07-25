@@ -56,7 +56,7 @@ Progression of the fast certauto pass (single core, nice-19):
 | 51 | 50s | candidate 21 wins, 1 wrong turn |
 | 52 | 21s | candidate 21 wins, 1 wrong turn |
 | 53 | 279s | candidate **8** wins, **13** wrong turns — the strain begins |
-| 54 | 725s | **10 subsets refuted (window-bounded)**, candidate **1** wins, 20 wrong turns |
+| 54 | 22486771935366632201839109831632289737092127593455046754337233294898735154535035683832000 | **STRONG (zero lex-greater prefixes)** | 522.7s (certset @W22) | **SUPERSEDED the |D|=50 WEAK value** (89 digits vs 87, |D| 51 vs 50, numerically larger). Forced set drops {26,27}. Found at the CHEAPEST rung, W=22, no ladder needed. Maximality is structural and needs no census: at W=22 the terminal prefix length is 51-23=28 and the value's first 28 digits ARE the descending top-28 of the forced set (…,29,28,25,24 — 26 and 27 dropped), i.e. the lex-maximum prefix available. **Zero lex-greater prefixes exist**, so the only branch is the equal-prefix one, whose window (23 positions = 51-28) covers the entire remainder and was searched exhaustively. One computational dependency only. Cheapest possible shape: b63 had 2 free positions (82 branches), b64 had 6 (7 regions), b54 has 0. |
 
 Mechanism: 54−1 = 53 is prime, so the only arrangement-independent subset
 filter is the mod-53 digit-sum rule — weak filtering lets many subsets

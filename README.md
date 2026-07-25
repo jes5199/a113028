@@ -144,7 +144,7 @@ refuse cleanly and await a bignum arithmetic epic).
 | 51 | `ב‎א‎νμλκιθηζεδγβαZXWVUTSRQPNLJDE758GKC2M43BA6F19I` | 50.1s · certauto certified, ×2 methods (v4 scan concordant, 5h51m) | 21 | 11.0 |
 | 52 | `ג‎ב‎א‎νμλκιθηζεγβαZYXWVUTSRPNLBCFJH765K9E1MAI2438G` | 21.5s · certauto certified, ×2 methods (v15 candidate concordant) | 21 | 11.0 |
 | 53 | `ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSRPONM8EG4FC75BLJK29A3DI6H1` | 279s · STRONG (single-method exhaustive) | 22 | 11.3 |
-| 54 | `ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSQPO1BC2D7H3GE8N96LKJFA5I` | **WEAK lower bound** (window-bounded; 725s fast pass) | 22 | 10.1 |
+| 54 | `ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUTSPOMG75A1EHFC4K289D6B3NLJI` | **STRONG** — |D|=51 (forced set), maximality: zero lex-greater prefixes (see below) | — | — |
 | 55 | `ו‎ה‎ד‎ג‎ב‎א‎νμλκθηζεδγβαZYWVUTSRQOI1N8532AHG64EC9LKJD7F` | 7.1s · STRONG (single-method exhaustive) | 22 | 11.3 |
 | 56 | `ז‎ו‎ה‎ג‎ב‎א‎μλκιθηζδγβαZYXVUTRQPLCN5B967DA2JK4FMHE1I3S` | 677s · **certified, ×2 methods** (engine + outer-B&B maximality proof) | 22 | 11.3 |
 | 57 | `ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδβαZYXWVUTSQPONFB2DI1MK86GA349E7CH5L` | 46s · STRONG (single-method exhaustive) | 22 | 11.3 |
@@ -273,6 +273,49 @@ Note b63 sits strictly below b64 by construction: 55 base-63 digits cap it
 at 99 decimal digits, while b64 (which needs no forced drops, since no digit
 ≤ 63 is divisible by 2⁶) keeps 60 digits and already has a valid 109-digit
 completion.
+
+### b54 — a(54), maximal because there is nothing above it
+
+**Value (89 decimal digits, 51 base-54 digits; forced set = `{1,…,53}` minus
+`{26,27}`):**
+
+```
+22486771935366632201839109831632289737092127593455046754337233294898735154535035683832000
+```
+
+Supersedes the previous `|D|=50`, 87-digit WEAK value on both counts. Found by
+`certset` at **W=22 in 522.7s** — the cheapest rung, no ladder required.
+
+**Why it is maximal — the whole argument.** At `W = 22` the terminal prefix
+length is `51 − 23 = 28`, and this value's first 28 digits are
+
+```
+53 52 51 50 49 48 47 46 45 44 43 42 41 40 39 38 37 36 35 34 33 32 31 30 29 28 25 24
+```
+
+which is **exactly the descending top-28 of the forced set** (26 and 27 are
+dropped, so 28 is followed by 25). The lexicographically greatest prefix
+available *is* the largest 28 digits in descending order — so this prefix is
+that maximum, and **there are zero lex-greater prefixes**. There is no region
+to dispose of because the region is empty.
+
+The case analysis collapses to one branch:
+
+1. **Lex-greater prefix** — none exist. Vacuous.
+2. **Equal prefix** — `certset` searched that prefix's window exhaustively;
+   the window is 23 positions and `51 − 28 = 23`, so it covers the entire
+   remainder, and it returned this value as the maximum.
+3. **Smaller digit set** — fewer digits, strictly smaller number.
+
+So a(54) rests on **exactly one computational dependency**,
+`runWrongTurnSearch`'s exhaustiveness — the same single dependency as b64's
+equal-prefix branch, and without b64's seven regions to eliminate first. It is
+labelled STRONG rather than CERTIFIED for the same reason: a second
+independent method on that one terminal search is what is still missing.
+
+Compare b63 (2 free positions above the prefix → 82 branches to refute) and
+b64 (6 free positions → 7 regions, disposed of by an arithmetic obstruction).
+**b54 has 0 free positions**, which is the cheapest shape this problem admits.
 
 ### b64 — a(64) determined by a one-line arithmetic obstruction
 
