@@ -340,6 +340,39 @@ Two corollaries, and the first is the reflex worth keeping:
 > the mathematical parameters. Same base, same width, same partition, same
 > binary — and still 11 % apart depending on concurrent load.
 
+**Name the real variable, not its proxy.** It is tempting to record this as
+"batch identity matters" — that is wrong and would mislead. Simultaneous
+launch is not what mattered; **load during execution** is, and batch merely
+correlated with it. The full run supplied its own natural experiment:
+
+| batch | mean | internal spread | conditions |
+|---|---:|---:|---|
+| 1 | 1636.0 s | 0.44 % | steady (one other job) |
+| 2 | 1454.3 s | 0.32 % | steady (one other job) |
+| 3 | 1493.7 s | **4.84 %** | **changing** — straddled another job's completion |
+| 4 | 1383.2 s | 1.41 % | steady (nothing else running) |
+
+Batch 3's members were launched together exactly like the others, and are an
+order of magnitude more scattered — because they *experienced different
+conditions from one another*. Full spread across all twelve: **18 %**, against
+the 0.44 % originally quoted from batch 1 alone.
+
+> **The tightness was measuring the stability of the environment, not the
+> precision of the measurement.**
+
+That is a natural experiment with a control, not an inference — better
+evidence than a designed test would have produced, and it arrived free from
+work already running.
+
+**A corollary for reporting.** An estimate should be quoted together with
+**the action that would invalidate it**. Here: *~1.4 h remaining, conditional
+on the box staying uncontended — a condition the estimator controls and could
+break by launching queued work.* Stating that turns a forecast into a decision
+input, and it converted a scheduling question into an explicit choice: run the
+remaining unknown-cost jobs **serially on a quiet box**, because their
+wall-clocks are the first data in that regime and are only interpretable if
+the conditions are describable.
+
 The claim of this lesson survives: cross-configuration extrapolation failed
 7/7, within-configuration interpolation works. But the licensed case is
 narrower than it first appeared, and the practical test needs both halves:
