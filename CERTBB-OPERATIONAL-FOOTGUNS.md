@@ -5,6 +5,33 @@ they produce plausible-looking output while doing the wrong amount of work.
 Each one below cost real time before it was understood. Read this before
 launching a long proof run.
 
+---
+
+## Read this first: three ways to manufacture agreement that is not evidence
+
+The operational entries below are specific to this engine. These three are
+not, and they are the most transferable thing the campaign has produced — all
+three surfaced on a single day, on different objects, and each one produced
+**confirmations that felt exactly like real ones**.
+
+| # | failure | the question that exposes it |
+|---|---|---|
+| **§13b** | **A run configured from a belief cannot test that belief.** | *What did I assume in order to configure this run, and could it have contradicted that assumption?* |
+| **§17** | **Verification that shares a premise with what it verifies.** Two derivations from the same understanding agree by construction. | *Did my check go back to the source — the code, the artefact — or to my own restatement of it?* |
+| **§19** | **Validation drawn entirely from one regime cannot detect regime-dependence.** | *What regimes does my sample span, and could any member of it have failed?* |
+
+In each case the confirming evidence was **available and adjacent** — the
+falsifier was on the same page, in the same log, or in the same table — and
+was read without being recognised. None was caught by thinking harder; each
+was caught when a **mechanism printed a number**.
+
+That is the practical conclusion: when a lesson recurs, build the thing that
+makes the failure visible without anyone remembering to look. Every mechanism
+built on that day found a real error within minutes of existing, and in two
+cases **not the error it was designed to catch**.
+
+---
+
 ## 1. Shard mode frozen at `(none)` disables pruning for the whole run
 
 **Symptom in the log:**

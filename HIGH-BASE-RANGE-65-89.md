@@ -191,6 +191,24 @@ the bases where the filter is strongest.
 
 ## Cost ledger (original enumeration)
 
+### Regime annotations, not a scoreboard
+
+A hit count is the wrong summary: it hides *what evidence would move a claim*.
+Each derived predictor below is annotated with the regime its confirmations
+came from, because a predictor confirmed only inside one regime is **unearned
+outside it**, not proven (§19).
+
+| predictor | status |
+|---|---|
+| forced sets | 4/4 against certified bases, spanning several drop-routes — **broad** |
+| the b64 obstruction (`T=1` ⇒ forced last digit) | verified at b64; **does not generalise** — b81 has two admissible last digits |
+| `L_nil` / `T` | derived from the digit set, checked against engine output — **sound**, after correcting `T`'s off-by-one (§17) |
+| `C(P,k)` prefix counts | exact as a **candidate** count; **not** the enumerated count where the filter bites (§19) |
+| window-fit `W ≥ T+Pc+2` | verified, and now enforced by the width guard |
+| reachability `T+Pc ≤ maxV−2` | **corrected**: `maxV` is per-base, not 24. Earlier "confirmations" were runs configured from the wrong premise (§13b) |
+| minimum-width-per-base | derived; enforced |
+| **`r0` ⇒ a hit is maximal for free** | 3/3 — **but every confirmation came from a filter-vacuous base.** *Untested in the regime where it could fail*: no hit has yet occurred on a base where the filter bites hard. **Unearned there, not proven.** |
+
 Eight quantities **derivable from the digit set** have held without exception:
 forced sets, the b64 obstruction, `r0`, `L_nil`/`T`, prefix counts `C(P,k)`,
 window-fit, reachability, minimum-width-per-base.
