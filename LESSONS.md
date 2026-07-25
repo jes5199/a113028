@@ -559,6 +559,24 @@ one commit after the boundary-stating lesson was itself written down.
 README's setup section, so the gap is closed by documentation rather than by
 memory.
 
+**Why this happens to every mechanism, not just these.** Five guards were built
+in one day and **all five had a domain narrower than their name**: a free-space
+guard watching one writer, a width guard covering two modes, a run ledger
+covering only what is launched through it, a durability store that was itself
+ephemeral, and a commit hook inert until a per-clone setting is made.
+
+> **The name is written while you are thinking about what the mechanism should
+> do. The domain only becomes visible when someone asks what it doesn't.**
+
+That is also why the gaps were found by the reviewer rather than the author,
+and why the reverse held for premises: **neither position can see its own blind
+spot, and the two do not overlap.** The author cannot see the boundary of a
+thing they were designing from the inside; the reviewer cannot see the flaw in
+a premise they handed over as settled. Each was reliably wrong about exactly
+what the other could check — which is an argument for the review layer being
+adversarial rather than confirmatory, and for it being a *different* agent
+rather than the same one reading twice.
+
 ## 14. A durability mechanism stored in ephemeral space is not a mechanism
 
 A ledger built so that results survive process death is worthless if the
