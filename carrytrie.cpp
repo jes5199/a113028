@@ -5657,6 +5657,31 @@ static TerminalOutcomeBB runExactTerminalBB(const ConstantsGen &c, const std::ve
 // prefix (buildFeasiblePrefix, per Sec3.4: legitimate for discovery, never
 // for a NO), one exact-terminal call. Never enumerates or descends to any
 // other subset -- there is only ever one D here.
+
+// WIDTH GUARD (footguns: a run that cannot possibly find anything must not
+// start). certset/certdisc need NX+NY = W - T - Pc >= 2, i.e. W >= T+Pc+2.
+// Below that the engine emits per-prefix DECLINEs -- and "49/49 DECLINED" is
+// indistinguishable from "49/49 REFUTED" at the call site, which is exactly
+// how a width mistake becomes a false negative in a summary. Refuse up front,
+// name the minimum, and exit with a DISTINCT code (8) so callers can tell
+// "wrong width" from "no completion" and from "out of budget".
+static void requireWidthOrDie(const char *mode, int B, const ConstantsGen &c, int W) {
+    int minW = c.T + c.Pc + 2;
+    if (W >= minW) return;
+    fprintf(stderr,
+        "[%s] ******************************************************************\n"
+        "[%s] base=%d REFUSING TO START: W_terminal=%d is below this digit set's\n"
+        "[%s]   minimum of %d (needs W >= T+Pc+2 = %d+%d+2).\n"
+        "[%s]   At this width every prefix DECLINES for want of window, and a run\n"
+        "[%s]   of declines is INDISTINGUISHABLE from a run of refutations in any\n"
+        "[%s]   summary -- which is how a width mistake becomes a false negative.\n"
+        "[%s]   This is NOT a statement about base %d. Re-run with CERTSET_W=%d or more.\n"
+        "[%s]   (Engine ceiling is 24; if the minimum exceeds 24 the base is\n"
+        "[%s]   UNREACHABLE by this engine -- again not a mathematical result.)\n"
+        "[%s] ******************************************************************\n",
+        mode, mode, B, W, mode, minW, c.T, c.Pc, mode, mode, mode, mode, B, minW, mode, mode, mode);
+    exit(8);
+}
 static void runCertSet(int B, const std::vector<int> &drops, long rssBudgetKB) {
     using clock = std::chrono::steady_clock;
     auto t0 = clock::now();
@@ -5670,12 +5695,8 @@ static void runCertSet(int B, const std::vector<int> &drops, long rssBudgetKB) {
                         "(arithmetically infeasible -- not a search failure)\n", B);
         exit(2);
     }
+    requireWidthOrDie("certset", B, c, W);
     int targetWY = W - c.T - c.Pc;
-    if (targetWY < 1) {
-        fprintf(stderr, "[certset] base=%d FATAL: W_terminal=%d too small for T=%d+Pc=%d -- widen CERTSET_W\n",
-                B, W, c.T, c.Pc);
-        exit(3);
-    }
     std::vector<int> prefix, pool;
     // EXPLICIT-PREFIX MODE (CERTSET_PREFIX="d1,d2,..."): run the terminal at a
     // CALLER-SUPPLIED prefix instead of buildFeasiblePrefix's heuristic one.
@@ -5822,12 +5843,8 @@ static void runCertDisc(int B, const std::vector<int> &drops, long rssBudgetKB, 
                         "(arithmetically infeasible -- not a search failure)\n", B);
         exit(2);
     }
+    requireWidthOrDie("certdisc", B, c, W);
     int targetWY = W - c.T - c.Pc;
-    if (targetWY < 1) {
-        fprintf(stderr, "[certdisc] base=%d FATAL: W_terminal=%d too small for T=%d+Pc=%d -- widen CERTSET_W\n",
-                B, W, c.T, c.Pc);
-        exit(3);
-    }
 
     char outPath[128];
     snprintf(outPath, sizeof(outPath), "certdisc_%d_survivors.jsonl", B);

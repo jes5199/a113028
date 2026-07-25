@@ -14,23 +14,37 @@ statements about A113028 rather than about our engine.
 | **REFUTED** | a real mathematical verdict: no completion under *that prefix* inside *that width* |
 | **INCONCLUSIVE (resource)** | timeout or resource decline — a statement about our budget, never about the maths |
 | **COULD-NOT-RUN @ W** | the engine refused to attempt the base *at that width*; configuration inadequate, not a negative |
-| **UNREACHABLE** | no *supported* width can attempt the base at all — an engine limitation |
+| **UNREACHABLE** | no supported width can attempt the base at all. **No base in 65–89 is in this class** — an earlier revision wrongly placed b82 and b86 here (see the correction below). The class is retained because it is real in principle: it applies when `T + Pc > maxV − 2` for that base's own ceiling. |
 
 ## Reachability is derivable, and it bites
 
 `certset` requires `NX + NY = W − T − Pc ≥ 2`, i.e. **`T + Pc ≤ W − 2`**.
 `CERTSET_W` is validated only on **[20, 24]**, so
 
-> **`T + Pc ≤ 22` is a hard engine limit.**
+> ~~**`T + Pc ≤ 22` is a hard engine limit.**~~ **RETRACTED — see below.**
+
+**CORRECTION (2026-07-25, later):** the ceiling is **per-base**, not a global
+24. `configureCertPosForBase` sets `maxV = 24` only for `B ≤ 64`; above that
+`maxV = max(24, P_full + 10)`. Every base in 65–89 therefore has a **wider**
+ceiling than 24 — b82 gets `[20,29]`, b86 gets `[20,30]`. The real bound is
+**`T + Pc ≤ maxV − 2`, evaluated per base.**
+
+> **All 25 bases in 65–89 are reachable. None is engine-limited.**
 
 `T` and `Pc` come from the digit set with no search (`deriveConstantsGen`), so
 **which bases can be attempted, and at what width, is knowable before spending
 anything.**
 
-- **b82** (`T=6, Pc=17, T+Pc=23`) — **UNREACHABLE**. Confirmed by run: at
-  W=24 it still returned `DECLINED: NX+NY<2`.
-- **b86** (`T=6, Pc=18, T+Pc=24`) — **UNREACHABLE** by the same arithmetic.
-- The other **23 of 25 are reachable**, at the minimum widths tabulated below.
+- **b82** (`T=6, Pc=17`) — needs `W ≥ 25`; its ceiling is 29. **Reachable.**
+- **b86** (`T=6, Pc=18`) — needs `W ≥ 26`; its ceiling is 30. **Reachable.**
+- **All 25 are reachable** at the minimum widths tabulated below.
+
+⚠️ **Both were previously recorded here as UNREACHABLE, and both had a run
+"confirming" it.** Those runs were executed at **W=24 — a width already
+derived to be below their minimums of 25 and 26** — so they declined for want
+of window and the declines were read as confirmation. *A run configured from a
+belief cannot test that belief.* The classification was wrong; the arithmetic
+that would have refuted it was already on this page.
 
 ⚠️ **A reader must not infer "no answers in 65–89" from these results.** Two
 bases were never attemptable, and four more (b74, b78, b84, b87) require
@@ -94,7 +108,8 @@ be *immediately maximal* — it says nothing about whether a hit exists
 | 22 | b70, b83, b85, b88, b89 |
 | 23 | b78, b84 |
 | 24 | b74, b87 |
-| — | **b82, b86 — unreachable at any supported width** |
+| 25 | b82 *(ceiling 29)* |
+| 26 | b86 *(ceiling 30)* |
 
 ## b89 in depth
 
@@ -206,8 +221,8 @@ a larger cap. Results so far:
 | b66 | 22 (cap 7200 s) | queued |
 | b70 | 22 (cap 7200 s) | running |
 
-**Running tally across 65–89: 19 REFUTED, 0 completions, 1 UNREACHABLE
-confirmed + 1 derived, 4 still open.** Every refutation is of that base's
+**Running tally across 65–89: 19 REFUTED, 0 completions, 0 UNREACHABLE,
+6 still open (b78 running; b82@25, b86@26, b84@≥23, b74, b66 queued).** Every refutation is of that base's
 *descending prefix at one width* and is bounded on both axes.
 
 ## Release-layer (r=1) sweep — complete, 10 bases, zero hits
@@ -245,8 +260,8 @@ which the engine correctly reported as DECLINED rather than REFUTED.
 | b84 | 24 | REFUTED, 11.611 s |
 | b70 | 22 (7200 s cap) | REFUTED, 2318.039 s |
 | b74 | 24 | **INCONCLUSIVE** — timed out at 3600 s |
-| b82 | 24 | UNREACHABLE, confirmed by run |
-| b86 | 24 | UNREACHABLE, confirmed by run (`FATAL: too small for T=6+Pc=18`) |
+| b82 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 25.** Not unreachable; queued at W=25 |
+| b86 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 26.** Not unreachable; queued at W=26 |
 | b78 | 24 | running |
 
 ## Open, not concluded

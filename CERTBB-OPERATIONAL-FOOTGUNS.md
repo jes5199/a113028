@@ -320,6 +320,7 @@ cause: `T = 1`**.
 | filter strength | 92.7% eliminated | **0.0%** (b54/b59/b61) |
 | release axis vs width axis | release cheaper (907s vs 1788s) | release ≥4.4 days vs width ~hours |
 | one W=22 terminal | 46.8s | **≥533s** (b59/b61) — ≥11× |
+| `CERTPOS` ceiling | 24 | **per-base, `max(24, P_full+10)`** — 29 at b82, 30 at b86 |
 
 `T = 1` pins the nilpotent suffix to a **single forced digit**, which
 simultaneously makes the feasibility filter a razor, makes it cheap to
@@ -368,6 +369,39 @@ discarded optimisation into a planning instrument.
 **The rule:** when an instrument underperforms, separate *"this did not do
 what I wanted"* from *"this produced no information."* They are different
 claims, and the second is much rarer than it looks.
+
+## 13b. A run configured from a belief cannot test that belief
+
+If a belief determines how a run is set up, that run's outcome cannot be
+evidence for the belief — it can only echo it. The output looks like
+confirmation and carries none.
+
+**Three instances in one day (2026-07-25), on three different objects:**
+
+1. **b84.** Believed to be probeable at W=22; run at W=22; returned
+   `49/49 DECLINED`. The declines were caused by the wrong width, not by the
+   mathematics.
+2. **b82 / b86.** Believed UNREACHABLE from a (wrong) global ceiling of 24;
+   run **at W=24**, a width already derived to be below their own minimums of
+   25 and 26; they declined; **the declines were recorded as "UNREACHABLE
+   confirmed by run"** and committed to the repository as a finding. Both
+   bases are in fact reachable.
+3. **The scoring of (2) as a win.** The false confirmation was then counted as
+   the arithmetic ledger "scoring again" — a prediction and its test sharing a
+   wrong premise agree perfectly.
+
+**The rule:** before treating a run as evidence, ask *what did I assume in
+order to configure it, and could the run have contradicted that assumption?*
+If the configuration encodes the claim, the run tests only itself.
+
+Practical form: when a parameter is **derived**, have the program refuse
+configurations inconsistent with the derivation rather than executing them —
+a refusal is honest, a decline looks like a result. That is what the width
+guard (exit 8) does, and it exposed instance (2) within ninety seconds of
+existing.
+
+Sibling of §17 (verification sharing a premise) and §19 (validation sharing a
+regime). All three are agreement that is not evidence.
 
 ## 14. Acting on your model of a thing instead of the thing (the unifying failure)
 
