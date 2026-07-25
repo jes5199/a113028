@@ -315,3 +315,36 @@ itself. One cause, four symptoms.
 This is not "b64 is weird" — it says *in advance* which measurements to
 distrust and why, and it is testable: compute `L_nil` and `T` for the target
 base first (see A64-MAXIMALITY.md's table).
+
+## 13. A measurement that fails at its stated purpose may still hold the answer to a different question
+
+Before discarding a measurement as wasted, look at **what it actually
+measured**, not at what you wanted it to measure.
+
+**Worked example.** The feasibility censuses on b54 and b62 cost **1,270
+CPU-seconds and filtered 0.0% of prefixes** — a total failure at their stated
+job, and correctly abandoned on those grounds (see §7: an optimiser that
+costs more than it saves should be bypassed).
+
+But the same runs reported `r0` — whether the *naive descending* prefix is
+feasible — and that single bit turns out to predict something far more
+valuable than the filtering ever would have:
+
+- `buildFeasiblePrefix` returns the **first** feasible prefix.
+- So `r0 = 1` ⇒ `certset` searches the **descending top-N** prefix.
+- The descending top-N is by construction the **lex-greatest** N-digit prefix
+  available.
+- ⇒ **zero lex-greater prefixes exist**, so a FOUND at that prefix is
+  *immediately maximal* — no census, no proof run.
+
+It retrodicts both settled bases: b54 (`r0=1`) found at the descending prefix
+and was maximal on the spot; b64 (`r0=0`) fell through to an `r≥1` prefix and
+therefore needed seven lex-greater regions disposed of.
+
+So a census that filtered nothing told us, in advance and for free, **which
+bases get their maximality for nothing if a completion is found** — turning a
+discarded optimisation into a planning instrument.
+
+**The rule:** when an instrument underperforms, separate *"this did not do
+what I wanted"* from *"this produced no information."* They are different
+claims, and the second is much rarer than it looks.
