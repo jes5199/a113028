@@ -665,3 +665,33 @@ scope limit explicitly.
 Sibling of §17: that entry is about verification sharing a *premise*; this one
 is about validation sharing a *regime*. Both produce agreement that is not
 evidence.
+
+## 20. Never key a monitor to a version-numbered artefact
+
+A status filter written against a versioned binary name — `carrytrie_cert.new2*`,
+`build-v3`, `foo-2026-07-25` — **narrows silently every time you build**. The
+next binary falls outside it, the monitor reports less than is running, and it
+fails in the worst possible direction: **toward "nothing is running."**
+
+**Incident (2026-07-25).** A box-status command grepped
+`carrytrie_cert.new2`, intending "new20 or new21". A job launched an hour
+earlier was running `.new19` and was therefore invisible to every status check
+that used it. The absence was about to be reported as *"b78 is gone with no
+verdict recorded"* — a false death, on a process at 90.5 % CPU. It was caught
+only because the process tree was read before the sentence was written.
+
+Roughly one new binary per hour was being built that day, so the filter went
+stale within an hour of being written and stayed silently wrong afterwards.
+
+**The rule:**
+
+- key monitors to the **family** (`carrytrie_cert.new[0-9]+ cert`), never to a
+  specific version;
+- better, key them to the **run ledger** rather than to `ps` at all — the
+  ledger records what was launched, so it cannot narrow as artefacts change.
+
+**Why the ledger is the real fix.** In the same incident, the jobs launched
+through `runlog.sh` were fully visible while the one predating it was not.
+The ledger was **the only monitoring surface that had not gone stale** — not
+because it was watched more carefully, but because it records launches instead
+of pattern-matching the present. Route everything through it.

@@ -62,6 +62,11 @@ refuses to start a run whose configuration cannot possibly produce a result.
 - The width guard, **within ninety seconds of existing**, retracted a claim
   that had already been committed to the repository as a finding — **and not
   the error it was built to catch.**
+- Later the same day a `ps`-based status filter went stale (it was keyed to a
+  version-numbered binary that had since been rebuilt) and reported a running
+  job as absent. The ledger showed it correctly: **it was the only monitoring
+  surface that had not silently narrowed**, because it records what was
+  launched rather than pattern-matching the present.
 
 > Every mechanism built that day found a real error within minutes. No amount
 > of additional documentation had.
