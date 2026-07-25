@@ -1,0 +1,2 @@
+{"ev":"START","tag":"b82_w25","pid":1089875,"t":"2026-07-25T18:44:13Z","cmd":"env CERTSET_W=25 timeout 7200 nice -n 19 ./carrytrie_cert.new21 certset 82 40,41 3000000"}
+{"ev":"END","tag":"b82_w25","pid":1089875,"t":"2026-07-25T20:44:13Z","rc":124}

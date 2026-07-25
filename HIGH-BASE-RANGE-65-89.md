@@ -290,3 +290,56 @@ which the engine correctly reported as DECLINED rather than REFUTED.
   tractable because their forced sets happened to be *near-descending-
   completable*, and this range may simply not be. Held at 17 of 19; several
   bases remain unsettled, and any single hit would move it.
+
+---
+
+## The decomposition primitive and its exact domain
+
+`CERTSET_PREFIX` runs a terminal at a caller-supplied prefix, which makes a
+width-`W` terminal decomposable into width-`(W−1)` children: fix its prefix,
+let the next position range over every remaining digit, and the union of the
+children **is** the parent — an exact partition, no approximation. That is what
+made b61 tractable: a monolithic W=23 terminal projected at ~10 h against a
+6 h cap became 23 checkpointed W=22 children, sharded, with a global stop on
+the first hit.
+
+**The domain of that trick is exact:**
+
+> **Decomposition applies iff `W > min W`, where `min W = T + Pc + 2`.**
+> At `W = min W` a base is **irreducible** — there is no smaller width to
+> partition into, and the children would be refused by the width guard.
+
+| base | `min W` | attempted at | decomposable? |
+|---|---:|---:|---|
+| b61 | 21 | 23 | ✅ 23 children at W=22 → the value was found |
+| b82 | **25** | **25** | ❌ **irreducible** |
+| b86 | **26** | **26** | ❌ **irreducible** |
+
+**This reframes b82 and b86.** They are not merely the slow ones — they are the
+ones where the campaign's most effective tool **provably does not apply**.
+Everything that rescued b61 (checkpointing, sharding, early stopping,
+resumability) is unavailable here by construction. They must run
+monolithically: all-or-nothing against a cap, with a timeout teaching only a
+lower bound.
+
+It also explains the shape of the whole day: every base the decomposition
+rescued satisfied `W > min W`, and the boundary was never visible because it
+was never reached.
+
+**How it surfaced.** Not by analysis — the **width guard** refused the child
+jobs, and the refusal made the constraint explicit. That is the third time a
+mechanism produced a *finding* rather than merely preventing an error, and the
+first time one said something about the **mathematics** rather than about the
+process.
+
+### Wide-regime attempts (b82, b86)
+
+| run | width | cap | outcome |
+|---|---:|---:|---|
+| b82 | 25 | 7200 s | `rc=124` — **INCONCLUSIVE-resource, `>7200 s`, no verdict** |
+| b82 | 25 | 36000 s | running |
+| b86 | 26 | — | queued, cap to be sized from b82's result |
+
+`>7200 s` is recorded as a **bound, not a runtime**. It is not a refutation and
+says nothing about base 82. For scale, the longest single job elsewhere in this
+campaign was b66 at 2507 s.
