@@ -153,11 +153,11 @@ refuse cleanly and await a bignum arithmetic epic).
 | 60 | `כ‎י‎ט‎ח‎ו‎ה‎ד‎ג‎א‎νμλιθηζδγβαYXWVTNB7Q19SI648RHEL23DGMJC` | 13.9s · **certified, ×2 methods** (engine + outer-B&B proof; post-churn-fix) | 23 | 11.5 |
 | 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νλκιηζεδγβαZYXWVUTSRQPONM56197GHKFCED834ILJ2AB` | **WEAK lower bound** (window-bounded at W=21; 1504s) | 22 | 11.3 |
 | 62 | `מ‎ל‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXUTSRQPONB9E8FCG15LID26A7H3J4MK` | **WEAK lower bound** (window-bounded at W=21; 4122s) | 23 | 12.6 |
-| 63 | `נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ה‎ד‎ג‎ב‎א‎νμλιθηζεδγβZYXWVUOGEHA8K5NC74PFDQJ6T31MB2L` | **verified lower bound** — maximality proof still running (see below) | — | — |
+| 63 | `נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ה‎ד‎ג‎ב‎א‎νμλιθηζεδγβZYXWVUOGEHA8K5NC74PFDQJ6T31MB2L` | **STRONG** (single-method exhaustive; complete maximality argument — see below) | — | — |
 | 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμκιηζεδγαZYXVUTSRQPONMHKADCLJ5F493EB1I2768GW` | **WEAK lower bound** (window-bounded at W=21; 3139s; mask ceiling) | 23 | 11.5 |
 
 
-### b63 — maximality proof covered by completed work (engine re-verify pending)
+### b63 — first-ever value, complete maximality argument (STRONG, single method)
 
 Base 63 is the live frontier run. The forced digit set is uniquely
 determined — {1..62} minus {9,18,27,28,36,45,54}, so |D| = 55 — and the
@@ -240,6 +240,23 @@ past counter 1256, ~1,200 terminals all lexicographically below the
 incumbent, are the direct evidence of its absence. Supplying that cutoff is
 exactly Phase 1 of `FASTER-PROVISIONAL-MAXIMUM-VALIDATION.md`; the engine
 confirmation is a *deliverable* of that work, not a gate available today.
+
+This was then confirmed empirically rather than left as inspection. Three
+merge runs against the SHA256-pinned checkpoints: all four files → **exit 5**
+(`has a record with prefix length 31 != expected terminalPrefixLen=32`);
+the three shards alone → **exit 4** (`24 of 1260 terminal-branch counter
+value(s) lack a definitive disposition`); shards plus the manifest filtered
+to its 56 depth-32 records → **exit 4**, identical (proving the sub-32
+records were the only ingestion blocker). The decisive detail: those 24
+uncovered counters are **1193, 1196, 1199 … 1250 — every one ≥ 1193**, some
+1,150 branches *past* the incumbent at counter 39. The merge failure lies
+entirely inside the provably-dominated region and is the ragged tail where
+one shard stopped before another; **not one uncovered counter is
+lex-relevant.** The engine's refusal is therefore real, is about the whole
+tree, and is *orthogonal* to the maximality argument — the clearest possible
+demonstration that whole-tree coverage is the wrong instrument for this
+question. (The engine's own setup line independently confirms `base=63
+W_terminal=22`, the 55−23=32 prefix length the argument rests on.)
 
 Accordingly this row stays at **single-method exhaustive** on the project's
 own evidence ladder. Under that ladder CERTIFIED additionally requires
