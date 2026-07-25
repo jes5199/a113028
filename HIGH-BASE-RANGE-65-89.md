@@ -133,7 +133,48 @@ definition. Nothing downstream changed (the primes' `T+Pc` moved 19→20, still
 inside 22), but a base at `T+Pc = 21` or `22` would have flipped
 reachability — see footguns §17.
 
-## Cost ledger
+## Cost ledger — corrected
+
+An earlier form of this section claimed *"everything extrapolated from
+observed behaviour has failed."* **That was too strong**, and b89's `r≤2` run
+falsified it in the useful direction:
+
+```
+predicted from the r<=1 measurement: 2,081 x 3.005 s = 6,254 s
+actual:                                                5,914 s
+error:                                                    5.5 %
+```
+
+The correct boundary is not *derived vs. observed* but **within-configuration
+vs. across-configuration**:
+
+> **Cost is unpredictable across configurations and predictable within one,
+> once measured.** Interpolation inside an identical configuration works
+> (5.5 % over 2,081 terminals, projected from a 65-terminal sample of the same
+> population); extrapolation across bases, widths or prefix classes has failed
+> every time (7/7).
+
+This *explains* the seven failures rather than merely tallying them — every
+one crossed a configuration boundary: b64 → other bases, one width → another,
+descending → non-descending. It also states exactly when a projection is
+legitimate: **same base, same width, same prefix class, measured on a sample
+of the very population being projected over.**
+
+### A second correction: prefix counts are upper bounds, not counts
+
+`C(prefixLen, k)` is the number of *candidate* prefixes at release layer `k`.
+The number actually enumerated is those that pass **feasibility**, which
+equals `C(P,k)` only where the filter is vacuous (`L_nil = 1`, i.e. the prime
+bases). Where the filter bites it can be dramatically smaller:
+
+> **b81 `r≤1`: 2 feasible prefixes, not the 56 that `C(56,1)` predicts.**
+
+b81 has `r0 = 0` — its descending prefix is infeasible — and the same
+constraint prunes its `r=1` layer to almost nothing. So release-layer cost
+estimates built on `C(P,k)` are **upper bounds**, and are loosest exactly on
+the bases where the filter is strongest.
+
+## Cost ledger (original enumeration)
 
 Eight quantities **derivable from the digit set** have held without exception:
 forced sets, the b64 obstruction, `r0`, `L_nil`/`T`, prefix counts `C(P,k)`,
