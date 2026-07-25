@@ -1055,4 +1055,4 @@ P=12, lifts=4
 [bucket-plan] decision=ADMIT
 [bucket-plan] B=61 a=21 NY=5 K=3 Y=2441880 Q=226981 projectedPeak=0.22GiB availableForIndex=2.61GiB
 [bucket-plan] decision=ADMIT
-[certset] base=61 REFUTED at the heuristic prefix (wall=1387.725s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+[certset] base=61 REFUTED at the heuristic prefix (wall=1415.995s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.

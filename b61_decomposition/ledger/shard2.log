@@ -1,3 +1,7 @@
 child3 rc=0 16:31:29 :: REFUTED at the heuristic prefix (wall=1639.988s) 
 child6 rc=0 16:55:41 :: REFUTED at the heuristic prefix (wall=1452.132s) 
 child9 rc=0 17:20:10 :: REFUTED at the heuristic prefix (wall=1468.852s) 
+child12 rc=0 17:43:18 :: REFUTED at the heuristic prefix (wall=1387.725s) 
+child15 rc=0 18:06:54 :: REFUTED at the heuristic prefix (wall=1415.995s) 
+child18 rc=0 18:29:31 :: REFUTED at the heuristic prefix (wall=1357.400s) 
+shard2 stopping: another child found a completion

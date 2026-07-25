@@ -1,3 +1,7 @@
 child1 rc=0 16:31:24 :: REFUTED at the heuristic prefix (wall=1635.249s) 
 child4 rc=0 16:55:39 :: REFUTED at the heuristic prefix (wall=1454.086s) 
 child7 rc=0 17:20:10 :: REFUTED at the heuristic prefix (wall=1470.980s) 
+child10 rc=0 17:43:20 :: REFUTED at the heuristic prefix (wall=1390.641s) 
+child13 rc=0 18:06:59 :: REFUTED at the heuristic prefix (wall=1418.905s) 
+child16 rc=0 18:27:44 :: FOUND: winningCandidate=3 survivors=1 (verified 1 OK / 0 FAILED) wall=1245.149s maximum value (106 digits): 2159432391576551378277658181546813434552677183954783130085487155062653805766432381530957181202633703075200 
+shard0 stopping: another child found a completion

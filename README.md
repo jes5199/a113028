@@ -173,7 +173,7 @@ epic).
 | 58 | `ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVURQPONLCKADM763I9JFB85124HEG` | 236s · **certified, ×2 methods** (engine + outer-B&B proof; 8× via planner calibration) | 22 | 11.3 |
 | 59 | `י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUSRQPOM1G76E9AB43I8KLNJ2HDF5C` | **STRONG** — |D|=57 (forced set), maximality: zero lex-greater prefixes | — | — |
 | 60 | `כ‎י‎ט‎ח‎ו‎ה‎ד‎ג‎א‎νμλιθηζδγβαYXWVTNB7Q19SI648RHEL23DGMJC` | 13.9s · **certified, ×2 methods** (engine + outer-B&B proof; post-churn-fix) | 23 | 11.5 |
-| 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νλκιηζεδγβαZYXWVUTSRQPONM56197GHKFCED834ILJ2AB` | **WEAK lower bound** (window-bounded at W=21; 1504s) | 22 | 11.3 |
+| 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVTSRQP83BENAICGJ21OLHD64F7M59K` | **verified lower bound; max within the W=23 window** — |D|=59 (forced set) | — | — |
 | 62 | `מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWTSRQPOE57NBD4J6GHI9LM38CK21FA` | **STRONG** — |D|=59 (forced set), maximality: zero lex-greater prefixes | — | — |
 | 63 | `נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ה‎ד‎ג‎ב‎א‎νμλιθηζεδγβZYXWVUOGEHA8K5NC74PFDQJ6T31MB2L` | **STRONG** (single-method exhaustive; complete maximality argument — see below) | — | — |
 | 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXVUTSRQPNHO6E72IM4BC83LAD1F9GJK5W` | **STRONG** — |D|=63 (full alphabet), maximality by arithmetic obstruction (see below) | — | — |
@@ -295,6 +295,50 @@ Note b63 sits strictly below b64 by construction: 55 base-63 digits cap it
 at 99 decimal digits, while b64 (which needs no forced drops, since no digit
 ≤ 63 is divisible by 2⁶) keeps 60 digits and already has a valid 109-digit
 completion.
+
+### b61 — the discovery-side base, and a decomposition that found it
+
+**Value (106 decimal digits, 59 base-61 digits; forced set = `{1,…,60}` minus
+`{30}`):**
+
+```
+2159432391576551378277658181546813434552677183954783130085487155062653805766432381530957181202633703075200
+```
+
+Supersedes the previous `|D|=58`, 104-digit WEAK value: **more digits, hence
+strictly larger.**
+
+**Why b61 resisted every technique that worked on the others.** Its previous
+incumbent used **58** digits while the forced set has **59**. Every 59-digit
+base-61 number exceeds every 58-digit one, so **no lex cutoff could fire at
+all** — the incumbent was one digit too short to prune anything. b61 was never
+"harder"; it was still on the **discovery** side of the pipeline while b54,
+b59, b62 and b64 had crossed to the proof side. Restoring the two missing
+digits multiplies the effective modulus by exactly `43 × 47 = 2021`, and the
+found value satisfies that larger modulus: `lcm(digits) = 9690712164777231700912800`,
+the forced 59-set's `L_eff`.
+
+**How it was found.** A single W=23 terminal was projected to take ~10 h
+against a 6 h cap — likely to burn its budget and return nothing. Instead it
+was **decomposed exactly**: fix the descending top-35 prefix, let position 36
+range over the 24 remaining digits, and each child becomes an independent
+W=22 terminal whose union is precisely the parent. 23 children (the 24th being
+an already-refuted terminal), checkpointed, sharded three ways, stopping
+globally on the first hit. **Child 16 hit at 1245 s**, after 15 refutations.
+
+**Maximality within the window comes for free from the ordering.** Children ran
+in strictly descending position-36 order, so the hit at `pos36 = 8` is
+preceded by refutations at **24, 23, …, 9 — contiguous, no gaps**. The top-35
+prefix is the lex-greatest 35-prefix available, so nothing inside the W=23
+terminal beats this value and the five unrun children are all lex-smaller.
+Coverage table: [`b61_decomposition/POS36_COVERAGE.md`](b61_decomposition/POS36_COVERAGE.md).
+
+> **Scope, stated precisely.** Each child's refutation exhausts only *that
+> prefix's window*, and the children partition the **W=23 terminal**, not the
+> whole arrangement space. Established: **a(61) ≥ this value, and it is the
+> maximum within the W=23 window.** Full maximality remains open — unlike
+> b54/b59/b62, whose values sit on the lex-maximal prefix and are therefore
+> STRONG.
 
 ### b62 — a(62)
 
