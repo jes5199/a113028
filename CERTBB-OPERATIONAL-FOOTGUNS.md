@@ -121,3 +121,44 @@ executed.
 
 **Always key manifest records on the exact prefix, never on the counter.**
 A cross-run union keyed by counter silently compares different branches.
+
+## 7. Design rule: an optimiser's failure must cost performance, never capability
+
+Whenever a *heuristic* component — a planner, a cost model, a cache, a
+precomputed index — sits in front of an exhaustive search, its failure path
+must fall back to the thing that always works. If the fallback is instead
+"give up on this branch", an optimisation has been silently converted into a
+capability limit, and a proof that used to complete now doesn't.
+
+**Worked example (2026-07-25, caught pre-commit by an A/B).** Phase 3 routed
+outer-proof terminals through the calibrated bucket planner instead of the
+hardcoded `NX=2 / K=3` split. `planBucket` declines whenever
+`enumeratePeeledConfigs` yields no config, which includes the case where the
+admissible-suffix-tuple DP itself declines (`suffixMult == UINT64_MAX`) — and
+that happens on perfectly ordinary b56 terminals. The first implementation
+mapped "planner declined" to a terminal `DECLINED`:
+
+```
+b56 legacy : nodesVisited=52 found=1 refuted=25 pruned=25 declined=0   CERTIFIED
+b56 planner: nodesVisited=52 found=1 refuted=0  pruned=25 declined=25  INCOMPLETE
+```
+
+25 branches the legacy split **refutes outright** became 25 unfinished ones,
+and b56 dropped from CERTIFIED to INCOMPLETE. Nothing was faster; the run
+took the same 304s. The fix is a fallback to the legacy split, so the planner
+path can never do *less* work than the engine it replaced — only the same or
+better.
+
+**Why this surfaced as a regression instead of a corrupted proof.** Because
+`RESOURCE_DECLINED` is never folded into `EXACT_TERMINAL_REFUTED`, the run
+reported an honest `INCOMPLETE` with its incumbent as a lower bound rather
+than a confident, wrong `CERTIFIED`. Had the two dispositions been conflated
+— the single most tempting simplification in this codebase — the same bug
+would have produced a **false certification** of a base whose branches were
+never actually searched, and no output would have looked wrong.
+
+That is the entire argument for the never-conflate rule, demonstrated on live
+code: it does not prevent bugs, it converts invisible ones into visible ones.
+Keep it, and keep A/B-ing any change to a search path against the engine it
+replaces — the regression was invisible in every aggregate except the
+disposition mix.

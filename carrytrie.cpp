@@ -5524,24 +5524,104 @@ static TerminalOutcomeBB runExactTerminalBB(const ConstantsGen &c, const std::ve
                         "(obligation I2 violated)\n", pool.size(), W + 1);
         exit(1);
     }
-    // Same chooseWY derivation as runCert (Sec3.2: "the required
-    // architectural change is to call it with the prefix fixed by the
-    // outer recursion" -- NX/NY selection itself is unchanged).
-    int NX = 2;
-    int NY = W - c.T - c.Pc - NX;
-    if (NY < 1) { NX = 1; NY = W - c.T - c.Pc - NX; }
-    if (NY < 1) { NX = 0; NY = W - c.T - c.Pc - NX; }
-    if (NX + NY < 2) {
-        out.disposition = TerminalOutcomeBB::DECLINED;
-        out.declineReason = "NX+NY<2 (CERTPOS/W_terminal window starved for this D's T+Pc)";
-        return out;
+    // PHASE 3 (FASTER-PROVISIONAL-MAXIMUM-VALIDATION.md Sec5): the split is
+    // chosen by the calibrated planner, not hardcoded.
+    //
+    // SOUNDNESS CLASS: ORDER/PLAN ONLY -- soundness-neutral. (NX,NY,K) is a
+    // work-partition knob; runWrongTurnSearch is exhaustive over the ENTIRE
+    // remaining pool for any admissible split (see its header comment), so a
+    // different split changes cost and nothing else. No pruning decision, no
+    // exhaustiveness claim, and no disposition depends on it.
+    //
+    // The planner's peeled enumeration already carries EXACTLY this
+    // terminal's window invariant -- enumeratePeeledConfigs uses
+    // W = certPos()-T-Pc with NY = W-NX, i.e. NX+NY = certPos()-T-Pc, which
+    // is the identity the legacy code computed by hand. So every config it
+    // returns is admissible here; no extra constraint is needed.
+    //
+    // Full-modulus is deliberately NOT offered: it needs its own constants
+    // and its own prefix/pool derivation (runCertFM's cFM/prefixF/poolF),
+    // which the outer recursion does not fix. Passing cFM=nullptr restricts
+    // the planner to the peeled family -- the same family the legacy path
+    // always used, so this cannot silently switch engines.
+    int NX, NY, K;
+    const char *planSrc;
+    bool legacyPlan = false;
+    { const char *e = getenv("CERTBB_TERMINAL_PLAN"); legacyPlan = (e && strcmp(e, "legacy") == 0); }
+
+    if (legacyPlan) {
+        // Legacy hardcoded split, retained ONLY as an A/B baseline so the
+        // Phase 3 speedup can be measured rather than asserted.
+        NX = 2;
+        NY = W - c.T - c.Pc - NX;
+        if (NY < 1) { NX = 1; NY = W - c.T - c.Pc - NX; }
+        if (NY < 1) { NX = 0; NY = W - c.T - c.Pc - NX; }
+        K = 3;
+        planSrc = "legacy(NX=2,K=3)";
+        if (NX + NY < 2) {
+            out.disposition = TerminalOutcomeBB::DECLINED;
+            out.declineReason = "NX+NY<2 (CERTPOS/W_terminal window starved for this D's T+Pc)";
+            return out;
+        }
+    } else {
+        // suffixMult: exact admissible-suffix-tuple count, derived exactly as
+        // runCertAuto does before its own planBucket call.
+        uint64_t suffixMult = 0;
+        {
+            std::vector<int> sortedPool = pool;
+            std::sort(sortedPool.begin(), sortedPool.end(), std::greater<int>());
+            for (int repCandidate : sortedPool) {
+                std::vector<int> restPool;
+                for (int d : pool) if (d != repCandidate) restPool.push_back(d);
+                uint64_t cnt = countAdmissibleSuffixTuplesDP(restPool, c.T, c.B, c.Lnil);
+                if (cnt == UINT64_MAX) { suffixMult = UINT64_MAX; break; } // DP declined; stop guessing
+                if (cnt > 0) { suffixMult = cnt; break; }
+            }
+        }
+        PlanResult plan = planBucket(c.B, c.T, c.Pc, c.lifts, /*P_full=*/0, suffixMult, rssBudgetKB,
+                                      &c, /*cFM=*/nullptr);
+        if (plan.admitted) {
+            NX = plan.chosen.NX; NY = plan.chosen.NY; K = plan.chosen.K;
+            planSrc = "planner";
+        } else {
+            // LEGACY FALLBACK -- NOT a decline.
+            //
+            // Caught by the b56 A/B before this shipped: planBucket declines
+            // whenever enumeratePeeledConfigs yields nothing, which includes
+            // the case where the admissible-suffix-tuple DP itself declines
+            // (suffixMult == UINT64_MAX) -- and that happens on ordinary b56
+            // terminals. Treating a planner decline as a terminal DECLINE
+            // turned 25 branches that the legacy split REFUTES outright into
+            // 25 unfinished ones: b56 went CERTIFIED -> INCOMPLETE. The proof
+            // stayed SOUND (declines are never folded into refutations, so it
+            // honestly reported INCOMPLETE rather than a false CERTIFIED) but
+            // it was a plain capability regression.
+            //
+            // The planner is an OPTIMISATION, so its failure must cost
+            // performance, never capability. Fall back to the split the
+            // hardcoded path always used: this route can therefore never do
+            // less work than the legacy engine, only the same or better.
+            NX = 2;
+            NY = W - c.T - c.Pc - NX;
+            if (NY < 1) { NX = 1; NY = W - c.T - c.Pc - NX; }
+            if (NY < 1) { NX = 0; NY = W - c.T - c.Pc - NX; }
+            K = 3;
+            planSrc = "legacy-fallback(planner declined)";
+        }
+        if (NX + NY < 2) {
+            out.disposition = TerminalOutcomeBB::DECLINED;
+            out.declineReason = "NX+NY<2 (CERTPOS/W_terminal window starved for this D's T+Pc)";
+            return out;
+        }
     }
     if (std::chrono::steady_clock::now() >= deadline) {
         out.disposition = TerminalOutcomeBB::DECLINED;
         out.declineReason = "deadline already reached before terminal started";
         return out;
     }
-    AttemptResult ar = runWrongTurnSearch(c, prefix, pool, NX, NY, 3, rssBudgetKB,
+    fprintf(stderr, "[certbb-terminal] plan=%s NX=%d NY=%d K=%d (W_terminal=%d T=%d Pc=%d)\n",
+            planSrc, NX, NY, K, W, c.T, c.Pc);
+    AttemptResult ar = runWrongTurnSearch(c, prefix, pool, NX, NY, K, rssBudgetKB,
                                            /*useCurrentRssForAvailable=*/true, deadline);
     out.ar = ar;
     if (ar.timedOut) {
