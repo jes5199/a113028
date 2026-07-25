@@ -152,7 +152,7 @@ refuse cleanly and await a bignum arithmetic epic).
 | 59 | `י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUSRQPOM1G76E9AB43I8KLNJ2HDF5C` | **STRONG** — |D|=57 (forced set), maximality: zero lex-greater prefixes | — | — |
 | 60 | `כ‎י‎ט‎ח‎ו‎ה‎ד‎ג‎א‎νμλιθηζδγβαYXWVTNB7Q19SI648RHEL23DGMJC` | 13.9s · **certified, ×2 methods** (engine + outer-B&B proof; post-churn-fix) | 23 | 11.5 |
 | 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νλκιηζεδγβαZYXWVUTSRQPONM56197GHKFCED834ILJ2AB` | **WEAK lower bound** (window-bounded at W=21; 1504s) | 22 | 11.3 |
-| 62 | `מ‎ל‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXUTSRQPONB9E8FCG15LID26A7H3J4MK` | **WEAK lower bound** (window-bounded at W=21; 4122s) | 23 | 12.6 |
+| 62 | `מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWTSRQPOE57NBD4J6GHI9LM38CK21FA` | **STRONG** — |D|=59 (forced set), maximality: zero lex-greater prefixes | — | — |
 | 63 | `נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ה‎ד‎ג‎ב‎א‎νμλιθηζεδγβZYXWVUOGEHA8K5NC74PFDQJ6T31MB2L` | **STRONG** (single-method exhaustive; complete maximality argument — see below) | — | — |
 | 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXVUTSRQPNHO6E72IM4BC83LAD1F9GJK5W` | **STRONG** — |D|=63 (full alphabet), maximality by arithmetic obstruction (see below) | — | — |
 
@@ -273,6 +273,29 @@ Note b63 sits strictly below b64 by construction: 55 base-63 digits cap it
 at 99 decimal digits, while b64 (which needs no forced drops, since no digit
 ≤ 63 is divisible by 2⁶) keeps 60 digits and already has a valid 109-digit
 completion.
+
+### b62 — a(62)
+
+**Value (106 decimal digits, 59 base-62 digits; forced set = `{1,…,61}`
+minus `{30,31}`):**
+
+```
+5636285065773651499796945616994676443519614972212770252490392293226928630689747617736444403004286825548000
+```
+
+Supersedes the previous `|D|=58`, 104-digit WEAK value on both counts. Found
+by `certset` at **W=22 in 1844s**, the cheapest rung.
+
+Maximality is the same structural argument as b54 and b59: the terminal
+prefix length is `59 − 23 = 36`, the value's first 36 digits are exactly the
+**descending top-36** of the forced set, so there are **zero lex-greater
+prefixes** (0 sub-regions, confirmed), the window of 23 covers the entire
+remainder, and only the equal-prefix branch exists. **STRONG**, resting on the
+single `runWrongTurnSearch` exhaustiveness dependency.
+
+This was the **third consecutive out-of-sample confirmation** of the `r0`
+prediction — see the b59 section for what that prediction is and why it holds
+by construction rather than by observation.
 
 ### b59 — a(59), and the first *prediction* this framework made and cashed
 
