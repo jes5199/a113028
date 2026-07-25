@@ -288,6 +288,26 @@ about its output — read `/proc/<pid>/cmdline` or `ps -o args`, not your
 memory of why you started it. Same family as §10's stale measurement: **the
 thing you believe is running is not always the thing that is running.**
 
+### The mirror case: a job that finishes quietly
+
+The same drift has a second form, and watching for one blinds you to the
+other. On 2026-07-25 a `certset` run at b61 was under a 3600s cap and being
+watched *for a timeout*. It exited on its own at **1415s** — a real verdict,
+with 36 minutes of budget unused — and the watch, armed for the wrong event,
+said nothing. The result sat unread until someone checked whether the process
+was still *there* rather than whether it had *reported*.
+
+- Watching for a **hang** misses a job that **finished**.
+- Watching for a **finish** misses a job that **died**.
+
+So a completion watch must test the process's existence *and* the log's
+content, and treat "process gone, no verdict written" as its own outcome —
+that is a crash, not a silence. The general form covers both this and §11's
+relabelling case:
+
+> **Your model of the box drifts from the box.** Re-read the actual state —
+> argv, `/proc`, the log — rather than the state you are expecting.
+
 ## 12. b64 is a systematic outlier: distrust anything measured there
 
 Four separate quantities measured on b64 failed to transfer to other bases,
