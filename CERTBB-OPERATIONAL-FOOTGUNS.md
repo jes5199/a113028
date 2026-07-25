@@ -7,6 +7,11 @@ launching a long proof run.
 
 ---
 
+> **Looking for the general lessons?** They live in **[LESSONS.md](LESSONS.md)**
+> — the ones that would still be true on a different project. This file keeps
+> the operational detail: flags, exit codes, file paths, and the specific
+> engine behaviour behind each rule.
+
 ## Read this first: three ways to manufacture agreement that is not evidence
 
 The operational entries below are specific to this engine. These three are

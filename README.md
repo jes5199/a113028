@@ -10,6 +10,12 @@ as weights B⁰..B^{|D|−1} so that lcm(D) divides the total, maximizing the
 value.* The subset turns out to be forced by elementary number theory; all
 the difficulty is in the arrangement.
 
+**Method notes:** [LESSONS.md](LESSONS.md) collects the general lessons from
+this work — what makes a confirmation real evidence, when a projection is
+legitimate, why resource outcomes and mathematical outcomes must never be
+merged. [CERTBB-OPERATIONAL-FOOTGUNS.md](CERTBB-OPERATIONAL-FOOTGUNS.md) keeps
+the engine-specific detail behind them.
+
 ## Digit alphabet
 
 Values below are written in the extended digit alphabet (digit values map to
