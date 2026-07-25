@@ -478,3 +478,45 @@ archaeology. But note the deeper lesson: the logging convention did not
 prevent the misdiagnosis — **the log already said COMPLETE and nobody read
 it.** Instrumentation only helps if absence triggers reading rather than
 inference.
+
+## 17. Independent verification must not share a premise with what it verifies
+
+Two people computing the same quantity and agreeing proves nothing if both
+computed it from the same understanding. That is not corroboration; it is the
+same computation run twice.
+
+**Worked example (2026-07-25).** A recon table reported `T = 0` for the bases
+with `L_nil = 1`, derived as *"minimal t ≥ 0 with `B^t ≡ 0 (mod L_nil)`"* —
+which is true as stated, since `1 % 1 == 0`. A second agent then
+*independently verified* the column and obtained `T = 0` as well.
+
+Both were wrong about the engine. `carrytrie.cpp` computes
+
+```cpp
+for (T = 1; T <= 12; T++) { p = (p * (u128)B) % c.Lnil; if (p == 0) { ... } }
+```
+
+The loop **starts at 1**, so the engine reports `T = 1`, which its own logs
+had been printing all along (`T=1 Pc=19`). The verification re-derived the
+definition from the same shared misunderstanding instead of reading
+`deriveConstantsGen` or the engine's output.
+
+**Why it mattered.** Nothing downstream broke — the primes shifted `T+Pc`
+from 19 to 20, still inside the reachability limit of 22. But reachability is
+precisely the claim where an error stops being about our tooling and becomes
+**a false statement about A113028**: a base at `T+Pc = 21` or `22` would have
+flipped classification, and an UNREACHABLE base misreported as REFUTED enters
+the record as mathematics.
+
+**The rule:** to verify a derived quantity, go to the **source of truth** —
+the implementation, or the artefact itself — not to your own restatement of
+how it is defined. Concretely, on this project:
+
+- verify values against the **decimal value**, re-deriving digits from it;
+- verify engine constants against **the engine's own output or its code**;
+- treat "I recomputed it and agree" as a *consistency* check, never an
+  independent one, unless the two paths provably differ.
+
+Every other check that day went back to a source — engine logs, decimal
+values, `ps` output. The one that skipped that step is the one that was
+wrong, and it was wrong *twice*, in agreement.
