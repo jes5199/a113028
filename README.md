@@ -154,7 +154,7 @@ refuse cleanly and await a bignum arithmetic epic).
 | 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νλκιηζεδγβαZYXWVUTSRQPONM56197GHKFCED834ILJ2AB` | **WEAK lower bound** (window-bounded at W=21; 1504s) | 22 | 11.3 |
 | 62 | `מ‎ל‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXUTSRQPONB9E8FCG15LID26A7H3J4MK` | **WEAK lower bound** (window-bounded at W=21; 4122s) | 23 | 12.6 |
 | 63 | `נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ה‎ד‎ג‎ב‎א‎νμλιθηζεδγβZYXWVUOGEHA8K5NC74PFDQJ6T31MB2L` | **STRONG** (single-method exhaustive; complete maximality argument — see below) | — | — |
-| 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμκιηζεδγαZYXVUTSRQPONMHKADCLJ5F493EB1I2768GW` | **WEAK lower bound** (window-bounded at W=21; 3139s; mask ceiling) | 23 | 11.5 |
+| 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXVUTSRQPNHO6E72IM4BC83LAD1F9GJK5W` | **STRONG** — |D|=63 (full alphabet), maximality by arithmetic obstruction (see below) | — | — |
 
 
 ### b63 — first-ever value, complete maximality argument (STRONG, single method)
@@ -273,6 +273,69 @@ Note b63 sits strictly below b64 by construction: 55 base-63 digits cap it
 at 99 decimal digits, while b64 (which needs no forced drops, since no digit
 ≤ 63 is divisible by 2⁶) keeps 60 digits and already has a valid 109-digit
 completion.
+
+### b64 — a(64) determined by a one-line arithmetic obstruction
+
+**Value (114 decimal digits, 63 base-64 digits — the entire alphabet
+`{1,…,63}`):**
+
+```
+615501230581118093011161624139305632631631099715005717665003460230260844588863956324726850814214663290418203804000
+```
+
+This supersedes the previous `|D|=60`, 109-digit WEAK value on both counts:
+more digits and numerically larger. Two independent completions were found —
+one by `certset` at W=24, one by `certdisc` at W=22 from a different prefix —
+and both pass all seven validity gates.
+
+**Why the forced set is the whole alphabet.** `64 = 2⁶`, and the largest power
+of two ≤ 63 is `32 = 2⁵`, so `64 ∤ lcm(1..63)` with **no drops at all**. The
+digit-sum condition holds outright: `1+⋯+63 = 2016 = 63 × 32 ≡ 0 (mod 63)`.
+
+**Why the value is maximal.** With `L = lcm(1..63)` we have `v₂(L) = 5`, so the
+nilpotent part is `L_nil = 2⁵ = 32` and `B¹ = 2⁶ ≡ 0 (mod 32)` — that is,
+**`T = 1`**. Every digit at position ≥ 1 therefore contributes `0 (mod 32)`, so
+
+> `32 | N` **iff** 32 divides the units digit — and **32 is the only digit in
+> `{1,…,63}` divisible by 32**. Hence *every* completion ends in the digit 32.
+
+The value above matches plain descending order for its first 31 positions,
+then places 31 where descending would place 32, exiling 32 to the final slot
+exactly as the obstruction demands. Any competitor falls into one of four
+cases: deviating before position 31 is lexicographically smaller (those
+positions are forced maximal, and all completions have 63 digits so digit-lex
+order *is* numeric order); deviating anywhere in positions 31–37 requires
+placing **32 inside the prefix**, which starves the units position and kills
+all seven lex-greater sub-regions at once; an equal prefix is settled by an
+exhaustive terminal search (`survivors=1`, verified, no resource decline); and
+any smaller digit set yields a shorter, smaller number.
+
+**Three of those four cases are checkable on paper.** Only the equal-prefix
+branch is engine-dependent, which is why the row is STRONG rather than
+CERTIFIED — a second independent method on that one branch is what is still
+missing. Full argument and controls: **[A64-MAXIMALITY.md](A64-MAXIMALITY.md)**.
+
+**Computational corroboration.** A census of the lex-greater region returned
+**0 feasible across 906,192 digit-subsets**, standing for 5.478 × 10⁸ ordered
+prefixes. That census is simply this obstruction evaluated mechanically.
+
+> ⚠️ **The census is a one-sided test.** `FEASIBLE = 0` is conclusive;
+> **`FEASIBLE > 0` says nothing** — feasibility is necessary, not sufficient.
+> Run above b63's engine-confirmed value it reports nonzero in most regions,
+> yet every one of those was refuted by exhaustive search. And at **b59/b61**
+> the base is prime, so `L_nil = 1` and there is no nilpotent constraint at
+> all: the census is **vacuous there by construction**.
+
+**The lens does not generalise.** `T = 1` requires `L_nil | B`, and b64 is the
+only base in range where that holds:
+
+| base | 54 | 56 | 58 | 59 | 60 | 61 | 62 | 63 | **64** |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `L_nil` | 288 | 196 | 32 | 1 | 864 | 1 | 32 | 147 | **32** |
+| `T` | 5 | 2 | 5 | 0 | 3 | 0 | 5 | 2 | **1** |
+
+Everywhere else `T ≥ 2`, so the constraint binds the last `T` digits jointly
+and forces no single digit. Bases 54, 59, 61 and 62 still require real search.
 
 ### Correction to the published a(46)
 
