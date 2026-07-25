@@ -1,0 +1,3 @@
+[certbb] base=63 resume-seeded incumbent from manifest: 919638671548642431083440200815272686323739054438990208528434484026726330816976573347252565881592800
+[certbb] base=63 DFS DONE: nodesVisited=117 found=0 refuted=0 pruned=32 unfinished(declined)=0 resume-skipped(refuted=81 found=1) terminalCounterMax=-1 wall=142.770s
+[certbb] base=63 CERTIFIED (zero unfinished branches)

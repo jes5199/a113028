@@ -6157,6 +6157,70 @@ static void runCertBB(int B, const std::vector<int> &drops, long rssBudgetKB, do
         ctx.pruneIncumbentSet = ctx.incumbentSet;
         fprintf(stderr, "[certbb] shard %lld/%lld: pruning incumbent FROZEN at %s\n", ctx.shardIdx, ctx.shardN,
                 ctx.pruneIncumbentSet ? decimalFromDigitsMSBfirstBB(B, ctx.pruneIncumbent).c_str() : "(none)");
+        // UNSEEDED-SHARD GUARD. Freezing at (none) is not a benign default:
+        // pruneIncumbentPtrBB then returns nullptr for the whole session, so
+        // EVERY bound-pruning test is skipped and the DFS grinds the entire
+        // arrangement space -- including every branch lexicographically below
+        // a survivor it finds later, because the freeze forbids that survivor
+        // from tightening the bound. This silently burned 17 CPU-hours on b63
+        // (2026-07-25): ~1,200 terminals executed past the incumbent's own
+        // branch, all of them provably dominated, with nothing in the output
+        // saying pruning was off. Refuse by default and say exactly why.
+        //
+        // The override exists because an unseeded shard run is *legitimate*
+        // for a base with no known completion at all -- you have to start
+        // somewhere. It must be a deliberate choice, not a silent default.
+        if (!ctx.pruneIncumbentSet) {
+            fprintf(stderr,
+                    "[certbb] ******************************************************************\n"
+                    "[certbb] base=%d SHARD %lld/%lld REFUSING TO START: pruning incumbent is (none).\n"
+                    "[certbb]   Shard mode freezes the pruning incumbent once, here, before the DFS.\n"
+                    "[certbb]   Frozen at (none) => bound-pruning is DISABLED FOR THE ENTIRE RUN, and\n"
+                    "[certbb]   no survivor this shard finds later may re-enable it (that is what the\n"
+                    "[certbb]   freeze means). The DFS would exhaustively grind branches that a known\n"
+                    "[certbb]   incumbent would prune in O(1).\n"
+                    "[certbb]   FIX: seed an incumbent first -- run a non-shard discovery/resume pass\n"
+                    "[certbb]   so the baseline manifest %s holds at least one\n"
+                    "[certbb]   EXACT_TERMINAL_FOUND record, then relaunch the shards with `resume`.\n"
+                    "[certbb]   NOTE: CERTBB_MANIFEST sets the OUTPUT path only -- resume READS the\n"
+                    "[certbb]   baseline path above, so pointing CERTBB_MANIFEST at a seeded file does\n"
+                    "[certbb]   NOT seed the incumbent.\n"
+                    "[certbb]   OVERRIDE (only when no completion is known for this base at all):\n"
+                    "[certbb]     CERTBB_ALLOW_UNSEEDED_SHARD=1\n"
+                    "[certbb] ******************************************************************\n",
+                    B, ctx.shardIdx, ctx.shardN, baselinePath);
+            const char *allow = getenv("CERTBB_ALLOW_UNSEEDED_SHARD");
+            if (!(allow && allow[0] && strcmp(allow, "0") != 0)) {
+                if (manifest) fclose(manifest);
+                exit(6);
+            }
+            fprintf(stderr, "[certbb] base=%d CERTBB_ALLOW_UNSEEDED_SHARD set -- proceeding with "
+                            "bound-pruning DISABLED for this entire run (expect full-space cost).\n", B);
+        }
+    }
+
+    // PROVENANCE HEADER. Records alone do not say what regime produced
+    // them, so a union of manifests silently assumes parameter
+    // compatibility that nobody checked. Stamp the run's identity into the
+    // output before the DFS writes anything: base, digit set, terminal
+    // width, shard split, and -- the field that matters most -- whether
+    // bound-pruning was actually active and against which incumbent. A
+    // manifest produced under CERTBB_ALLOW_UNSEEDED_SHARD has pruning OFF,
+    // which is invisible in its records.
+    //
+    // Deliberately carries NO "disposition" field, so every existing
+    // consumer (classifyManifestBB, runCertBBMerge) skips it on their
+    // first parse check -- old readers ignore it, new readers can check it.
+    if (manifest) {
+        const std::vector<int> *pinc = pruneIncumbentPtrBB(ctx);
+        fprintf(manifest, "{\"record\":\"run_header\",\"base\":%d,\"digitsD\":%zu,\"W_terminal\":%d,"
+                          "\"terminalPrefixLen\":%d,\"drops\":[", B, D.size(), W, (int)D.size() - (W + 1));
+        for (size_t i = 0; i < drops.size(); i++) fprintf(manifest, "%s%d", i ? "," : "", drops[i]);
+        fprintf(manifest, "],\"shardMode\":%s,\"shardIdx\":%lld,\"shardN\":%lld,\"pruningActive\":%s,"
+                          "\"pruneIncumbent\":\"%s\",\"resume\":%s}\n",
+                shardMode ? "true" : "false", shardIdx, shardN, pinc ? "true" : "false",
+                pinc ? decimalFromDigitsMSBfirstBB(B, *pinc).c_str() : "", resumeMode ? "true" : "false");
+        fflush(manifest);
     }
 
     bool finished = certBBProve(ctx, {}, D);

@@ -1,0 +1,9 @@
+[certbb] base=63 discovery seed: no immediate completion at the heuristic prefix (disposition=REFUTED) -- DFS proceeds unseeded (this is NOT a refutation)
+[certbb] shard 0/3: pruning incumbent FROZEN at (none)
+[certbb] ******************************************************************
+[certbb] base=63 SHARD 0/3 REFUSING TO START: pruning incumbent is (none).
+[certbb]   FIX: seed an incumbent first -- run a non-shard discovery/resume pass
+[certbb]   OVERRIDE (only when no completion is known for this base at all):
+[certbb]     CERTBB_ALLOW_UNSEEDED_SHARD=1
+[certbb] ******************************************************************
+EXIT=6
