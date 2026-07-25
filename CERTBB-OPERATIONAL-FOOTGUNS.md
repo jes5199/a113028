@@ -198,3 +198,32 @@ records / 161 MB. The same b64 run, bounded.
 **Note the interaction:** hitting this guard usually means footgun #1 —
 you are proving without an incumbent. Check `pruningActive` in the header
 before raising the floor.
+
+## 9. Never signal by pattern — resolve to exact PIDs and verify `comm` first
+
+`pkill -f <pattern>` and `pgrep`-driven kill loops match **any** command line
+containing the string, including the shell that is running the command
+itself, unrelated tooling, and — on this box — a live-money Erlang VM
+(`beam.smp`, pid 26593) that must never be touched.
+
+**The rule:** resolve the intended targets to explicit PIDs, read
+`/proc/<pid>/comm` for each, confirm it is what you expect, *then* signal —
+and re-verify the protected process is alive afterwards.
+
+```sh
+for p in 713397 713398 713399; do
+  c=$(cat /proc/$p/comm 2>/dev/null)
+  if [ "$c" = "carrytrie_cert." ]; then kill -TERM "$p"; else echo "REFUSING $p: comm='$c'"; fi
+done
+[ -d /proc/26593 ] && echo "protected process still alive"
+```
+
+Prefer `SIGTERM`: the manifests are append-only JSONL and a graceful stop
+flushes the in-flight line instead of truncating it mid-record.
+
+**How this was learned, cheaply.** Stopping the b63 shards and the runaway
+b64 prover both used the exact-PID + `comm`-check form above and were clean.
+A later `pkill -f "until ! pgrep"`, aimed at some dead waiter loops, matched
+the very shell issuing it and killed the session's own command (exit 144).
+Harmless that time. The same carelessness pointed at a busier pattern is how
+an unrelated production process gets killed by a maintenance command.
