@@ -1,0 +1,13 @@
+=== b82 W=24 cap=3600 drops={40,41} 14:30:55 ===
+[certset] base=82 DECLINED: NX+NY<2 (CERTPOS/W_terminal window starved for this D's T+Pc) (wall=4.438s)
+   rc=3 14:31:00
+=== b87 W=24 cap=3600 drops={29,42,58} 14:31:00 ===
+[certset] base=87 REFUTED at the heuristic prefix (wall=678.869s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+   rc=4 14:42:19
+=== b84 W=24 cap=3600 drops={7,14,21,28,35,36,42,49,56,63,70,77} 14:42:19 ===
+[certset] base=84 REFUTED at the heuristic prefix (wall=11.611s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+   rc=4 14:42:30
+=== b70 W=22 cap=7200 drops={7,14,21,28,30,35,42,49,56,63} 14:42:30 ===
+[certset] base=70 REFUTED at the heuristic prefix (wall=2318.039s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+   rc=4 15:21:08
+=== ROUND2 HALF 0 COMPLETE 15:21:08 ===

@@ -1,0 +1,21 @@
+b81 rc-recorded 15:21:09
+NO COMPLETION FOUND within BOTH bounds: maxReleases=1 AND W_terminal=22 (2 feasible prefixes, all refuted).
+b88 rc-recorded 15:22:16
+NO COMPLETION FOUND within BOTH bounds: maxReleases=1 AND W_terminal=22 (57 feasible prefixes, all refuted).
+b80 rc-recorded 15:22:17
+NO COMPLETION FOUND within BOTH bounds: maxReleases=1 AND W_terminal=22 (1 feasible prefixes, all refuted).
+b72 rc-recorded 15:24:36
+NO COMPLETION FOUND within BOTH bounds: maxReleases=1 AND W_terminal=22 (41 feasible prefixes, all refuted).
+b85 rc-recorded 15:26:33
+NO COMPLETION FOUND within BOTH bounds: maxReleases=1 AND W_terminal=22 (57 feasible prefixes, all refuted).
+b83 rc-recorded 15:29:25
+NO COMPLETION FOUND within BOTH bounds: maxReleases=1 AND W_terminal=22 (59 feasible prefixes, all refuted).
+b79 rc-recorded 15:33:26
+NO COMPLETION FOUND within BOTH bounds: maxReleases=1 AND W_terminal=22 (55 feasible prefixes, all refuted).
+b75 rc-recorded 15:39:08
+NO COMPLETION FOUND within BOTH bounds: maxReleases=1 AND W_terminal=22 (49 feasible prefixes, all refuted).
+b77 rc-recorded 15:47:02
+NO COMPLETION FOUND within BOTH bounds: maxReleases=1 AND W_terminal=22 (47 feasible prefixes, all refuted).
+b84 rc-recorded 15:47:03
+INCONCLUSIVE: 49 of 49 prefixes DECLINED (resource), so the search space was not fully covered even within its two bounds.
+=== R1 SWEEP COMPLETE 15:47:03 ===

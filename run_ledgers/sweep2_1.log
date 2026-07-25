@@ -1,0 +1,11 @@
+=== b74 W=24 cap=3600 drops={36,37} 14:30:55 ===
+   rc=124 15:30:55
+=== b86 W=24 cap=3600 drops={42,43} 15:30:55 ===
+[certset] base=86 FATAL: W_terminal=24 too small for T=6+Pc=18 -- widen CERTSET_W
+   rc=3 15:30:55
+=== b78 W=24 cap=3600 drops={13,26,36,39,52,65} 15:30:55 ===
+   rc=124 16:30:55
+=== b66 W=22 cap=7200 drops={11,22,30,33,44,55} 16:30:55 ===
+[certset] base=66 REFUTED at the heuristic prefix (wall=2506.991s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+   rc=4 17:12:42
+=== ROUND2 HALF 1 COMPLETE 17:12:42 ===

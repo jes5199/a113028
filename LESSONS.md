@@ -440,3 +440,38 @@ after a disappointing one.
 *All incidents recorded here occurred on 2026-07-25 unless stated otherwise.
 Entries are added when a lesson is learned, not when it is resolved — a
 [VIGILANCE] tag means the failure can still happen.*
+
+---
+
+## 14. A durability mechanism stored in ephemeral space is not a mechanism
+
+A ledger built so that results survive process death is worthless if the
+ledger itself lives somewhere that does not survive the session.
+
+**Incident.** A run ledger was built to make vanished processes visible, and
+it worked — it correctly answered questions that `ps`-based checks had gotten
+wrong twice. But it was written to session-scoped scratch space under `/tmp`,
+alongside every child log of a 10-CPU-hour computation. **The only durable
+record of ten hours of verdicts was what had been quoted in chat messages.**
+
+**What it cost.** Nothing — it was caught and copied into the repository
+before any session change. But the exposure lasted several hours, and it
+existed *because the work felt unfinished*: the campaign was in progress, so
+nothing had been written down yet. That is lesson 11 arriving in its sharpest
+form — **the artefact built specifically to prevent loss was itself the thing
+most at risk.**
+
+**The rule:** anything whose purpose is durability must be stored durably.
+Concretely: the ledger and the raw verdicts belong in version control, copied
+as they accumulate rather than at the end. Running jobs keep their working
+directory; the *record* does not have to live there.
+
+**A related near-miss worth recording.** During the same check, a completed
+base's verdict was reported as possibly lost — searched for by base label
+(`b66`) when the log recorded it as `base=66`. The result existed and was
+found immediately on a second look. **A search that fails to match is not
+evidence of absence** (lesson 7); before declaring a result lost, vary the
+query.
+
+**[MECHANISM]** — ledgers and verdict tables now live in the repository
+(`run_ledgers/`, `b61_decomposition/ledger/`).

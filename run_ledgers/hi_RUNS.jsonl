@@ -1,0 +1,20 @@
+{"ev":"START","tag":"r1_b81","pid":1047763,"t":"2026-07-25T15:21:09Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 81 40 3000000"}
+{"ev":"END","tag":"r1_b81","pid":1047763,"t":"2026-07-25T15:21:09Z","rc":4}
+{"ev":"START","tag":"r1_b88","pid":1047795,"t":"2026-07-25T15:21:09Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 88 11,22,33,40,44,55,66,77 3000000"}
+{"ev":"END","tag":"r1_b88","pid":1047795,"t":"2026-07-25T15:22:16Z","rc":4}
+{"ev":"START","tag":"r1_b80","pid":1048016,"t":"2026-07-25T15:22:16Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 80 16,32,48,64,77 3000000"}
+{"ev":"END","tag":"r1_b80","pid":1048016,"t":"2026-07-25T15:22:17Z","rc":4}
+{"ev":"START","tag":"r1_b72","pid":1048025,"t":"2026-07-25T15:22:17Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 72 9,18,27,32,36,45,54,63 3000000"}
+{"ev":"END","tag":"r1_b72","pid":1048025,"t":"2026-07-25T15:24:36Z","rc":4}
+{"ev":"START","tag":"r1_b85","pid":1048680,"t":"2026-07-25T15:24:36Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 85 17,34,40,51,68 3000000"}
+{"ev":"END","tag":"r1_b85","pid":1048680,"t":"2026-07-25T15:26:33Z","rc":4}
+{"ev":"START","tag":"r1_b83","pid":1048842,"t":"2026-07-25T15:26:33Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 83 41 3000000"}
+{"ev":"END","tag":"r1_b83","pid":1048842,"t":"2026-07-25T15:29:25Z","rc":4}
+{"ev":"START","tag":"r1_b79","pid":1049037,"t":"2026-07-25T15:29:25Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 79 39 3000000"}
+{"ev":"END","tag":"r1_b79","pid":1049037,"t":"2026-07-25T15:33:26Z","rc":4}
+{"ev":"START","tag":"r1_b75","pid":1049960,"t":"2026-07-25T15:33:26Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 75 25,36,50 3000000"}
+{"ev":"END","tag":"r1_b75","pid":1049960,"t":"2026-07-25T15:39:08Z","rc":4}
+{"ev":"START","tag":"r1_b77","pid":1050540,"t":"2026-07-25T15:39:08Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 77 11,22,33,35,44,55,66 3000000"}
+{"ev":"END","tag":"r1_b77","pid":1050540,"t":"2026-07-25T15:47:02Z","rc":4}
+{"ev":"START","tag":"r1_b84","pid":1051061,"t":"2026-07-25T15:47:02Z","cmd":"env CERTSET_W=22 CERTDISC_MAX_RELEASES=1 timeout 3600 nice -n 19 ./carrytrie_cert.new19 certdisc 84 7,14,21,28,35,36,42,49,56,63,70,77 3000000"}
+{"ev":"END","tag":"r1_b84","pid":1051061,"t":"2026-07-25T15:47:03Z","rc":3}

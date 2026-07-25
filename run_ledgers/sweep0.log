@@ -1,0 +1,30 @@
+=== b68 |D|=63 drops={17,32,34,51} 13:29:02 ===
+[certset] base=68 REFUTED at the heuristic prefix (wall=168.465s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+   rc=4
+=== b70 |D|=59 drops={7,14,21,28,30,35,42,49,56,63} 13:31:50 ===
+   rc=124
+=== b72 |D|=63 drops={9,18,27,32,36,45,54,63} 14:01:50 ===
+[certset] base=72 REFUTED at the heuristic prefix (wall=3.335s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+   rc=4
+=== b74 |D|=71 drops={36,37} 14:01:54 ===
+[certset] base=74 FATAL: W_terminal=22 too small for T=6+Pc=16 -- widen CERTSET_W
+   rc=3
+=== b76 |D|=71 drops={19,36,38,57} 14:01:54 ===
+[certset] base=76 REFUTED at the heuristic prefix (wall=26.747s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+   rc=4
+=== b78 |D|=71 drops={13,26,36,39,52,65} 14:02:21 ===
+[certset] base=78 DECLINED: NX+NY<2 (CERTPOS/W_terminal window starved for this D's T+Pc) (wall=2.989s)
+   rc=3
+=== b80 |D|=74 drops={16,32,48,64,77} 14:02:24 ===
+[certset] base=80 REFUTED at the heuristic prefix (wall=1.599s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+   rc=4
+=== b82 |D|=79 drops={40,41} 14:02:25 ===
+[certset] base=82 FATAL: W_terminal=22 too small for T=6+Pc=17 -- widen CERTSET_W
+   rc=3
+=== b85 |D|=79 drops={17,34,40,51,68} 14:02:25 ===
+[certset] base=85 REFUTED at the heuristic prefix (wall=3.290s) -- this does NOT prove D has no completion (only this one prefix's window is exhausted); use certbb for the full outer proof.
+   rc=4
+=== b87 |D|=83 drops={29,42,58} 14:02:28 ===
+[certset] base=87 FATAL: W_terminal=22 too small for T=4+Pc=18 -- widen CERTSET_W
+   rc=3
+=== SWEEP HALF 0 COMPLETE 14:02:28 ===

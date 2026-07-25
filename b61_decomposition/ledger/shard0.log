@@ -1,0 +1,3 @@
+child1 rc=0 16:31:24 :: REFUTED at the heuristic prefix (wall=1635.249s) 
+child4 rc=0 16:55:39 :: REFUTED at the heuristic prefix (wall=1454.086s) 
+child7 rc=0 17:20:10 :: REFUTED at the heuristic prefix (wall=1470.980s) 
