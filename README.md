@@ -153,9 +153,39 @@ refuse cleanly and await a bignum arithmetic epic).
 | 60 | `כ‎י‎ט‎ח‎ו‎ה‎ד‎ג‎א‎νμλιθηζδγβαYXWVTNB7Q19SI648RHEL23DGMJC` | 13.9s · **certified, ×2 methods** (engine + outer-B&B proof; post-churn-fix) | 23 | 11.5 |
 | 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νλκιηζεδγβαZYXWVUTSRQPONM56197GHKFCED834ILJ2AB` | **WEAK lower bound** (window-bounded at W=21; 1504s) | 22 | 11.3 |
 | 62 | `מ‎ל‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXUTSRQPONB9E8FCG15LID26A7H3J4MK` | **WEAK lower bound** (window-bounded at W=21; 4122s) | 23 | 12.6 |
-| 63 | *(no value yet — proof in progress)* | outer-B&B maximality proof STARTED on the forced 55-digit set: top 40 lex branches exhaustively refuted (permanent), full parallel grind running | — | — |
+| 63 | `נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ה‎ד‎ג‎ב‎א‎νμλιθηζεδγβZYXWVUOGEHA8K5NC74PFDQJ6T31MB2L` | **verified lower bound** — maximality proof still running (see below) | — | — |
 | 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμκιηζεδγαZYXVUTSRQPONMHKADCLJ5F493EB1I2768GW` | **WEAK lower bound** (window-bounded at W=21; 3139s; mask ceiling) | 23 | 11.5 |
 
+
+### b63 — verified lower bound, maximality proof in progress
+
+Base 63 is the live frontier run. The forced digit set is uniquely
+determined — {1..62} minus {9,18,27,28,36,45,54}, so |D| = 55 — and the
+outer-lexicographic branch-and-bound maximality proof is grinding the
+arrangement space on 3 parallel shards.
+
+Current best survivor (99 decimal digits):
+
+```
+919638671548642431083440200815272686323739054438990208528434484026726330816976573347252565881592800
+```
+
+Independently verified from scratch (not the engine's own report): base-63
+decode matches, 55 distinct nonzero digits all in 1..62, digit set is
+exactly the forced complement, lcm(digits) | N, 63 ∤ lcm (gcd = 21),
+N ≡ digitsum (1736) mod 62.
+
+**This is a lower bound, not yet a certified maximum.** As of 17h into the
+run: 1164 branches exhaustively refuted (permanent), 31 survivors banked,
+this being the largest. Because verified survivors exist, the forced 55-set
+cannot fully refute — b63 will therefore yield a first-ever *value*; what
+remains open is only whether this survivor is the maximum. The row is
+promoted to certified only when the remaining branches close.
+
+Note b63 sits strictly below b64 by construction: 55 base-63 digits cap it
+at 99 decimal digits, while b64 (which needs no forced drops, since no digit
+≤ 63 is divisible by 2⁶) keeps 60 digits and already has a valid 109-digit
+completion.
 
 ### Correction to the published a(46)
 
@@ -221,8 +251,9 @@ current one):
   from the b-file's 48 to 52 in one day;
 - bases 53–64: **values computed at graded confidence** up to the
   implementation's digit-mask ceiling — certified-clean (56, 58, 60),
-  strong (53, 55, 57), weak lower bounds (54, 59, 61, 62, 64), one open
-  (63). Hardness is not one wall but three separable modes: *discovery
+  strong (53, 55, 57), weak lower bounds (54, 59, 61, 62, 64), and 63 now a
+  verified lower bound with its maximality proof mid-flight (was: no value
+  at all). Hardness is not one wall but three separable modes: *discovery
   churn* (fixed by feasible-subset enumeration — b60 went from no-value at
   90 min to certified in 14s), *memory* (fixed by admission control), and
   *band depth* — the one real open problem: when the answer's divergence
