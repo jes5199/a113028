@@ -148,6 +148,27 @@ cheapness, filter strength, release-axis advantage, terminal cost,
 > a property of a base at all, but of the interaction between its constants
 > and the planner's chosen split — for which we have no theory.
 
+## Round 2 — bases re-run at their correct minimum widths
+
+The W=22 sweep could not address six bases. Round 2 re-runs them at the width
+each actually needs (derived, not guessed), and re-runs the two timeouts with
+a larger cap. Results so far:
+
+| base | width | outcome |
+|---|---:|---|
+| b87 | 24 | **REFUTED**, 678.869 s |
+| b84 | 24 | **REFUTED**, 11.611 s |
+| b82 | 24 | `DECLINED: NX+NY<2` — **UNREACHABLE confirmed by run**, as derived |
+| b74 | 24 | running |
+| b78 | 24 | queued |
+| b86 | 24 | queued — **derived UNREACHABLE** (`T+Pc = 24`); the run will only confirm it |
+| b66 | 22 (cap 7200 s) | queued |
+| b70 | 22 (cap 7200 s) | running |
+
+**Running tally across 65–89: 19 REFUTED, 0 completions, 1 UNREACHABLE
+confirmed + 1 derived, 4 still open.** Every refutation is of that base's
+*descending prefix at one width* and is bounded on both axes.
+
 ## Open, not concluded
 
 - Round 2 running: b74/b87 at W=24, b78/b84 at W≥23, b66/b70 at a 7200 s cap.
