@@ -83,12 +83,28 @@ a(56)/a(58)/a(60) end-to-end (upgrading all three to ×2-method certified);
 live in the unified production binary with resumable, shard-parallel proof
 manifests.
 
-**Bases 65–89** are open territory unlocked by the 128-bit mask widening
-(2026-07-24): fast passes at b65/b73/b81 all came back honest NO-VALUE
-(band-deep — the machinery is validated, the answers sit below fast-pass
-windows; the proof engine is the path). **Base 89 is the exact arithmetic
-ceiling** (lcm(1..88) fits in 128 bits; lcm(1..89) does not — bases ≥90
-refuse cleanly and await a bignum arithmetic epic).
+**Bases 65–89** were swept on 2026-07-25 — see
+**[HIGH-BASE-RANGE-65-89.md](HIGH-BASE-RANGE-65-89.md)** (in progress). Every
+base's forced set, `L_nil`, `T`, `Pc` and **minimum attemptable width** is now
+derived and tabulated. Two results so far:
+
+- **Reachability is a hard engine limit and is derivable:** `certset` needs
+  `T + Pc ≤ W − 2`, and `CERTSET_W` is validated only on [20,24], so
+  `T + Pc ≤ 22`. **b82 and b86 cannot be attempted at any supported width**;
+  the other 23 can, at the widths tabulated there.
+- **At W=22: 17 REFUTED and 2 INCONCLUSIVE out of the 19 bases attemptable at
+  that width** (the remaining six need `W ≥ 23` or are unreachable). **No
+  completions found yet.** These are refutations of each base's *descending
+  prefix at one width* — not statements that those bases have no answer.
+
+⚠️ Do **not** read this as "no answers above 64": two bases were never
+attemptable, four more require `W ≥ 23` and were not tested at W=22, and every
+negative is bounded on both the width and release axes. A second round at
+corrected widths is running.
+
+**Base 89 is the exact arithmetic ceiling** (lcm(1..88) fits in 128 bits;
+lcm(1..89) does not — bases ≥90 refuse cleanly and await a bignum arithmetic
+epic).
 
 | base | value (alphabet) | wall-clock | m\* | log₁₀ W |
 |-----:|------------------|-----------:|----:|--------:|
