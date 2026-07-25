@@ -201,3 +201,56 @@ instead of return-first, and stop on success instead of on the first failure.
 A refutation from this instrument is bounded on both axes. "No completion
 found within `maxReleases` swaps and a width-W window" is **never** "no
 completion exists". Record both bounds with every negative result.
+
+---
+
+## Two lessons kept as assets
+
+### The positive control is not optional
+
+`certdisc` was validated against **b60, whose answer we already know**, before
+being pointed at b64, where we don't. It found the published a(60) in 18.4 s
+at `releases=0`, char-exact.
+
+The generalisable reason, worth stating because it applies to every future
+search tool here: **a discovery instrument that never finds anything is
+indistinguishable from a broken one.** An empty result from an unvalidated
+searcher carries no information at all — "no completion within bounds" and
+"the enumerator silently returns nothing" produce identical output. Validating
+against a known answer is what separates those two, and it has to happen
+*before* the unknown run, not after a disappointing one.
+
+### `certdisc_evidence/b60_two_completions_fixture.jsonl` — a deliberate test fixture
+
+The two-shard b60 gate produced **two different valid completions** of the
+same forced set:
+
+| releases | value | note |
+|---|---|---|
+| 0 | `374096795553866901593729…6776816352` | the published a(60) |
+| 1 | `367754321000032809538022…2254553632` | valid, strictly smaller |
+
+Both pass all seven validity gates independently (decode matches, 47 distinct
+digits, digit set exactly the forced set, `lcm(digits) | N`, `60 ∤ lcm`,
+`N ≡ digitsum mod 59`).
+
+This is kept rather than discarded because it is the cleanest possible
+statement of the tool's contract:
+
+> **`certdisc` returns *a* completion, never *the* maximum.**
+> Its output is a **seed for `certbb`**, not an answer.
+
+A known-valid, known-**non**-maximal completion of an already-certified base
+exercises the "found something true but not the answer" path — precisely the
+path that breaks silently, because its output looks correct in isolation.
+Anyone tempted to read a `certdisc` hit as a value now has a concrete
+counterexample in the repo rather than a warning in a comment.
+
+### Known limitation: the cross-shard stop is approximate
+
+The `FOUND` sentinel is polled every 8 prefixes, so two shards can both hit
+before either notices — which is exactly what happened in the b60 gate. "First
+hit ends the run globally" is therefore *approximately* true, not
+instantaneous. The failure mode is benign for a satisfiability search: a
+little wasted work, and two valid completions instead of one. Recorded here so
+a log showing two `FOUND` records doesn't later read as a bug.
