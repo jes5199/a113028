@@ -360,6 +360,23 @@ the 0.44 % originally quoted from batch 1 alone.
 > **The tightness was measuring the stability of the environment, not the
 > precision of the measurement.**
 
+**And the explanation is partial, which is worth saying out loud.** Two later
+batches both ran with nothing else on the machine — nominally identical
+conditions — and came in **2.4 % apart** (1383.2 s vs 1416.7 s), each still
+internally tight (1.41 % and 0.26 %). The same signature as before, **tight
+within and looser between**, at a smaller scale.
+
+No mechanism is proposed for the residual, and inventing one would be worse
+than leaving it open. The honest statement is:
+
+> **Load during execution explained *most* of the variance, not all of it.
+> The between-group term shrank when the largest contributor was removed; it
+> did not disappear.**
+
+That distinction matters because *"X explains the variance"* is the kind of
+claim that gets falsified later, while *"X explained most of it, and a
+residual remains unattributed"* stays true and keeps the band honest.
+
 That is a natural experiment with a control, not an inference — better
 evidence than a designed test would have produced, and it arrived free from
 work already running.
