@@ -439,3 +439,42 @@ because no hit occurred to test it.
 **The rule:** when a predictor produces a run of apparent failures, check
 first that the failures are of the thing it predicted. A necessary-condition
 test cannot be refuted by absence.
+
+## 16. Absence is not evidence of failure — it is evidence of absence
+
+A process that is no longer running has either **finished** or **died**, and
+from the outside those look identical: no error, no marker, just a gap in
+`ps`. The failure is not in noticing the gap; it is in *naming* it before
+reading the log.
+
+**Worked example, and the irony is instructive.** On 2026-07-25 a two-way
+sweep driver over 21 bases was found missing from the process table with two
+cores idle. It was reported as *"the driver died and took the remaining work
+with it"* — and the accompanying suggestion was to add per-base logging
+because **"a dead driver looks exactly like a completed one from the
+outside."**
+
+The logs showed both halves had written `SWEEP HALF COMPLETE`. The driver had
+finished its entire list normally. The diagnosis was the mirror of the
+principle stated in the very same message: **a finished driver looks exactly
+like a dead one**, and the person naming the pattern fell for it while
+naming it. (It was the supervising agent, not the one running the sweep —
+recorded because the point is that seniority and correctness are unrelated
+here.)
+
+**The rule:** on discovering a process is gone, the first action is to read
+its output, not to classify it. "Not running" is a single observation
+consistent with at least three states — completed, crashed, killed — and the
+log distinguishes them in one command:
+
+```sh
+tail -5 <logfile>          # completed runs say so; crashed ones stop mid-work
+grep -c 'rc=' <logfile>    # per-item drivers: count items actually attempted
+```
+
+Have long-running drivers emit a per-item line (`item, verdict, wall, rc`)
+and a terminal `COMPLETE` marker, so the distinction survives without process
+archaeology. But note the deeper lesson: the logging convention did not
+prevent the misdiagnosis — **the log already said COMPLETE and nobody read
+it.** Instrumentation only helps if absence triggers reading rather than
+inference.
