@@ -223,6 +223,28 @@ bytes written: 2.2 GB is harmless with 200 GB free and an emergency with
 - If free space can't be determined the guard disables itself and says so,
   rather than blocking a legitimate run.
 
+**⚠️ THE GUARD'S DOMAIN — narrower than it sounds.** It watches the **certbb
+manifest writer** and nothing else. It does **not** cover:
+
+- `certset` / `certdisc` **stdout**, which on a wide-width run is the largest
+  writer on the box — a b82 W=25 run produced **585 MB in 2 hours** (9.8 M
+  `[bucket-plan]` planner traces around 9 lines of signal), and a second at
+  ~277 MB/h;
+- anything a driver script redirects;
+- anything written outside the engine.
+
+So *"the free-space guard protects the box from disk exhaustion"* is **false**.
+It protects one path, and on 2026-07-25 the biggest writer of the day was on a
+path it does not watch. An unstated domain is how a mechanism becomes a false
+reassurance — the same shape as crediting a predictor validated in one regime
+across all regimes (§19).
+
+**Mitigation for the uncovered path:** distil at write time. Raw planner traces
+are ~99.99 % `[bucket-plan]` lines; `grep -v '^\[bucket-plan\]'` reduces a
+585 MB log to under 2 KB with no loss of signal. A repo-level pre-commit hook
+(`.githooks/pre-commit`, 20 MB limit) now refuses raw traces at commit time,
+after two were committed in one day without their size being checked.
+
 Verified end-to-end on the run that caused the incident: startup passed at
 21.17 GiB against a 20.87 GiB floor, then aborted at 20.86 GiB after 634,880
 records / 161 MB. The same b64 run, bounded.
