@@ -5807,6 +5807,96 @@ static void runCertDisc(int B, const std::vector<int> &drops, long rssBudgetKB, 
         ? t0 + std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(capSeconds))
         : clock::time_point::max();
 
+    // REGION COUNT mode (CERTDISC_REGION_DESC=k): count FEASIBLE prefixes in
+    // the lex region "prefix begins with the descending top-k of D", which is
+    // exactly the region that can beat an incumbent whose first deviation
+    // from descending order falls at position k.
+    //
+    // The enabling observation, verified against countAdmissibleSuffixTuplesGen:
+    // FEASIBILITY DEPENDS ONLY ON THE POOL SET, NOT ON THE PREFIX ORDERING.
+    // The pool is D minus the prefix's digits as a SET, and the admissible-
+    // suffix-tuple DP consumes only that set. So instead of enumerating
+    // ordered prefixes -- 31*30*...*26 ~ 5.3e8 at W=24 -- we enumerate the
+    // C(|D|-k, P-k) SUBSETS that could fill the remaining prefix slots:
+    // C(31,6) = 736,281. Ordered feasible prefixes are then
+    // (feasible subsets) x (P-k)!.
+    //
+    // Runs ZERO terminals. It is a census of where a better incumbent could
+    // live, not a search for one.
+    if (const char *ek = getenv("CERTDISC_REGION_DESC")) {
+        int k = atoi(ek);
+        int P = (int)D.size() - (W + 1); // terminal prefix length
+        int rest = P - k;                 // prefix slots left to fill
+        int poolN = (int)D.size() - k;    // digits available for them
+        (void)0;
+        if (k < 0 || k > P || rest < 0 || rest > poolN) {
+            fprintf(stderr, "[certdisc] FATAL: CERTDISC_REGION_DESC=%d invalid (terminalPrefixLen=%d, |D|=%zu)\n",
+                    k, P, D.size());
+            exit(1);
+        }
+        std::vector<int> sortedDesc = D;
+        std::sort(sortedDesc.begin(), sortedDesc.end(), std::greater<int>());
+        std::vector<int> fixed(sortedDesc.begin(), sortedDesc.begin() + k);
+        // CERTDISC_REGION_PREFIX overrides the descending-top-k with an
+        // EXPLICIT fixed prefix. Needed because the lex-relevant region above
+        // an incumbent is not one descending block: for an incumbent whose
+        // first deviation is at position j0, EVERY position j >= j0 where a
+        // larger digit is still available contributes its own sub-region
+        // (incumbent's own digits up to j, then the larger digit, then
+        // anything). Counting only the j0 block would understate the region.
+        if (const char *ep = getenv("CERTDISC_REGION_PREFIX")) {
+            fixed.clear();
+            const char *q = ep;
+            while (*q) { fixed.push_back(atoi(q)); while (*q && *q != ',') q++; if (*q == ',') q++; }
+            std::vector<bool> seen(c.B, false);
+            for (int d : fixed) {
+                if (d < 1 || d >= c.B || seen[d]) { fprintf(stderr, "[certdisc] FATAL: REGION_PREFIX has a repeated/out-of-range digit %d\n", d); exit(1); }
+                seen[d] = true;
+                if (std::find(D.begin(), D.end(), d) == D.end()) { fprintf(stderr, "[certdisc] FATAL: REGION_PREFIX digit %d not in D\n", d); exit(1); }
+            }
+            k = (int)fixed.size();
+            rest = P - k; poolN = (int)D.size() - k;
+            if (rest < 0 || rest > poolN) { fprintf(stderr, "[certdisc] FATAL: REGION_PREFIX length %d incompatible with terminalPrefixLen=%d\n", k, P); exit(1); }
+        }
+        std::vector<int> avail;
+        { std::vector<bool> inFixed(c.B, false);
+          for (int d : fixed) inFixed[d] = true;
+          for (int d : sortedDesc) if (!inFixed[d]) avail.push_back(d); }
+        fprintf(stderr, "[certdisc] base=%d REGION COUNT: prefix fixed to descending top-%d, %d slot(s) to fill "
+                        "from %d digit(s) -> C(%d,%d) subsets to test (feasibility is order-invariant)\n",
+                B, k, rest, poolN, poolN, rest);
+        long long feasible = 0, tested = 0;
+        std::vector<int> comb(rest);
+        for (int i = 0; i < rest; i++) comb[i] = i;
+        bool done = (rest > poolN);
+        while (!done) {
+            std::vector<bool> inPrefix(c.B, false);
+            for (int d : fixed) inPrefix[d] = true;
+            for (int idx : comb) inPrefix[avail[idx]] = true;
+            std::vector<int> pool;
+            for (int d : c.D) if (!inPrefix[d]) pool.push_back(d);
+            tested++;
+            if (countAdmissibleSuffixTuplesGen(pool, c.T, c.B, c.Lnil) > 0) feasible++;
+            if (rest == 0) break;
+            int i = rest - 1;
+            while (i >= 0 && comb[i] == poolN - rest + i) i--;
+            if (i < 0) break;
+            comb[i]++;
+            for (int j = i + 1; j < rest; j++) comb[j] = comb[j-1] + 1;
+        }
+        long double orderings = 1.0L;
+        for (int i = 2; i <= rest; i++) orderings *= i;
+        double rw = std::chrono::duration<double>(clock::now() - t0).count();
+        fprintf(stderr, "[certdisc] base=%d REGION COUNT k=%d W=%d: tested=%lld subsets, FEASIBLE=%lld (%.4f%%), "
+                        "orderings each=%.0Lf -> feasible ordered prefixes ~%.4Lg (wall=%.3fs, ZERO terminals)\n",
+                B, k, W, tested, feasible, tested ? 100.0*(double)feasible/(double)tested : 0.0,
+                orderings, (long double)feasible * orderings, rw);
+        fprintf(stderr, "[certdisc] base=%d: this is a CENSUS of where a better incumbent could live. No terminal "
+                        "was run, so it says nothing about whether any of them completes.\n", B);
+        if (out) fclose(out);
+        return;
+    }
+
     // COUNT-ONLY mode: enumerate feasible prefixes WITHOUT running a single
     // terminal, so a run can be costed before it is launched. Budgeting by
     // intuition is what produced today's width mis-estimate (~9x documented,
