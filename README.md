@@ -10,6 +10,23 @@ as weights B⁰..B^{|D|−1} so that lcm(D) divides the total, maximizing the
 value.* The subset turns out to be forced by elementary number theory; all
 the difficulty is in the arrangement.
 
+## Setup after cloning
+
+```sh
+git config core.hooksPath .githooks
+```
+
+**Required, and not optional.** `core.hooksPath` is **per-clone configuration,
+not repository state** — the hook file is committed, but a fresh clone will not
+run it until this is set. Without it, `.githooks/pre-commit` silently does
+nothing.
+
+It refuses staged files ≥ 20 MB. The repository already contains one 97 MB raw
+trace log that was committed because nothing checked, and a 585 MB one was
+stopped only by GitHub's 100 MB limit *after* a push had already failed. Raw
+planner traces are ~99.99 % `[bucket-plan]` lines around a handful of signal
+lines: **distil at write time, commit the summary, never the trace.**
+
 **Method notes:** [LESSONS.md](LESSONS.md) collects the general lessons from
 this work — what makes a confirmation real evidence, when a projection is
 legitimate, why resource outcomes and mathematical outcomes must never be

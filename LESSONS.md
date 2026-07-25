@@ -526,6 +526,39 @@ The practical test is the same one that exposes the three failures, asked in
 the positive direction: *what would have had to be true for these two results
 to differ — and was that possible?*
 
+## 13c. State a mechanism's domain, or it becomes a false reassurance
+
+A guard is trusted for what its *name* suggests, not for what it *covers*. If
+the gap between those is never written down, the mechanism stops being
+protection and becomes a reason not to look.
+
+**Three instances, one day, escalating in subtlety:**
+
+1. **A free-space guard** was built after an unbounded proof filled 2.2 GB. It
+   watches one writer — the proof manifest. It does **not** watch the search
+   binary's stdout, which the same day produced **585 MB in two hours**. The
+   sentence *"the guard protects the box from disk exhaustion"* was false, and
+   the largest writer of the day sat on the path it does not watch.
+2. **A predictor** confirmed 3/3 was credited generally, when all three
+   confirmations came from one regime (§4).
+3. **A pre-commit hook** was built, committed, gated and demonstrated —
+   and its activation lives in `core.hooksPath`, which is **per-clone
+   configuration, not repository state.** The file ships; the enforcement does
+   not. Its real domain was *"this working copy, until someone re-clones"*
+   while its description was *"the repo refuses large files."*
+
+The third is the sharpest because the mechanism was correct, tested, and
+committed — and would still have run **nowhere but one machine**. It was caught
+one commit after the boundary-stating lesson was itself written down.
+
+> **Write the domain next to the mechanism.** "Protects X" invites the reader
+> to assume it protects Y. State what it does *not* cover, and state what must
+> be true for it to be active at all.
+
+**[MECHANISM]** — for the hook specifically: the activation step is now in the
+README's setup section, so the gap is closed by documentation rather than by
+memory.
+
 ## 14. A durability mechanism stored in ephemeral space is not a mechanism
 
 A ledger built so that results survive process death is worthless if the
