@@ -520,3 +520,40 @@ how it is defined. Concretely, on this project:
 Every other check that day went back to a source — engine logs, decimal
 values, `ps` output. The one that skipped that step is the one that was
 wrong, and it was wrong *twice*, in agreement.
+
+## 18. The results most at risk of being lost are the ones that feel unfinished
+
+There is a backwards instinct in how work reaches disk: **a finished finding
+gets written down immediately because it feels like a conclusion, while an
+in-flight campaign is deferred because it feels like progress.** That is
+exactly inverted from the actual risk.
+
+A finished finding is the *safe* one — it is short, it is understood, and it
+could be reconstructed from memory in minutes. An in-flight campaign is what
+dies with the session: dozens of measurements, a derived limit, a
+classification table, wall-clocks that exist nowhere else.
+
+**Worked example (2026-07-25).** Over one afternoon, seven footguns entries
+reached the repository within minutes of being identified. Meanwhile a
+25-base classification, a derived engine-reachability limit, and 17 verdicts
+with their wall-clocks sat only in a scratch directory and a conversation for
+several hours — until someone outside the work asked whether the repo was up
+to date. Three processes had exited silently that same day; the session was
+demonstrably no more durable than a job, and the entry warning about exactly
+that (§16) had been written an hour earlier.
+
+**The cause is a conflation worth separating.** The deferral came from
+waiting to know what the results *meant* before recording what they *were*.
+Those are independent acts:
+
+> **Write facts continuously. Withhold judgement until the evidence is in.**
+
+An in-progress document with a clear `STATUS: IN PROGRESS` marker, facts on
+the page and conclusions explicitly absent, is strictly better than nothing —
+and it costs nothing later, because the judgement gets appended when it
+arrives.
+
+**Practical trigger:** whenever a campaign produces a *table* — of bases,
+configurations, timings, anything enumerated — that table is already the
+durable artefact. Commit it then, marked in progress, before knowing what it
+shows.
