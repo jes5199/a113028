@@ -128,3 +128,76 @@ Note the ~9×/width cost growth: W=24 is the practical ceiling.
    scoped by what step 2 reveals.
 
 **Nothing is relaunched at b64 until a decision on this document.**
+
+---
+
+## Addendum (same day): the existing code already contains most of Proposal B
+
+Read of `buildFeasiblePrefix` (carrytrie.cpp ~L3717) while W=24 ran. Two
+findings that make Proposal B smaller than it looked, and one that explains
+why the ladder alone was never going to be enough.
+
+### Finding 1 — a second, unexplored axis: `maxReleases`, hardcoded 3 everywhere
+
+`buildFeasiblePrefix(c, targetWY, maxReleases, ...)` starts from the naive
+descending prefix; if that prefix's pool admits no suffix tuple it *releases*
+r prefix digits and *promotes* the r boundary-adjacent pool digits — a
+size-preserving swap, since `runWrongTurnSearch` hard-requires
+`pool.size() == windowSize`. It searches r = 1..`maxReleases`.
+
+**Every one of the six call sites passes `maxReleases = 3`** (L4891, L5066,
+L5253, L5255, L5662, L6307). It is a hardcoded constant, never an argument,
+never an env knob.
+
+So the campaign has explored two things very unevenly:
+
+| axis | what it controls | how far we've gone |
+|---|---|---|
+| `W` (`CERTPOS`/`CERTSET_W`) | depth of the terminal window | laddered 20→24, engine ceiling 24, **~16.5×/width** |
+| `maxReleases` | how far the *starting prefix* may deviate from descending | **fixed at 3, forever, everywhere** |
+
+These are orthogonal. Widening `W` searches deeper *below a given prefix*;
+raising `maxReleases` reaches *different prefixes*. Every "window-bounded
+refutation" in this campaign is bounded on **both** axes, but only one has
+ever been laddered.
+
+### Finding 2 — `certset` tries exactly ONE prefix, and that is the real limit
+
+`buildFeasiblePrefix` returns the **first** feasible prefix it finds and
+stops. `certset` runs one terminal on that one prefix. So
+`REFUTED at the heuristic prefix` means precisely: *the first prefix within 3
+release/promote swaps of descending order has no completion inside a
+width-W window.*
+
+This also corrects a tempting move: simply raising `maxReleases` does **not**
+help `certset`, because when a feasible prefix already exists at r ≤ 3 the
+function returns that same prefix regardless of the cap. The cap only matters
+when nothing is feasible within it.
+
+### Consequence — the precise shape of Proposal B
+
+Not "write a new enumerator". Generalise the existing one:
+
+1. Change `buildFeasiblePrefix` from *"return the first feasible prefix"* to
+   *"enumerate feasible prefixes in order"* (callback or iterator). The
+   release/promote loop already emits them in a principled order — fewest
+   releases first, i.e. nearest to descending order first, which is the right
+   order for a satisfiability search.
+2. Drive a terminal per feasible prefix, **stopping at the first completion**
+   (§8 wins on cardinality; there is nothing to maximise).
+3. Journal **survivors only**. The refuted-branch records are not
+   proof-bearing during discovery and are exactly what wrote 2.2 GB.
+4. Expose `maxReleases` as an env knob so *this* axis can be laddered — it is
+   plausibly far cheaper per step than `W`'s measured ~16.5×, since each
+   additional release costs a `countAdmissibleSuffixTuplesGen` call
+   (cheap) and only the *feasible* prefixes draw an expensive terminal.
+
+The existing machinery — feasibility test, size-preserving swap, terminal
+runner, planner — is all reusable. The change is control flow: enumerate
+instead of return-first, and stop on success instead of on the first failure.
+
+### Standing caveat, restated
+
+A refutation from this instrument is bounded on both axes. "No completion
+found within `maxReleases` swaps and a width-W window" is **never** "no
+completion exists". Record both bounds with every negative result.
