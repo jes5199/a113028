@@ -3714,8 +3714,23 @@ static AttemptResult runWrongTurnSearchFM(const ConstantsGen &c, const std::vect
 // (closest to the boundary first) until the resulting pool admits at least
 // one admissible suffix tuple AT ALL (a cheap necessary pre-check before the
 // expensive wrong-turn search).
-static bool buildFeasiblePrefix(const ConstantsGen &c, int targetWY, int maxReleases,
-                                 std::vector<int> &outPrefix, std::vector<int> &outPool) {
+// SEC-8 DISCOVERY (SECTION-8-DISCOVERY-DESIGN.md addendum): the prefix
+// search below is a SECOND bounded axis, orthogonal to the terminal window
+// width W. W controls how DEEP we search beneath a given prefix; maxReleases
+// controls how FAR the starting prefix may deviate from plain descending
+// order. Historically every call site passed a literal 3 and nothing ever
+// varied it, so every "REFUTED" in this campaign has silently meant "the
+// first prefix within 3 swaps of descending order admits no completion
+// inside a width-W window" -- much weaker than it reads.
+//
+// forEachFeasiblePrefix enumerates ALL feasible prefixes, in the exact order
+// the original return-first search visited them (naive first, then
+// r = 1..maxReleases, standard ascending-index combination order). That order
+// is fewest-releases-first, i.e. nearest-to-descending first, which is both
+// the right order for a satisfiability search and the one that makes an early
+// hit most likely. cb returns true to stop. Returns true iff cb stopped it.
+template <typename F>
+static bool forEachFeasiblePrefix(const ConstantsGen &c, int targetWY, int maxReleases, F cb) {
     int nD = (int)c.D.size();
     int windowSize = c.T + c.Pc + targetWY + 1; // +1 for the candidate position
     if (windowSize >= nD) return false;
@@ -3723,8 +3738,6 @@ static bool buildFeasiblePrefix(const ConstantsGen &c, int targetWY, int maxRele
     std::sort(sortedDesc.begin(), sortedDesc.end(), std::greater<int>());
     int naivePrefixLen = nD - windowSize;
     std::vector<int> naivePrefix(sortedDesc.begin(), sortedDesc.begin() + naivePrefixLen);
-    // naivePool sorted descending too -- its FRONT is the boundary-adjacent
-    // (largest) pool digits, used below as the natural promotion candidates.
     std::vector<int> naivePool(sortedDesc.begin() + naivePrefixLen, sortedDesc.end());
 
     auto poolFor = [&](const std::vector<int> &prefix) {
@@ -3735,20 +3748,15 @@ static bool buildFeasiblePrefix(const ConstantsGen &c, int targetWY, int maxRele
         return pool;
     };
 
-    if (countAdmissibleSuffixTuplesGen(poolFor(naivePrefix), c.T, c.B, c.Lnil) > 0) {
-        outPrefix = naivePrefix; outPool = poolFor(naivePrefix); return true;
+    {
+        std::vector<int> pool = poolFor(naivePrefix);
+        if (countAdmissibleSuffixTuplesGen(pool, c.T, c.B, c.Lnil) > 0) {
+            if (cb(naivePrefix, pool, 0)) return true;
+        }
     }
-    // Naive (no reservation) prefix is infeasible. Try releasing INDIVIDUAL
-    // prefix digits (not necessarily contiguous/trailing) back into the
-    // pool -- but pool.size() MUST stay exactly windowSize (runWrongTurnSearch's
-    // buildSuffixBranchGen hard-requires freeDigits.size()==Pc+NX+NY, i.e.
-    // pool.size()==windowSize, via its fixed pos=certPos()-style convention). So
-    // every release of r prefix digits is paired with a compensating
-    // PROMOTION of the r boundary-adjacent (largest) pool digits into the
-    // prefix, keeping both sizes exactly fixed -- a swap, not a plain
-    // shrink. Search order over which r prefix digits to release is
-    // unchanged (standard ascending-index combination enumeration; npref is
-    // at most a few dozen, cheap regardless of order).
+    // Release r prefix digits, promote the r boundary-adjacent (largest) pool
+    // digits: a size-preserving SWAP, because runWrongTurnSearch's
+    // buildSuffixBranchGen hard-requires pool.size() == windowSize.
     int npref = (int)naivePrefix.size();
     for (int releases = 1; releases <= maxReleases && releases <= npref && releases <= (int)naivePool.size(); releases++) {
         std::vector<int> promoted(naivePool.begin(), naivePool.begin() + releases);
@@ -3762,7 +3770,7 @@ static bool buildFeasiblePrefix(const ConstantsGen &c, int targetWY, int maxRele
             for (int d : promoted) trial.push_back(d);
             auto pool = poolFor(trial);
             if (countAdmissibleSuffixTuplesGen(pool, c.T, c.B, c.Lnil) > 0) {
-                outPrefix = trial; outPool = pool; return true;
+                if (cb(trial, pool, releases)) return true;
             }
             int i = releases - 1;
             while (i >= 0 && comb[i] == npref - releases + i) i--;
@@ -3772,6 +3780,16 @@ static bool buildFeasiblePrefix(const ConstantsGen &c, int targetWY, int maxRele
         }
     }
     return false;
+}
+
+// Return-first wrapper -- byte-identical behaviour to the original
+// buildFeasiblePrefix, so every existing caller is unaffected.
+static bool buildFeasiblePrefix(const ConstantsGen &c, int targetWY, int maxReleases,
+                                 std::vector<int> &outPrefix, std::vector<int> &outPool) {
+    return forEachFeasiblePrefix(c, targetWY, maxReleases,
+        [&](const std::vector<int> &prefix, const std::vector<int> &pool, int) {
+            outPrefix = prefix; outPool = pool; return true;
+        });
 }
 
 // ============================================================================
@@ -5687,6 +5705,232 @@ static void runCertSet(int B, const std::vector<int> &drops, long rssBudgetKB) {
     }
 }
 
+// ============================================================================
+// Sec8 DISCOVERY (`certdisc`) -- SECTION-8-DISCOVERY-DESIGN.md Proposal B.
+//
+// A SATISFIABILITY search, not a maximality proof. §8's observation is that
+// for b54/59/61/62/64 the forced maximal-cardinality set is LARGER than the
+// set each provisional value uses, so ANY completion of the forced set
+// supersedes that value on cardinality alone, regardless of within-set order.
+// There is therefore nothing to maximise here: stop at the first completion
+// and hand it to certbb as a seeded incumbent, where the maximality proof is
+// the minutes-long operation b63 demonstrated.
+//
+// Why not certbb for this: certbb is a maximality PROVER whose efficiency is
+// entirely bound-pruning against an incumbent. With no incumbent nothing
+// prunes, and it enumerates the whole prefix space while journalling a record
+// per terminal -- on b64 that was 7.9M records / 2.2GB in 4.5 minutes.
+//
+// TWO BOUNDS, both recorded with every negative result:
+//   W_terminal   -- how DEEP each terminal window searches beneath a prefix
+//   maxReleases  -- how FAR the starting prefix may deviate from descending
+// A negative here means "no completion within `maxReleases` swaps of
+// descending order and a width-W window". It NEVER means "no completion
+// exists". Both numbers appear in every line below that reports a negative.
+//
+// Journalling is SURVIVORS-ONLY by design: refuted prefixes are not
+// proof-bearing during discovery, and journalling them is exactly what wrote
+// the 2.2GB. Aggregate counters carry the rest.
+// ============================================================================
+static void runCertDisc(int B, const std::vector<int> &drops, long rssBudgetKB, double capSeconds) {
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+    int W = certSetupWBB(B);
+    std::vector<int> D;
+    for (int d = 1; d < B; d++) if (std::find(drops.begin(), drops.end(), d) == drops.end()) D.push_back(d);
+
+    int maxReleases = 3;
+    if (const char *e = getenv("CERTDISC_MAX_RELEASES")) {
+        int v = atoi(e);
+        if (v >= 0 && v <= 12) maxReleases = v;
+        else { fprintf(stderr, "[certdisc] FATAL: CERTDISC_MAX_RELEASES=%s outside [0,12]\n", e); exit(1); }
+    }
+    // SHARDING a SATISFIABILITY search. This differs from certbb's sharding
+    // in a way that is in our favour, and the asymmetry must be explicit
+    // because it is exactly what gets misread later:
+    //
+    //   POSITIVE needs ONE shard.  Any single completion answers §8's
+    //     question -- it wins on cardinality no matter which prefix produced
+    //     it -- so the first hit anywhere ends the run globally.
+    //   NEGATIVE needs ALL shards.  "No completion within both bounds" is
+    //     only true once every shard has EXHAUSTED its assignment. One shard
+    //     dying early makes the global negative unprovable, not merely
+    //     weaker.
+    //
+    // Coordination is by sentinel files rather than shared memory: a shard
+    // that finds a completion writes certdisc_<B>.FOUND; the others notice
+    // and stop. Each shard that exhausts its own assignment writes
+    // certdisc_<B>.shard<i>of<N>.exhausted. A global negative REQUIRES all N
+    // of those markers -- the log says so on every shard-level negative.
+    long long shardIdx = 0, shardN = 1;
+    if (const char *e = getenv("CERTDISC_SHARD")) {
+        if (sscanf(e, "%lld/%lld", &shardIdx, &shardN) != 2 || shardN < 1 || shardIdx < 0 || shardIdx >= shardN) {
+            fprintf(stderr, "[certdisc] FATAL: CERTDISC_SHARD=%s malformed (want i/N, 0<=i<N)\n", e);
+            exit(1);
+        }
+    }
+    char foundSentinel[128], exhaustedMarker[160];
+    snprintf(foundSentinel, sizeof(foundSentinel), "certdisc_%d.FOUND", B);
+    snprintf(exhaustedMarker, sizeof(exhaustedMarker), "certdisc_%d.shard%lldof%lld.exhausted", B, shardIdx, shardN);
+
+    fprintf(stderr, "[certdisc] base=%d |D|=%zu dropped=%zu W_terminal=%d maxReleases=%d capSeconds=%.0f shard=%lld/%lld\n",
+            B, D.size(), drops.size(), W, maxReleases, capSeconds, shardIdx, shardN);
+
+    ConstantsGen c = deriveConstantsGen(B, D);
+    if (!c.ok) {
+        fprintf(stderr, "[certdisc] base=%d: deriveConstantsGen FAILED for this EXPLICIT digit set "
+                        "(arithmetically infeasible -- not a search failure)\n", B);
+        exit(2);
+    }
+    int targetWY = W - c.T - c.Pc;
+    if (targetWY < 1) {
+        fprintf(stderr, "[certdisc] base=%d FATAL: W_terminal=%d too small for T=%d+Pc=%d -- widen CERTSET_W\n",
+                B, W, c.T, c.Pc);
+        exit(3);
+    }
+
+    char outPath[128];
+    snprintf(outPath, sizeof(outPath), "certdisc_%d_survivors.jsonl", B);
+    FILE *out = fopen(outPath, "a");
+    if (!out) fprintf(stderr, "[certdisc] WARNING: cannot open %s for writing (errno=%d)\n", outPath, errno);
+    else {
+        // Provenance header: BOTH bounds, so a survivors file can never be
+        // read without knowing which two-axis box produced it.
+        fprintf(out, "{\"record\":\"run_header\",\"mode\":\"certdisc\",\"base\":%d,\"digitsD\":%zu,"
+                     "\"W_terminal\":%d,\"maxReleases\":%d,\"drops\":[", B, D.size(), W, maxReleases);
+        for (size_t i = 0; i < drops.size(); i++) fprintf(out, "%s%d", i ? "," : "", drops[i]);
+        fprintf(out, "]}\n");
+        fflush(out);
+    }
+
+    auto deadline = (capSeconds > 0)
+        ? t0 + std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(capSeconds))
+        : clock::time_point::max();
+
+    // COUNT-ONLY mode: enumerate feasible prefixes WITHOUT running a single
+    // terminal, so a run can be costed before it is launched. Budgeting by
+    // intuition is what produced today's width mis-estimate (~9x documented,
+    // 16.5x measured) and nearly turned a resource timeout into something a
+    // reader would take for a refutation. Cost here is
+    //   (feasible prefixes at r <= N) x (measured terminal cost at width W)
+    // and only the first factor is cheap to get -- so get it separately.
+    if (const char *e = getenv("CERTDISC_COUNT_ONLY")) {
+        if (e[0] && strcmp(e, "0") != 0) {
+            long long perRc[16] = {0}; long long total = 0;
+            forEachFeasiblePrefix(c, targetWY, maxReleases,
+                [&](const std::vector<int> &, const std::vector<int> &, int releases) -> bool {
+                    total++; if (releases < 16) perRc[releases]++;
+                    return false; // never stop: we are counting, not searching
+                });
+            double cw = std::chrono::duration<double>(clock::now() - t0).count();
+            fprintf(stderr, "[certdisc] base=%d COUNT-ONLY: %lld feasible prefixes at maxReleases=%d W_terminal=%d",
+                    B, total, maxReleases, W);
+            for (int r = 0; r <= maxReleases && r < 16; r++) fprintf(stderr, " r%d=%lld", r, perRc[r]);
+            fprintf(stderr, " (enumeration wall=%.3fs, ZERO terminals run)\n", cw);
+            fprintf(stderr, "[certdisc] base=%d: multiply %lld by a MEASURED terminal cost at W=%d to budget the "
+                            "real run. No terminal was executed, so this says nothing about completions.\n",
+                    B, total, W);
+            if (out) fclose(out);
+            return;
+        }
+    }
+
+    long long nPrefixes = 0, nRefuted = 0, nDeclined = 0, prefixIndex = 0;
+    long long perR[16] = {0};
+    bool found = false, deadlineHit = false, otherShardFound = false;
+    std::string foundDecimal; std::vector<int> foundDigits; int foundReleases = -1;
+
+    forEachFeasiblePrefix(c, targetWY, maxReleases,
+        [&](const std::vector<int> &prefix, const std::vector<int> &pool, int releases) -> bool {
+            if (clock::now() >= deadline) { deadlineHit = true; return true; }
+            long long myIdx = prefixIndex++;
+            if (shardN > 1 && (myIdx % shardN) != shardIdx) return false; // another shard owns it
+            // Another shard already answered the question -- a positive needs
+            // only one, so stop rather than duplicate work.
+            if (shardN > 1 && (nPrefixes % 8) == 0) {
+                FILE *fs = fopen(foundSentinel, "r");
+                if (fs) { fclose(fs); otherShardFound = true; return true; }
+            }
+            nPrefixes++;
+            if (releases < 16) perR[releases]++;
+            TerminalOutcomeBB outc = runExactTerminalBB(c, prefix, pool, rssBudgetKB, deadline);
+            if (outc.disposition == TerminalOutcomeBB::FOUND) {
+                found = true; foundReleases = releases;
+                foundDecimal = outc.ar.maxDecimal; foundDigits = outc.ar.maxDigitsMSBfirst;
+                if (out) {
+                    fprintf(out, "{\"record\":\"survivor\",\"base\":%d,\"releases\":%d,\"W_terminal\":%d,"
+                                 "\"maxReleases\":%d,\"prefix\":[", B, releases, W, maxReleases);
+                    for (size_t i = 0; i < prefix.size(); i++) fprintf(out, "%s%d", i ? "," : "", prefix[i]);
+                    fprintf(out, "],\"value\":\"%s\",\"digits\":[", foundDecimal.c_str());
+                    for (size_t i = 0; i < foundDigits.size(); i++) fprintf(out, "%s%d", i ? "," : "", foundDigits[i]);
+                    fprintf(out, "]}\n");
+                    fflush(out);
+                }
+                if (shardN > 1) { FILE *fs = fopen(foundSentinel, "w"); if (fs) { fprintf(fs, "%s\n", foundDecimal.c_str()); fclose(fs); } }
+                return true; // satisfiability search: stop at the FIRST completion
+            }
+            if (outc.disposition == TerminalOutcomeBB::REFUTED) nRefuted++;
+            else {
+                nDeclined++;
+                fprintf(stderr, "[certdisc] base=%d prefix#%lld (releases=%d) DECLINED: %s -- resource outcome, "
+                                "NOT a refutation; this prefix remains unsettled\n",
+                        B, nPrefixes, releases, outc.declineReason);
+            }
+            return false;
+        });
+
+    double wall = std::chrono::duration<double>(clock::now() - t0).count();
+    fprintf(stderr, "[certdisc] base=%d prefixes tried=%lld (refuted=%lld declined=%lld)", B, nPrefixes, nRefuted, nDeclined);
+    for (int r = 0; r <= maxReleases && r < 16; r++) if (perR[r]) fprintf(stderr, " r%d=%lld", r, perR[r]);
+    fprintf(stderr, " wall=%.3fs\n", wall);
+    if (out) fclose(out);
+
+    if (found) {
+        fprintf(stderr, "[certdisc] base=%d COMPLETION FOUND at releases=%d (%zu digits): %s\n",
+                B, foundReleases, foundDecimal.size(), foundDecimal.c_str());
+        fprintf(stderr, "[certdisc] base=%d: |D|=%zu completion exists -- this SUPERSEDES any smaller-cardinality "
+                        "provisional value for this base. Next: seed certbb with it for the maximality proof.\n",
+                B, D.size());
+        return;
+    }
+    if (otherShardFound) {
+        fprintf(stderr, "[certdisc] base=%d shard %lld/%lld STOPPED: another shard found a completion "
+                        "(sentinel %s). A positive needs only one shard.\n", B, shardIdx, shardN, foundSentinel);
+        return;
+    }
+    if (deadlineHit) {
+        fprintf(stderr, "[certdisc] base=%d INCONCLUSIVE (deadline): cap %.0fs reached after %lld prefixes. "
+                        "RESOURCE outcome, not a refutation. NO exhausted-marker written.\n", B, capSeconds, nPrefixes);
+        exit(3);
+    }
+    if (nDeclined > 0) {
+        fprintf(stderr, "[certdisc] base=%d INCONCLUSIVE: %lld of %lld prefixes DECLINED (resource), so the "
+                        "search space was not fully covered even within its two bounds.\n", B, nDeclined, nPrefixes);
+        exit(3);
+    }
+    // Exhausted THIS shard's assignment. Only now may the marker be written.
+    { FILE *fm = fopen(exhaustedMarker, "w");
+      if (fm) { fprintf(fm, "{\"base\":%d,\"shard\":%lld,\"shardN\":%lld,\"W_terminal\":%d,\"maxReleases\":%d,"
+                            "\"prefixesRefuted\":%lld}\n", B, shardIdx, shardN, W, maxReleases, nPrefixes); fclose(fm); } }
+    if (shardN > 1) {
+        fprintf(stderr, "[certdisc] base=%d shard %lld/%lld EXHAUSTED its assignment (%lld prefixes, all refuted) "
+                        "at maxReleases=%d W_terminal=%d -- wrote %s.\n",
+                B, shardIdx, shardN, nPrefixes, maxReleases, W, exhaustedMarker);
+        fprintf(stderr, "[certdisc] base=%d ***THIS IS NOT A GLOBAL NEGATIVE.*** A shard negative covers only this "
+                        "shard's 1/%lld of the prefix space. A global 'no completion within bounds' claim requires "
+                        "ALL %lld exhausted-markers to be present; a shard that died early leaves it UNPROVABLE, "
+                        "not merely weaker.\n", B, shardN, shardN);
+        exit(4);
+    }
+    fprintf(stderr, "[certdisc] base=%d NO COMPLETION FOUND within BOTH bounds: maxReleases=%d AND W_terminal=%d "
+                    "(%lld feasible prefixes, all refuted).\n", B, maxReleases, W, nPrefixes);
+    fprintf(stderr, "[certdisc] base=%d ***THIS IS NOT A PROOF THAT NO COMPLETION EXISTS.*** It means: no "
+                    "completion within %d release/promote swaps of descending order AND inside a width-%d "
+                    "window. Both bounds must be quoted with this result. Widen either axis to say more.\n",
+            B, maxReleases, W);
+    exit(4);
+}
+
 // RESUME (task item 4, duplicate-safety classes): forward-declared here so
 // CertBBContext's proven-branch map below can use it directly. Definition
 // and the manifest-loading/classification logic that produces it live
@@ -6787,6 +7031,21 @@ int main(int argc, char **argv) {
         if (argc >= 5) rssBudgetKB = atol(argv[4]);
         fprintf(stderr, "[certset] base=%d dropsArg=%s rssBudgetKB=%ld\n", base, argv[3], rssBudgetKB);
         certdrv::runCertSet(base, drops, rssBudgetKB);
+    } else if (mode == "certdisc") {
+        // SECTION-8-DISCOVERY-DESIGN.md Proposal B:
+        // certdisc <base> <comma-separated-dropped-digits> [rssBudgetKB] [capSeconds]
+        // Satisfiability search over feasible prefixes of the EXPLICIT digit
+        // set; stops at the FIRST completion. CERTSET_W sets W_terminal,
+        // CERTDISC_MAX_RELEASES sets the prefix-deviation bound (default 3).
+        if (argc < 4) { fprintf(stderr, "certdisc requires <base> <comma-separated-dropped-digits>\n"); return 1; }
+        int base = atoi(argv[2]);
+        std::vector<int> dropsD = certdrv::parseDropListBB(argv[3]);
+        long rssBudgetKB = -1;
+        if (argc >= 5) rssBudgetKB = atol(argv[4]);
+        double capS = 0.0;
+        if (argc >= 6) capS = atof(argv[5]);
+        fprintf(stderr, "[certdisc] base=%d dropsArg=%s rssBudgetKB=%ld capSeconds=%.0f\n", base, argv[3], rssBudgetKB, capS);
+        certdrv::runCertDisc(base, dropsD, rssBudgetKB, capS);
     } else if (mode == "certbb") {
         // HIGHER-BASE-CERTIFICATION-STRATEGY.md Sec8.3 + RESUME task:
         // certbb <base> <comma-separated-dropped-digits> [rssBudgetKB] [capSeconds] [resume]

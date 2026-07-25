@@ -1,0 +1,24 @@
+== positive control: certdisc finds the KNOWN b60 answer ==
+[certdisc] base=60 prefixes tried=1 (refuted=0 declined=0) r0=1 wall=18.430s
+[certdisc] base=60 COMPLETION FOUND at releases=0 (84 digits): 374096795553866901593729675694543662806191148614834420420657978999648347496776816352
+   char-exact vs published README b60: True
+
+== refactor regression (buildFeasiblePrefix -> thin wrapper over enumerator) ==
+[certbb] base=60 DFS DONE: nodesVisited=25 found=1 refuted=0 pruned=24 unfinished(declined)=0 resume-skipped(refuted=0 found=0) terminalCounterMax=0 wall=34.277s
+[certbb] base=60 CERTIFIED (zero unfinished branches)
+[certbb] base=56 DFS DONE: nodesVisited=52 found=1 refuted=25 pruned=25 unfinished(declined)=0 resume-skipped(refuted=0 found=0) terminalCounterMax=25 wall=317.217s
+[certbb] base=56 CERTIFIED (zero unfinished branches)
+   b60 + b56 values char-exact vs published: True / True
+
+== b64 feasible-prefix census (ZERO terminals) ==
+        maxR=3   maxR=4   maxR=5
+  W=22    781     9920    92171     (r0=0 r1=1 r2=39 r3=741)
+  W=23    742     9178    82993
+  W=24    704     8474    74519
+  -> certset has only ever tested the single r1 prefix: 1 of 781 = 0.13% of the r<=3 space at W=22
+
+== satisfiability sharding gate (b60, 2 shards) ==
+[certdisc] base=60 COMPLETION FOUND at releases=0 (84 digits): 374096795553866901593729675694543662806191148614834420420657978999648347496776816352
+[certdisc] base=60 COMPLETION FOUND at releases=1 (84 digits): 367754321000032809538022936609822865971468915636736366329190956442745944772254553632
+  both independently verified: decode==reported, 47 distinct digits, set==forced, lcm|N, 60 does not divide lcm, N==digitsum mod 59
+  NOTE: shards found DIFFERENT completions. Correct for a satisfiability search -- certdisc returns A completion, never THE maximum.
