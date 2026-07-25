@@ -368,3 +368,42 @@ discarded optimisation into a planning instrument.
 **The rule:** when an instrument underperforms, separate *"this did not do
 what I wanted"* from *"this produced no information."* They are different
 claims, and the second is much rarer than it looks.
+
+## 14. Acting on your model of a thing instead of the thing (the unifying failure)
+
+Entries §10, §11 and §13 are the same mistake in different clothes, and a
+fourth instance on 2026-07-25 makes the family explicit:
+
+| # | what was consulted | what should have been consulted |
+|---|---|---|
+| §10 | "I niced that job" | `ps -o ni` on the actual process |
+| §11 | "that job is a probe for the abandoned sweep" | `ps -o args` — it was the new plan's rung |
+| §11b | "the watch will tell me when it ends" | whether the process still exists |
+| §13 | "that census was wasted" | what the census actually measured (`r0`) |
+| §14 | "b65 has 5 drops" *(my own summary)* | the derivation — the drops were `{13,26,30,39,52}`, not the 5-multiples I guessed |
+
+The b65 case is the cleanest specimen because nothing was mistyped. A
+summary table said "5 drops"; the drop *list* was never printed; the guess
+`{5,10,15,20,25}` was plausible, self-consistent, and wrong — the forced set
+takes the 13-multiples route. A probe then ran for minutes on a digit set
+that does not exist.
+
+**The rule:** a derived value must be read from the derivation, never
+reconstructed from a summary of it — *especially* a summary you wrote
+yourself, because it carries your own confidence without your own working.
+
+### The architectural defence that caught it
+
+The wrong digit set produced:
+
+```
+[certset] base=65: buildFeasiblePrefix found no feasible heuristic top prefix
+  at W_terminal=22 -- INCONCLUSIVE (not a refutation of D)
+```
+
+**INCONCLUSIVE, not REFUTED.** The never-conflate-resource-with-mathematics
+rule (§7) caught an error class it was never designed for: a nonexistent
+digit set cannot produce a false negative through that path, because the path
+has no way to express one. That is the strongest argument yet for keeping
+resource outcomes and mathematical outcomes rigidly separate — **it defends
+against mistakes nobody anticipated**, which is the only kind that matters.
