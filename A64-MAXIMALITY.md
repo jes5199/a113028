@@ -1,8 +1,11 @@
 # a(64): a one-line arithmetic obstruction, with computational corroboration
 
 **Date:** 2026-07-25
-**Status:** argument complete; awaiting independent re-derivation before any
-OEIS-facing claim.
+**Status:** argument complete; **independently re-derived 2026-07-26** by an
+outside reviewer (Sol Max), who reproduced the obstruction from the problem
+statement — v₂(lcm(1..63)) = 5, every positive power of 64 ≡ 0 (mod 32), 32
+the only digit divisible by 32, hence every full-alphabet completion ends in
+digit 32. OEIS-facing claims may now cite this argument.
 
 ## The value
 

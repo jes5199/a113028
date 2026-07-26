@@ -1,6 +1,7 @@
 # Frontier status: bases 50–64
 
-**Date:** 2026-07-23 (updated live during the fast-mode climb)
+**Date:** 2026-07-23, final update 2026-07-26 — the 50–64 campaign is closed
+(every base STRONG or CERTIFIED); this file is the canonical per-base ledger.
 **Context:** the published OEIS b-file for A113028 ends at base 48; a(49) was
 jes's laptop computation. Everything from base 50 upward on this page is a
 **first-ever computed value**, and none of it is published. The distinction

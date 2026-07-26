@@ -5,7 +5,8 @@ Binary: gcc -O2 -march=native, v2 two-engine source (a113028.c).
 
 ## Validation status
 - Bases 2–39: **all match** the b-file exactly (38/38). Engine/timing below.
-- Bases 40–48: in progress, bounded per-base runs (1h wall-clock cap each).
+- Bases 40–48: **complete — all solved and verified** (see the tail-run and
+  bucket-sweep sections below; this line originally read "in progress").
 
 ## Timing (validated bases, v2 baseline)
 
@@ -27,7 +28,7 @@ a single surviving subset, and essentially all wall-clock is engine work inside
 it. So subset-level filters only help further if that survivor is *dead*;
 otherwise the win has to come from faster engines (prefix pruning, suffix
 enumeration).
-| 40 | — | — | — | >1h (first run killed mid-flight at 17e9-node budget; bounded rerun in progress) |
+| 40 | — | — | — | >1h (first run killed mid-flight at 17e9-node budget; *later solved — 5.81 s canonical best, see README table*) |
 
 ## Tail runs (bases 40–48)
 (updated as they land)
@@ -42,7 +43,7 @@ enumeration).
 | 45 | COMPLETE, eng=S, subsets=490899 | 551.9s | **MATCH** (29858202121833974366127520253547500517971464443016809773917504800) |
 | 46 | COMPLETE, eng=S, subsets=300 | 678.4s | **B-FILE ERROR FOUND** — see below |
 | 47 | COMPLETE, eng=S, subsets=25 | 386.2s | **MATCH** (1754681573582232514378787438934811607312193893426436545338224933544695955200) |
-| 48 | **CERTIFIED CORRECT** (nilpotent-peeling certificate, NILPOTENT-PEELING.md; last digit forced =24) | cert ~3.3 min (jes-side; our v12 reproduction queued) | **MATCH** (94237804886307950779486130179671488973571078333724597158459950718126090200) — divergence-law flag refuted (nilpotent suffix effect) |
+| 48 | **CERTIFIED CORRECT** (nilpotent-peeling certificate, NILPOTENT-PEELING.md; last digit forced =24) | cert ~3.3 min (jes-side; later reproduced this-box by the autonomous bucket cert, 18.3 s — README table) | **MATCH** (94237804886307950779486130179671488973571078333724597158459950718126090200) — divergence-law flag refuted (nilpotent suffix effect) |
 
 **Tail sweep complete (v2 baseline, 1h caps): 7 complete (41–47), all validated
 — 6 matches + 1 published-value error found (46, ours strictly larger, doubly
@@ -92,7 +93,9 @@ leaf widening (only when band pruning power ≤ 32): b36 12.1s → 2.4s (parity)
 Monster attempts: b49 under v6 = 1h TIMEOUT (while sharing the box with b40;
 band sweep estimate ~8.4e9 nodes ≈ 42 min solo — near miss). Next: solo 2h
 rerun, then v8 = Barrett constants for tracked-moduli updates (3–5× node cost)
-if needed. b40 under v7 (wide leaf) in progress.
+if needed. b40 under v7 (wide leaf) in progress. *(Resolved: both bases were
+subsequently solved — b40 at 5.81 s, a(49) certified; see the sections below
+and the README table.)*
 
 ## Base 49 (out-of-range target; jes's independent answer, ~1 week on a 2020 laptop)
 
@@ -203,7 +206,8 @@ family=full-modulus NX=1/NY=6/K=4, candidate 21 refuted, candidate 20 wins,
 lex-smaller; the window search covers all shallower divergence with
 candidates descending. Concordant second path: the width-21 PEELED run
 (different family, unaffected by the FM bug) found the same maximum.
-v4 scan arbiter still running as an independent third signal.
+v4 scan arbiter subsequently completed concordant — the third independent
+signal; **a(50) is CERTIFIED ×3 engines** (see FRONTIER-STATUS.md).
 
 **The autopsy that made this possible:** the original width-20 run had
 actually FOUND this exact completion in its join — then lost it in
@@ -288,7 +292,8 @@ base 52, all distinct and nonzero, digit set exactly the forced subset
 {1..51}\{13,24,26,39}, divisible by digit-lcm 238388038788153592800, 52∤lcm,
 digit-sum ≡ N (mod 51) holds, descending prefix 51,50,...,44. Status upgrades
 to certified only if the v4 full-scan arm (still running) or an exhaustive
-cert reproduces it.
+cert reproduces it. *(Resolved: the v15 candidate arm reproduced it exactly —
+**a(52) is CERTIFIED ×2 methods**; see FRONTIER-STATUS.md.)*
 
 **SWEEP COMPLETE (07:51 UTC): 9/9 bases solved and verified against known
 answers. 8/9 bucket-certified by the autonomous driver (b42–b49, 47m 57s

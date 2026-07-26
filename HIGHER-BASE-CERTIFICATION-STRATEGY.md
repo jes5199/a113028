@@ -1,5 +1,11 @@
 # Confirming the Higher A113028 Values
 
+> **Historical (strategy snapshot, 2026-07-24).** Written when b54/b59/b61/
+> b62/b64 were WEAK lower bounds and b63 had no value. The outer
+> branch-and-bound it proposes was built, validated, and did its work: every
+> base ≤ 64 is now **STRONG or CERTIFIED** — see FRONTIER-STATUS.md. Kept as
+> the strategy record.
+
 ## Executive summary
 
 The principal problem above base 52 is no longer finding arithmetically valid

@@ -1,8 +1,12 @@
 # Bases 65–89: reachability, classification, and first-pass results
 
-**Date:** 2026-07-25 · **Status: IN PROGRESS — facts only, no conclusion.**
-A second round is live at corrected widths and one release-layer probe is
-running. Nothing here is a verdict on the range.
+**Date:** 2026-07-25 · **Status: CONCLUDED 2026-07-26.** Every run this
+document describes has finished and the denominator is closed: **22 bases
+REFUTED at their minimum widths, zero completions, 2 INCONCLUSIVE-resource
+(b74 `>10800 s`, b82 `>36000 s`), 1 deliberately unattempted (b86,
+irreducible regime).** See the final tally below. Every negative remains
+bounded on both the width and release axes — this is a verdict on the
+campaign, not a proof that no values exist above 64.
 
 ## The four outcome classes
 
@@ -95,7 +99,7 @@ be *immediately maximal* — it says nothing about whether a hit exists
 | 86 | 83 | 42,43 | 64 | 6 | 18 | 24 | 26 | 1 | not attempted — irreducible regime |
 | 87 | 83 | 29,42,58 | 81 | 4 | 18 | 22 | 24 | 1 | COULD-NOT-RUN @W22 (needs 24) |
 | 88 | 79 | 11,22,33,40,44,55,66,77 | 64 | 2 | 18 | 20 | 22 | 1 | REFUTED 1.3s |
-| 89 | 87 | 44 | 1 | 1 | 19 | 20 | 22 | 1 | REFUTED 3.6s (+W23 5.6s, W24 53.5s, r<=1 195.3s) |
+| 89 | 87 | 44 | 1 | 1 | 19 | 20 | 22 | 1 | REFUTED 3.6s (+W23 5.6s, W24 53.5s, r<=1 195.3s, r<=2 5914s) |
 
 ## Minimum width per base — the reusable artefact
 
@@ -123,6 +127,7 @@ supported width range:
 | W=23 | 5.605 s | REFUTED |
 | W=24 | 53.476 s | REFUTED |
 | release layer r≤1 (65 prefixes) | 195.306 s | all refuted, 0 declined |
+| release layer r≤2 (2,081 prefixes) | 5,914 s | all refuted — zero completions |
 
 **Measured, and it closes a real unknown:** 65 terminals in 195.306 s =
 **3.005 s each**, against 3.638 s for the descending terminal — **ratio
@@ -226,18 +231,18 @@ cheapness, filter strength, release-axis advantage, terminal cost,
 
 The W=22 sweep could not address six bases. Round 2 re-runs them at the width
 each actually needs (derived, not guessed), and re-runs the two timeouts with
-a larger cap. Results so far:
+a larger cap. Results (all runs finished):
 
 | base | width | outcome |
 |---|---:|---|
 | b87 | 24 | **REFUTED**, 678.869 s |
 | b84 | 24 | **REFUTED**, 11.611 s |
 | b82 | 24 | `DECLINED: NX+NY<2` — **W=24 is below its minimum of 25**; not a verdict (the UNREACHABLE reading was retracted) |
-| b74 | 24 | running |
-| b78 | 24 | queued |
+| b74 | 24 | INCONCLUSIVE-resource — `rc=124` at 3600 s, and again at a 10800 s cap (`run_ledgers/b74_w24.summary.txt`); standing bound **>10800 s** |
+| b78 | 24 | `rc=124` at 3600 s; **REFUTED at W=23** (its derived minimum), 4754.060 s under a 10800 s cap |
 | b86 | 24 | `FATAL` — **W=24 is below its minimum of 26**; not a verdict (the UNREACHABLE reading was retracted) |
-| b66 | 22 (cap 7200 s) | queued |
-| b70 | 22 (cap 7200 s) | running |
+| b66 | 22 (cap 7200 s) | **REFUTED**, 2506.991 s |
+| b70 | 22 (cap 7200 s) | **REFUTED**, 2318.039 s |
 
 **FINAL TALLY, 65–89 — the denominator is closed (2026-07-26 09:55Z).**
 Counted from the logs, not from a running total:
@@ -304,21 +309,29 @@ inconclusive. Collapsing the two kept b84 on the open list for a day.
 | b87 | 24 | REFUTED, 678.869 s |
 | b84 | 24 | REFUTED, 11.611 s |
 | b84 | 23 | **REFUTED, 8.003 s** — second width, independent corroboration of the W=24 refutation |
+| b66 | 22 (7200 s cap) | REFUTED, 2506.991 s |
 | b70 | 22 (7200 s cap) | REFUTED, 2318.039 s |
-| b74 | 24 | **INCONCLUSIVE** — timed out at 3600 s |
+| b74 | 24 | **INCONCLUSIVE-resource** — timed out at 3600 s, then again at a 10800 s cap (`run_ledgers/b74_w24.summary.txt`); the standing bound is **>10800 s** |
 | b82 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 25.** Not unreachable. *Subsequently run at W=25 twice and capped both times — see the wide-regime table.* |
 | b86 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 26.** Not unreachable. *Deliberately not attempted at W=26 — see the irreducible-regime section.* |
 | b78 | 24 | `rc=124` at a 3600 s cap — INCONCLUSIVE-resource |
 | **b78** | **23** | **REFUTED, 4754.060 s** — resolved once given a 10800 s cap at its *derived minimum* width |
 
-## Open, not concluded
+## Closed (2026-07-26)
 
-- Round 2 running: b74/b87 at W=24, b78/b84 at W≥23, b66/b70 at a 7200 s cap.
-- b89 `r≤2` running (2,081 prefixes).
+An earlier revision of this section ("Open, not concluded") listed Round 2
+and the b89 `r≤2` sweep as running. **Everything it listed has finished:**
+
+- Round 2 complete: b87 REFUTED (W=24), b84 REFUTED (W=24 and W=23),
+  b78 REFUTED (W=23, its derived minimum), b66 and b70 REFUTED (W=22,
+  7200 s cap), b74 INCONCLUSIVE-resource with standing bound `>10800 s`.
+- b89 `r≤2` complete: 2,081 prefixes in 5,914 s (the 5.5 %-error
+  within-configuration projection in the cost ledger), **zero completions**.
 - **Hypothesis, explicitly not a conclusion:** the §8 bases may have been
   tractable because their forced sets happened to be *near-descending-
-  completable*, and this range may simply not be. Held at 17 of 19; several
-  bases remain unsettled, and any single hit would move it.
+  completable*, and this range may simply not be. Held at 22 of 22
+  refutations with zero completions; b74 and b82 are budget-bounded and b86
+  unattempted, so any single future hit would move it.
 
 ---
 

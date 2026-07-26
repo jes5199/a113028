@@ -1,5 +1,10 @@
 # Band-Depth Certification — Sol (codex) design plan
 
+> **Historical (design snapshot, 2026-07-23).** The problem statement below —
+> b54/b59/b61/b62/b64 WEAK, b63 NO-VALUE — describes that date. All six bases
+> have since been solved and upgraded to **STRONG**; the live per-base status
+> is FRONTIER-STATUS.md. Kept as the design record.
+
 **Status:** Design plan (Sol read-only exploration + codex reasoning). Mine-don't-trust; implementing engineer validates + refines. Correctness paramount (unpublished first-ever-value territory — an unsound certification is worse than an honest WEAK label).
 
 **Problem:** Bases 54, 59, 61, 62, 64 yield only WEAK (window-bounded) lower bounds; base 63 yields NO-VALUE. The refute-and-descend search at fixed CERTPOS window (21 positions) cannot prove maximality when the divergence-depth m* (number of positions where the answer deviates from descending-digit order) exceeds the window. Brute window-widening is prohibitive: each +1 CERTPOS costs ~9× (exponential in the per-position search band).
