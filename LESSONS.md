@@ -526,6 +526,46 @@ The practical test is the same one that exposes the three failures, asked in
 the positive direction: *what would have had to be true for these two results
 to differ — and was that possible?*
 
+### A matched pair, same two agents, twenty-four hours apart
+
+The contrast is sharper than either case alone, because everything except the
+method was held constant:
+
+| | **worthless agreement** | **decisive agreement** |
+|---|---|---|
+| what | a constant, `T`, for one class of bases | a count: how many bases were refuted |
+| how A got it | derived from a definition | enumerated from a document plus logs read directly |
+| how B got it | **re-derived from the same definition** | **grepped every verdict line in the raw run directories** |
+| shared? | **the same premise** — one computation run twice | nothing — different sources, different methods |
+| could they have differed? | **no** | **yes** |
+| outcome | both wrong; a correct document nearly "fixed" into a wrong one | both right; a published integer corrected before it shipped |
+
+Same pair of agents, one day apart, both times "we agree" — and the agreement
+carried **no information** in one case and **settled the question** in the
+other. The difference is not diligence. It is whether the two paths were
+capable of disagreeing.
+
+### A footnote on how results and accounting come apart
+
+One base in that count, `b66`, was mishandled **twice in one day, in opposite
+directions, by both agents** — first written off as a possibly-lost result when
+a search for `b66` missed a log recording it as `base=66`, then omitted from a
+hand-maintained tally when its verdict landed during unrelated work.
+
+**Its verdict was correct, and correctly recorded in the document and the
+ledger, the entire time.** Neither error was ever about the mathematics; both
+were about our accounting of it. Results kept in files stayed right; numbers
+kept in heads drifted.
+
+> **The count drifted because it was a number being carried rather than a
+> number being computed.** Recomputation needs no memory and takes seconds.
+
+And note where the drift happened: not at the unusual case (a base settled at
+an unexpected width, which drew attention and was handled correctly) but at
+the **interrupted** one — a verdict that arrived while something else was
+mid-flight. **Bookkeeping fails where attention was elsewhere, not where the
+work was hard.**
+
 ## 13c. State a mechanism's domain, or it becomes a false reassurance
 
 A guard is trusted for what its *name* suggests, not for what it *covers*. If
