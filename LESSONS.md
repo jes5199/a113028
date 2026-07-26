@@ -670,6 +670,44 @@ the correction was right; only its reach was short.
 
 **[VIGILANCE]**
 
+## 13e. Two lessons from building the checker that catches 13d
+
+**(a) An edit selector that says "the first row starting `| 54 |`" is silently
+wrong in any file with two tables.** It does not fail — it **corrupts one row
+and misses another**, and both results look plausible in isolation.
+
+*Incident.* `FRONTIER-STATUS.md` contains a hardness table and a results table
+whose rows both begin `| 54 |`. An update took the first match: it overwrote a
+live hardness row with a results row **and** left the actual results row stale
+at the superseded status. Both were on origin for a day. That only one base
+appeared in both tables was luck; a file with more overlap would have
+scattered the damage.
+
+> **Anchor edits on something unique to the target — a table header, a
+> preceding line, a full-row match — never on a prefix that another table
+> shares.** Then verify the row you changed *and* count how many matched.
+
+**(b) A guard's first failure mode to test is whether it can read a
+negation.** The consistency checker's first run reported two bases as
+disagreeing when both documents said the same thing: it matched `CERTIFIED`
+inside **`NOT CERTIFIED`** — precisely the rows it most needed to police.
+
+**A checker that cries wolf is worse than no checker**, because you stop
+reading it while believing you are covered. This is the same family as
+*"every mechanism's domain is narrower than its name"*: the guard's real
+domain excluded negated forms, and nothing in its name said so.
+
+**(c) And a prediction, now strong enough to state as one.** Four mechanisms
+were built this weekend after a lesson recurred. **Every one found something
+within minutes of existing** — twice something other than what it was built to
+catch, and once a defect in itself.
+
+> **When you convert a repeated lesson into a check, expect it to find
+> something on its first run. If it doesn't, suspect the check.**
+
+A clean first run is weak evidence that the problem was rare, and strong
+evidence that the check isn't looking where the problem lives.
+
 ## 14. A durability mechanism stored in ephemeral space is not a mechanism
 
 A ledger built so that results survive process death is worthless if the
