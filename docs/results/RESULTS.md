@@ -1,6 +1,6 @@
 # A113028 results log
 
-Ground truth: OEIS b-file (b113028.txt), bases 2–48.
+Ground truth at the time: the published OEIS b-file, bases 2–48 (preserved at ../../evidence/b113028_published_2-48.txt; the published a(46) was later shown suboptimal). The live b113028.txt at the repo root now carries the corrected and extended terms, n=2..64.
 Binary: gcc -O2 -march=native, v2 two-engine source (a113028.c).
 
 ## Validation status
