@@ -107,8 +107,38 @@ nothing) can't reach 0 from these digits. Note 6 ≡ 2 (mod 4): neither
 rule and the eleven rule — the right frontier, named in 2006, crossed
 here.
 
-(The true a(6) = 412 uses the *next* set, {4, 2, 1}, where the same
-orbit is satisfiable: 4·36 + 1·6 + 2 has d₀ + 2d₁ = 2 + 2 ≡ 0.)
+(The true a(6) = 412₆ = 152 uses the *next* set, {4, 2, 1}, where the
+same orbit is satisfiable: 4·36 + 1·6 + 2 has d₀ + 2d₁ = 2 + 2 ≡ 0.)
+
+## The first base where the names run out
+
+Base 7 — immediately after the alphabet gets interesting. The answer's
+digit set is {1, 2, 4, 5, 6}, lcm 60, and 60's prime powers split
+across all three vocabularies plus the one that has none:
+
+- q = 3: 7 ≡ 1 → digit sum (nine rule)
+- q = 4: 7 ≡ −1 → alternating sum (eleven rule)
+- **q = 5: 7 ≡ 2 → orbit `1, 2, 4, 3`, period 4 — no name, no trick**
+
+And the nameless one *discriminates*: of all 120 arrangements, the
+largest satisfying the two named rules (N ≡ 0 mod 12) is
+`65421₇ = 16332` — which is not divisible by 5. The true
+a(7) = `65142₇ = 16200`. **The 2006 vocabulary, applied at base 7,
+points at the wrong arrangement.** (Verified by enumeration; every base
+from 7 through 64 has at least one nameless orbit over its answer's
+digit set, and bases 2–6 have none — it starts at 7 and never reverts.)
+
+Two qualifications, so the example doesn't overclaim:
+
+1. **Necessary as a *rule*, not as a computation.** At base 7 you can
+   brute-force 120 permutations without ever thinking about orbits.
+   Base 7 is where the classical vocabulary stops being able to
+   *express* the constraint — not where the problem gets hard.
+2. **Base 6 is earlier, and is a different milestone.** Its obstruction
+   (q = 4, orbit `1, 2, 0, 0, …`) is the *degenerate* shape — the third
+   *named* one. So **6 is where the two congruence rules run out, and 7
+   is where the naming runs out.** Distinct events; collapsing them
+   would be wrong.
 
 ## The same shape, twenty years apart
 
