@@ -606,6 +606,17 @@ section — every table, every tally, every summary line, every count. A
 retraction is complete when the old wording appears nowhere, not when the
 argument has been fixed.
 
+**Check the tables first, not last.** The worst surviving instance was not in
+prose but in the **main classification table**, where the retracted claim
+appeared in its strongest possible form — a minimum-width column reading `—`,
+meaning *no such width exists*, rather than merely "we could not run it".
+
+> **The most quotable place is where a stale claim does the most damage, and
+> it is the last place anyone looks** — because a table reads as data rather
+> than as argument, so it is scanned for values instead of re-read for claims.
+
+Prose gets re-read when the reasoning changes. Tables get copied.
+
 **A distinct sibling failure, from the same review:** a *base's* status and one
 of its *layers'* status were conflated. `b84` the base was REFUTED at two
 widths; only its `r=1` layer at `W=22` was inconclusive. "b84 is

@@ -284,8 +284,8 @@ inconclusive. Collapsing the two kept b84 on the open list for a day.
 | b84 | 23 | **REFUTED, 8.003 s** — second width, independent corroboration of the W=24 refutation |
 | b70 | 22 (7200 s cap) | REFUTED, 2318.039 s |
 | b74 | 24 | **INCONCLUSIVE** — timed out at 3600 s |
-| b82 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 25.** Not unreachable; queued at W=25 |
-| b86 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 26.** Not unreachable; queued at W=26 |
+| b82 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 25.** Not unreachable. *Subsequently run at W=25 twice and capped both times — see the wide-regime table.* |
+| b86 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 26.** Not unreachable. *Deliberately not attempted at W=26 — see the irreducible-regime section.* |
 | b78 | 24 | running |
 
 ## Open, not concluded
