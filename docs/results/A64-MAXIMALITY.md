@@ -5,7 +5,7 @@
 outside reviewer (Sol Max), who reproduced the obstruction from the problem
 statement — v₂(lcm(1..63)) = 5, every positive power of 64 ≡ 0 (mod 32), 32
 the only digit divisible by 32, hence every full-alphabet completion ends in
-digit 32. OEIS-facing claims may now cite this argument.
+digit 32. OEIS-facing claims may now cite this argument (the review: [../reviews/SHOULD-THE-PROJECT-STOP-AT-BASE-64.md](../reviews/SHOULD-THE-PROJECT-STOP-AT-BASE-64.md)).
 
 ## The value
 
