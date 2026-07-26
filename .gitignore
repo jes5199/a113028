@@ -8,3 +8,17 @@ tail_b49.*
 v5_ladder*
 v6_ladder*
 gmon.out
+
+# Root-anchored build/debug junk (post-reorg; tracked files are unaffected)
+/carrytrie*
+/a113028_v1[0-9]
+/a113028_prof
+/alpha_go
+/*.log
+/*.err
+/*.out
+/bench_*.txt
+/cert[0-9]*_*.txt
+/candidates_log.txt
+/bucket_*.log
+/b[0-9]*_*.log

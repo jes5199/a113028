@@ -32,8 +32,8 @@ fi
 # status. Three times in two days a correction reached the rows it was about
 # and missed the neighbours (LESSONS 13d), each time leaving a stale claim in
 # a TABLE -- which readers scan for values rather than re-read for claims.
-if git diff --cached --name-only | grep -qE '^(README|FRONTIER-STATUS)\.md$'; then
-    if ! python3 check_ladder_consistency.py; then
+if git diff --cached --name-only | grep -qE '^(README\.md|docs/results/FRONTIER-STATUS\.md)$'; then
+    if ! python3 scripts/check_ladder_consistency.py; then
         echo
         echo "  Reconcile the two ladders before committing, or"
         echo "  GIT_ALLOW_LADDER_SKEW=1 git commit ... to override deliberately."

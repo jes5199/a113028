@@ -35,7 +35,7 @@ def statuses(path, pat):
 
 row = re.compile(r'^\|\s*(\d{1,3})\s*\|(.*)$')
 rd = statuses('README.md', row)
-fr = statuses('FRONTIER-STATUS.md', row)
+fr = statuses('docs/results/FRONTIER-STATUS.md', row)
 
 bad = []
 for b in sorted(set(rd) & set(fr)):

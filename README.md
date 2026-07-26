@@ -27,10 +27,10 @@ stopped only by GitHub's 100 MB limit *after* a push had already failed. Raw
 planner traces are ~99.99 % `[bucket-plan]` lines around a handful of signal
 lines: **distil at write time, commit the summary, never the trace.**
 
-**Method notes:** [LESSONS.md](LESSONS.md) collects the general lessons from
+**Method notes:** [LESSONS.md](docs/process/LESSONS.md) collects the general lessons from
 this work — what makes a confirmation real evidence, when a projection is
 legitimate, why resource outcomes and mathematical outcomes must never be
-merged. [CERTBB-OPERATIONAL-FOOTGUNS.md](CERTBB-OPERATIONAL-FOOTGUNS.md) keeps
+merged. [CERTBB-OPERATIONAL-FOOTGUNS.md](docs/process/CERTBB-OPERATIONAL-FOOTGUNS.md) keeps
 the engine-specific detail behind them.
 
 ## Digit alphabet
@@ -93,10 +93,10 @@ completion whose **maximality is unproven** (refutations were
 window-bounded, and such refutations have provably hidden larger answers
 three times — see the b50/b56/b58 supersede stories). Canonical per-base
 detail, evidence-class definitions, and the hardness taxonomy:
-**[FRONTIER-STATUS.md](FRONTIER-STATUS.md)**.
+**[FRONTIER-STATUS.md](docs/results/FRONTIER-STATUS.md)**.
 
 **The maximality-proof engine** (2026-07-24,
-[HIGHER-BASE-CERTIFICATION-STRATEGY.md](HIGHER-BASE-CERTIFICATION-STRATEGY.md)):
+[HIGHER-BASE-CERTIFICATION-STRATEGY.md](docs/engine/HIGHER-BASE-CERTIFICATION-STRATEGY.md)):
 an exact outer lexicographic branch-and-bound wraps the bucket engine as a
 terminal oracle — every branch above the incumbent is bound-pruned,
 exhaustively refuted, or exact-searched, so **window width is a performance
@@ -107,7 +107,7 @@ live in the unified production binary with resumable, shard-parallel proof
 manifests.
 
 **Bases 65–89** were swept on 2026-07-25 — see
-**[HIGH-BASE-RANGE-65-89.md](HIGH-BASE-RANGE-65-89.md)** (in progress). Every
+**[HIGH-BASE-RANGE-65-89.md](docs/results/HIGH-BASE-RANGE-65-89.md)** (in progress). Every
 base's forced set, `L_nil`, `T`, `Pc` and **minimum attemptable width** is now
 derived and tabulated. Two results so far:
 
@@ -501,7 +501,7 @@ any smaller digit set yields a shorter, smaller number.
 **Three of those four cases are checkable on paper.** Only the equal-prefix
 branch is engine-dependent, which is why the row is STRONG rather than
 CERTIFIED — a second independent method on that one branch is what is still
-missing. Full argument and controls: **[A64-MAXIMALITY.md](A64-MAXIMALITY.md)**.
+missing. Full argument and controls: **[A64-MAXIMALITY.md](docs/results/A64-MAXIMALITY.md)**.
 
 **Computational corroboration.** A census of the lex-greater region returned
 **0 feasible across 906,192 digit-subsets**, standing for 5.478 × 10⁸ ordered
