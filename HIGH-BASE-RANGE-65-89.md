@@ -239,10 +239,17 @@ a larger cap. Results so far:
 | b66 | 22 (cap 7200 s) | queued |
 | b70 | 22 (cap 7200 s) | running |
 
-**Running tally across 65–89 (updated 2026-07-26): 20 REFUTED, 0 completions,
-0 UNREACHABLE. Open: b78 and b74 running at their minimum widths; b82
+**Running tally across 65–89 (updated 2026-07-26 08:15Z): 21 REFUTED, 0
+completions, 0 UNREACHABLE. Open: b74 only, running at W=24. b82
 INCONCLUSIVE-resource with a measured `>36000 s` bound; b86 not attempted
-(irreducible regime).** b66 and b84 are REFUTED, not open. Every refutation is of that base's
+(irreducible regime).** b66, b78 and b84 are REFUTED, not open.
+
+**Note on b78 — a cap, not a wall.** It timed out at a 3600 s cap on Saturday
+and sat as INCONCLUSIVE-resource overnight. Re-run at its *derived minimum*
+width with a 10800 s cap it **refuted in 4754 s** — i.e. the original run was
+about 25 % short of the budget it needed. A resource timeout is a statement
+about the budget and nothing else, and this is what it looks like when the
+budget was simply too small. Every refutation is of that base's
 *descending prefix at one width* and is bounded on both axes.
 
 ## Release-layer (r=1) sweep — complete, 10 bases, zero hits
@@ -286,7 +293,8 @@ inconclusive. Collapsing the two kept b84 on the open list for a day.
 | b74 | 24 | **INCONCLUSIVE** — timed out at 3600 s |
 | b82 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 25.** Not unreachable. *Subsequently run at W=25 twice and capped both times — see the wide-regime table.* |
 | b86 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 26.** Not unreachable. *Deliberately not attempted at W=26 — see the irreducible-regime section.* |
-| b78 | 24 | running |
+| b78 | 24 | `rc=124` at a 3600 s cap — INCONCLUSIVE-resource |
+| **b78** | **23** | **REFUTED, 4754.060 s** — resolved once given a 10800 s cap at its *derived minimum* width |
 
 ## Open, not concluded
 
