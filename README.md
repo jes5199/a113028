@@ -190,7 +190,7 @@ epic).
 | 58 | `ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVURQPONLCKADM763I9JFB85124HEG` | 236s · **certified, ×2 methods** (engine + outer-B&B proof; 8× via planner calibration) | 22 | 11.3 |
 | 59 | `י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVUSRQPOM1G76E9AB43I8KLNJ2HDF5C` | **STRONG** — |D|=57 (forced set), maximality: zero lex-greater prefixes | — | — |
 | 60 | `כ‎י‎ט‎ח‎ו‎ה‎ד‎ג‎א‎νμλιθηζδγβαYXWVTNB7Q19SI648RHEL23DGMJC` | 13.9s · **certified, ×2 methods** (engine + outer-B&B proof; post-churn-fix) | 23 | 11.5 |
-| 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVTSRQP83BENAICGJ21OLHD64F7M59K` | **verified lower bound; max within the W=23 window** — |D|=59 (forced set) | — | — |
+| 61 | `ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWVTSRQP83BENAICGJ21OLHD64F7M59K` | **STRONG** — |D|=59 (forced set); maximality exhaustive, 16/16 lex-greater prefixes refuted | — | — |
 | 62 | `מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXWTSRQPOE57NBD4J6GHI9LM38CK21FA` | **STRONG** — |D|=59 (forced set), maximality: zero lex-greater prefixes | — | — |
 | 63 | `נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ה‎ד‎ג‎ב‎א‎νμλιθηζεδγβZYXWVUOGEHA8K5NC74PFDQJ6T31MB2L` | **STRONG** (single-method exhaustive; complete maximality argument — see below) | — | — |
 | 64 | `ס‎נ‎מ‎ל‎כ‎י‎ט‎ח‎ז‎ו‎ה‎ד‎ג‎ב‎א‎νμλκιθηζεδγβαZYXVUTSRQPNHO6E72IM4BC83LAD1F9GJK5W` | **STRONG** — |D|=63 (full alphabet), maximality by arithmetic obstruction (see below) | — | — |
@@ -350,12 +350,16 @@ prefix is the lex-greatest 35-prefix available, so nothing inside the W=23
 terminal beats this value and the five unrun children are all lex-smaller.
 Coverage table: [`b61_decomposition/POS36_COVERAGE.md`](b61_decomposition/POS36_COVERAGE.md).
 
-> **Scope, stated precisely.** Each child's refutation exhausts only *that
-> prefix's window*, and the children partition the **W=23 terminal**, not the
-> whole arrangement space. Established: **a(61) ≥ this value, and it is the
-> maximum within the W=23 window.** Full maximality remains open — unlike
-> b54/b59/b62, whose values sit on the lex-maximal prefix and are therefore
-> STRONG.
+> **Scope — upgraded 2026-07-26, with no new compute.** Framed at W=22 the
+> terminal prefix is 36 digits, and the incumbent's is *descending-top-35 +
+> [8]*. Its first 35 digits are the lex-greatest 35-prefix available, so the
+> only lex-greater 36-prefixes are `top-35 + d` for `d > 8` — **exactly 16**,
+> and **all 16 already carry definitive REFUTED records** at identical
+> parameters. A W=22 terminal is exhaustive over its remaining pool, so no
+> completion exists under any of them. **a(61)'s maximality is therefore
+> exhaustive, not window-bounded**, and b61 joins b54/b59/b62/b64 at
+> **STRONG**. Still **not CERTIFIED** — that needs a second independent engine
+> family. Count and coverage: [`b61_decomposition/POS36_COVERAGE.md`](b61_decomposition/POS36_COVERAGE.md).
 
 ### b62 — a(62)
 
