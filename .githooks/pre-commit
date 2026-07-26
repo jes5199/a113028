@@ -28,4 +28,18 @@ if [ "$fail" = 1 ]; then
     [ -n "$GIT_ALLOW_LARGE" ] || exit 1
     echo "  GIT_ALLOW_LARGE set -- proceeding."
 fi
+# Ladder consistency: README and FRONTIER-STATUS must agree on every base's
+# status. Three times in two days a correction reached the rows it was about
+# and missed the neighbours (LESSONS 13d), each time leaving a stale claim in
+# a TABLE -- which readers scan for values rather than re-read for claims.
+if git diff --cached --name-only | grep -qE '^(README|FRONTIER-STATUS)\.md$'; then
+    if ! python3 check_ladder_consistency.py; then
+        echo
+        echo "  Reconcile the two ladders before committing, or"
+        echo "  GIT_ALLOW_LADDER_SKEW=1 git commit ... to override deliberately."
+        [ -n "$GIT_ALLOW_LADDER_SKEW" ] || exit 1
+        echo "  GIT_ALLOW_LADDER_SKEW set -- proceeding."
+    fi
+fi
+
 exit 0
