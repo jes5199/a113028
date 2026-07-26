@@ -15,19 +15,30 @@ Pulled from the live OEIS record 2026-07-26
   "even faster Python program" link. Entry last edited 8 May 2024. The
   inline terms stop at a(21); the b-file carries 22–48.
 
-**The public record understates the continuity.** jes worked on this
-problem **with Peter Boothe in 2006**, at the time of the original
-submission (stated by jes, 2026-07-26; none of this is in the OEIS entry).
-So the story is not a stranger picking up an abandoned sequence eighteen
-years later — it is a problem worked on with its original author, left at
-base 21 when the first effort stopped in February 2006, and carried to
-base 64 with maximality proven rather than assumed.
+**The public record understates the continuity** (the following is from jes
+directly, 2026-07-26; none of it is in the OEIS entry):
 
-> **PLACEHOLDER — awaiting jes.** How the 2006 work was divided, whether
-> Peter Boothe should be told or credited beyond his authorship line, and
-> whether the 2020 Ruby return was solo or joint are facts only jes has.
-> Do not fill this in by inference, and draft nothing for the OEIS
-> submission's comments field until he decides.
+- **Peter Boothe published alone** — the authorship line is correct as it
+  stands, and no shared credit is claimed.
+- After publication, **jes kept working on the problem under Boothe's
+  advice**, and **found a(16) in 2006** — unsubmitted.
+- The public trail stops with Carr's February 2006 extension to a(13).
+  Sixteen years later, **Michael S. Branicky found a(14)–a(17)
+  independently** (January 2022) — which is how a(16) entered the
+  encyclopedia. Branicky found it and submitted it; **his credit is
+  legitimate and exactly how OEIS works.** This section records work that
+  happened and was never written down; it is not a priority claim.
+
+The arc, in one line: puzzle (Jun 2005) → Boothe publishes (Jan 2006) →
+Carr to a(13) (Feb 2006) → jes reaches base 16 under Boothe's advice,
+unsubmitted → sixteen quiet years → Branicky independently to a(17)
+(2022) → jes returns (2024: a(18)–a(21), b-file to 48) → 2026: solved
+through 64 with maximality proven rather than assumed.
+
+> **Still jes's call — placeholders, not to be drafted by agents:**
+> whether Peter Boothe is told directly, whether any of this goes in the
+> OEIS submission's comments field, and whether the 2020 Ruby return was
+> solo or joint.
 
 The corrected a(46) is in any case an **erratum against the author's own
 2024 b-file** — a correction of the record, not a dispute with anyone.

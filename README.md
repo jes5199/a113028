@@ -4,6 +4,14 @@
 base-B representation uses distinct nonzero digits and is divisible by every
 digit it contains** — equivalently, divisible by the lcm of its digits.
 
+The flavor of the problem in one value: **a(16) = `0xFEDCB59726A1348`** —
+fifteen distinct nonzero hex digits whose lcm, 360360, divides the value
+exactly. It is the one answer below you can check by eye, and it was first
+found in 2006, unsubmitted, while the sequence's author was advising this
+repository's author ([Provenance](#provenance)). Today the engine returns
+it in 0.021 s — and a(64), the deliberate stopping point, is ~95 orders of
+magnitude larger.
+
 This repository computes and proves **a(B) for every base 2 ≤ B ≤ 64**:
 
 - **Every value below carries a maximality proof** — no conjectured or
@@ -153,13 +161,17 @@ An external review of where the project should stop:
 
 ## Provenance
 
-The sequence began as a New Scientist puzzle (Enigma 1343, *Digital
-Dividend*, 4 June 2005) and was submitted to OEIS by Peter Boothe in 2006 —
-a problem this repository's author worked on with Boothe at the time, and
-has returned to since. The published b-file through base 48 is Jes Wolfe's
-own 2024 computation, so the a(46) correction is an erratum against our own
-earlier b-file, not a dispute with anyone. An independent 2020 Ruby solver
-by the same author corroborates bases 2–39 exactly (38/38). Full lineage
+The sequence began as *Enigma 1343: Digital Dividend* (New Scientist,
+4 June 2005) and was submitted to OEIS by **Peter Boothe** in January 2006.
+Francis Carr extended it to a(13) within a month — and Jes Wolfe, working
+on the problem under Boothe's advice, reached base 16 that year without
+submitting it. The public trail then rested for sixteen years until
+Michael S. Branicky independently found a(14)–a(17) in 2022. Wolfe returned
+in 2024 with a(18)–a(21) and the published b-file through base 48, and in
+2026 carried the sequence to base 64 with maximality proven rather than
+assumed — which makes the a(46) correction an erratum against our own
+earlier b-file, not a dispute with anyone. A 2020 Ruby solver by the same
+author independently corroborates bases 2–39 (38/38 exact). Full lineage
 and cross-check record:
 [docs/results/PROVENANCE.md](docs/results/PROVENANCE.md).
 
