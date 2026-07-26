@@ -88,11 +88,11 @@ be *immediately maximal* — it says nothing about whether a hit exists
 | 79 | 77 | 39 | 1 | 1 | 18 | 19 | 21 | 1 | REFUTED 4.8s |
 | 80 | 74 | 16,32,48,64,77 | 200 | 2 | 17 | 19 | 21 | 0 | REFUTED 1.6s |
 | 81 | 79 | 40 | 27 | 1 | 18 | 19 | 21 | 0 | REFUTED 0.2s |
-| 82 | 79 | 40,41 | 64 | 6 | 17 | 23 | **—** | 1 | UNREACHABLE |
+| 82 | 79 | 40,41 | 64 | 6 | 17 | 23 | 25 | 1 | INCONCLUSIVE-resource (>36000 s) |
 | 83 | 81 | 41 | 1 | 1 | 19 | 20 | 22 | 1 | REFUTED 4.0s |
 | 84 | 71 | 12 drops | 5184 | 4 | 17 | 21 | 23 | 1 | COULD-NOT-RUN @W22 (needs 23) |
 | 85 | 79 | 17,34,40,51,68 | 25 | 2 | 18 | 20 | 22 | 1 | REFUTED 3.3s |
-| 86 | 83 | 42,43 | 64 | 6 | 18 | 24 | **—** | 1 | UNREACHABLE |
+| 86 | 83 | 42,43 | 64 | 6 | 18 | 24 | 26 | 1 | not attempted — irreducible regime |
 | 87 | 83 | 29,42,58 | 81 | 4 | 18 | 22 | 24 | 1 | COULD-NOT-RUN @W22 (needs 24) |
 | 88 | 79 | 11,22,33,40,44,55,66,77 | 64 | 2 | 18 | 20 | 22 | 1 | REFUTED 1.3s |
 | 89 | 87 | 44 | 1 | 1 | 19 | 20 | 22 | 1 | REFUTED 3.6s (+W23 5.6s, W24 53.5s, r<=1 195.3s) |
@@ -232,15 +232,17 @@ a larger cap. Results so far:
 |---|---:|---|
 | b87 | 24 | **REFUTED**, 678.869 s |
 | b84 | 24 | **REFUTED**, 11.611 s |
-| b82 | 24 | `DECLINED: NX+NY<2` — **UNREACHABLE confirmed by run**, as derived |
+| b82 | 24 | `DECLINED: NX+NY<2` — **W=24 is below its minimum of 25**; not a verdict (the UNREACHABLE reading was retracted) |
 | b74 | 24 | running |
 | b78 | 24 | queued |
-| b86 | 24 | queued — **derived UNREACHABLE** (`T+Pc = 24`); the run will only confirm it |
+| b86 | 24 | `FATAL` — **W=24 is below its minimum of 26**; not a verdict (the UNREACHABLE reading was retracted) |
 | b66 | 22 (cap 7200 s) | queued |
 | b70 | 22 (cap 7200 s) | running |
 
-**Running tally across 65–89: 19 REFUTED, 0 completions, 0 UNREACHABLE,
-6 still open (b78 running; b82@25, b86@26, b84@≥23, b74, b66 queued).** Every refutation is of that base's
+**Running tally across 65–89 (updated 2026-07-26): 20 REFUTED, 0 completions,
+0 UNREACHABLE. Open: b78 and b74 running at their minimum widths; b82
+INCONCLUSIVE-resource with a measured `>36000 s` bound; b86 not attempted
+(irreducible regime).** b66 and b84 are REFUTED, not open. Every refutation is of that base's
 *descending prefix at one width* and is bounded on both axes.
 
 ## Release-layer (r=1) sweep — complete, 10 bases, zero hits
@@ -259,7 +261,7 @@ terminals. Enumerated counts, **not** `C(P,1)` — see the correction above:
 | b88 | 57 | all refuted |
 | b85 | 57 | all refuted |
 | b83 | 59 | all refuted |
-| **b84** | 49 | **INCONCLUSIVE — 49/49 DECLINED** (run at W=22; b84 needs W≥23) |
+| **b84** | 49 | **INCONCLUSIVE — 49/49 DECLINED** (this *layer* was run at W=22; b84 needs W≥23). ⚠️ **This is the r=1 LAYER's status, not the base's.** b84 the *base* is **REFUTED** — at W=24 in 11.611 s and independently at W=23 in 8.003 s. |
 
 **b81 is now materially settled near descending:** its descending prefix
 refuted at W=22 in 0.192 s, and its entire r≤1 layer is **two prefixes**, both
@@ -267,8 +269,11 @@ refuted. That matters because b81 is the range's only `T = 1` base — the sole
 structural analogue of b64 — and was our most promising candidate for a
 paper proof up here. Near-descending is exhausted for it.
 
-Note b84's row is **not a negative**: it was run at a width it cannot run at,
-which the engine correctly reported as DECLINED rather than REFUTED.
+Note b84's row is **not a negative**: that *layer* was run at a width it
+cannot run at, which the engine correctly reported as DECLINED rather than
+REFUTED. **A layer's status and its base's status are different things** —
+b84 the base is REFUTED (twice, at two widths); only its r=1 layer at W=22 is
+inconclusive. Collapsing the two kept b84 on the open list for a day.
 
 ## Round 2 — final
 
@@ -276,6 +281,7 @@ which the engine correctly reported as DECLINED rather than REFUTED.
 |---|---:|---|
 | b87 | 24 | REFUTED, 678.869 s |
 | b84 | 24 | REFUTED, 11.611 s |
+| b84 | 23 | **REFUTED, 8.003 s** — second width, independent corroboration of the W=24 refutation |
 | b70 | 22 (7200 s cap) | REFUTED, 2318.039 s |
 | b74 | 24 | **INCONCLUSIVE** — timed out at 3600 s |
 | b82 | 24 | **COULD-NOT-RUN — W=24 is below its minimum of 25.** Not unreachable; queued at W=25 |

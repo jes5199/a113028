@@ -577,6 +577,48 @@ what the other could check — which is an argument for the review layer being
 adversarial rather than confirmatory, and for it being a *different* agent
 rather than the same one reading twice.
 
+## 13d. A retraction must reach every place the claim was written
+
+Correcting the passage where a claim was *argued* is not the same as
+correcting every passage where it was *asserted*. An incomplete retraction is
+how a corrected error comes back — usually months later, quoted from the part
+nobody updated.
+
+**Incident.** A reachability claim ("these two bases cannot be attempted at any
+supported width") was retracted thoroughly: the reasoning section rewritten,
+the arithmetic corrected, the outcome class redefined and explicitly emptied,
+the count fixed. The retraction was verified on origin by a second agent.
+
+**A results table earlier in the same file still read `UNREACHABLE confirmed by
+run`.** So did the main classification table, which additionally showed those
+bases' minimum width as `—`, i.e. *none exists*. **One document asserted both
+the claim and its retraction, in different sections.** Anyone building a
+summary from the tables — which is exactly what the tables are for — would have
+reproduced the retracted claim.
+
+**What it cost.** Nothing yet, because it was caught before the summary was
+sent. But the file had contradicted itself for eighteen hours, and a stale
+tally in the same pass still listed an already-refuted base as "queued" and an
+already-refuted base as "open".
+
+**The rule:** when retracting, grep the repository for the *claim*, not for the
+section — every table, every tally, every summary line, every count. A
+retraction is complete when the old wording appears nowhere, not when the
+argument has been fixed.
+
+**A distinct sibling failure, from the same review:** a *base's* status and one
+of its *layers'* status were conflated. `b84` the base was REFUTED at two
+widths; only its `r=1` layer at `W=22` was inconclusive. "b84 is
+INCONCLUSIVE-width" collapsed the two and kept the base on the open list for a
+day. **Statuses attach to specific objects; check which object a status is
+about before promoting it to a summary.**
+
+This entry is about **propagation**, not evidence — unlike §2, §3 and §4, which
+are about how agreement gets manufactured. Here the reasoning was right and
+the correction was right; only its reach was short.
+
+**[VIGILANCE]**
+
 ## 14. A durability mechanism stored in ephemeral space is not a mechanism
 
 A ledger built so that results survive process death is worthless if the
