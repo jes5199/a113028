@@ -697,6 +697,30 @@ reading it while believing you are covered. This is the same family as
 *"every mechanism's domain is narrower than its name"*: the guard's real
 domain excluded negated forms, and nothing in its name said so.
 
+**(b2) When two people get different numbers for "the same" quantity, suspect
+a definitional difference before an arithmetic bug.**
+
+*Incident.* Two agents produced different counts for the lex-greater prefixes
+above an incumbent. One had counted `(position, digit)` **sub-regions** and
+labelled them prefixes; the other had counted alternatives at the position
+*inside* the terminal, which is not part of the prefix at all. **Different
+mistakes, identical shape — both measured one index off the object**, in the
+same table, within the same hour. Each went looking for an arithmetic bug in
+the other's working; the actual fault was a shared ambiguity about what the
+column meant.
+
+> **Arithmetic disagreement is the symptom most often produced by definitional
+> drift.** Ask *what object are we each counting?* before asking *who
+> miscalculated?*
+
+The fix is cheap and structural: **name the counted object in the column
+header.** `16` is meaningless; `16 sub-regions` and `16 prefixes` are
+different claims, and one of them was wrong.
+
+This is the base/layer conflation (§13d) in new clothes — *prefix*,
+*sub-region* and *position-inside-terminal* are all "a thing at index j", and
+nothing in the notation stops you sliding between them.
+
 **(c) And a prediction, now strong enough to state as one.** Four mechanisms
 were built this weekend after a lesson recurred. **Every one found something
 within minutes of existing** — twice something other than what it was built to

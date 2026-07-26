@@ -505,7 +505,18 @@ missing. Full argument and controls: **[A64-MAXIMALITY.md](A64-MAXIMALITY.md)**.
 
 **Computational corroboration.** A census of the lex-greater region returned
 **0 feasible across 906,192 digit-subsets**, standing for 5.478 × 10⁸ ordered
-prefixes. That census is simply this obstruction evaluated mechanically.
+prefixes at W=24. That census is simply this obstruction evaluated
+mechanically.
+
+**And the scale is worth stating plainly, because it is the clearest
+illustration in this project of why structure beats compute.** At W=22 the
+lex-greater region above this value contains **328,688,069,455 terminal
+prefixes**. This machine completes roughly **1.5 terminals per hour**. Every
+one of those 3 × 10¹¹ regions is disposed of by a single arithmetic
+observation — *every completion must end in 32, so no prefix consuming 32 can
+complete* — an argument that fits in one sentence and takes no compute at all.
+The same lesson as the forced-set audit: **the structure was derivable in
+advance; the search never had to be run.**
 
 > ⚠️ **The census is a one-sided test.** `FEASIBLE = 0` is conclusive;
 > **`FEASIBLE > 0` says nothing** — feasibility is necessary, not sufficient.
