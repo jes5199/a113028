@@ -337,9 +337,33 @@ process.
 | run | width | cap | outcome |
 |---|---:|---:|---|
 | b82 | 25 | 7200 s | `rc=124` — **INCONCLUSIVE-resource, `>7200 s`, no verdict** |
-| b82 | 25 | 36000 s | running |
-| b86 | 26 | — | queued, cap to be sized from b82's result |
+| b82 | 25 | 36000 s | `rc=124` — **INCONCLUSIVE-resource, `>36000 s`, no verdict** |
+| b86 | 26 | — | **not attempted** — see below |
 
-`>7200 s` is recorded as a **bound, not a runtime**. It is not a refutation and
-says nothing about base 82. For scale, the longest single job elsewhere in this
-campaign was b66 at 2507 s.
+Both are recorded as **bounds, not runtimes**. Neither is a refutation and
+neither says anything about base 82. For scale, the longest *completed* job
+anywhere in this campaign was b66 at 2507 s; b82 was given **more than
+fourteen times that** and returned nothing.
+
+### The irreducible wide-width regime is out of reach of this engine
+
+b82 was given 5× its first budget — **ten uncontended hours** — and only the
+bound moved. b86 is **strictly harder**: a wider window (26 vs 25) on a larger
+digit set (`|D|=83` vs 79). Attempting it buys a third `rc=124` with high
+probability, consuming a day to move a bound that can already be stated.
+
+**So it was not attempted, and that is a conclusion rather than an omission:**
+
+> **Bases at `W = min W` — where the decomposition provably cannot apply — are
+> out of reach of this engine at any budget worth spending.**
+
+The reason is **structural, not incidental.** These are exactly the bases where
+`W − 1 < min W`, so there is no smaller width to partition into: no
+checkpointing, no sharding, no early stopping, no resumption. They must run
+all-or-nothing against a cap, on the two bases where all-or-nothing is most
+expensive. Everything that made b61 tractable — a monolith projected at ~10 h
+turned into 23 checkpointed children, one of which found the value in 1245 s —
+is unavailable here **by construction**.
+
+b82 and b86 therefore stand as **INCONCLUSIVE-resource with explicit bounds**,
+and the bound on b82 is now a measured `>36000 s`.
