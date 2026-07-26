@@ -670,7 +670,7 @@ the correction was right; only its reach was short.
 
 **[VIGILANCE]**
 
-## 13e. Two lessons from building the checker that catches 13d
+## 13e. Four lessons from building the checker that catches 13d
 
 **(a) An edit selector that says "the first row starting `| 54 |`" is silently
 wrong in any file with two tables.** It does not fail — it **corrupts one row
