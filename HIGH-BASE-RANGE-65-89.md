@@ -239,10 +239,25 @@ a larger cap. Results so far:
 | b66 | 22 (cap 7200 s) | queued |
 | b70 | 22 (cap 7200 s) | running |
 
-**Running tally across 65–89 (updated 2026-07-26 08:15Z): 21 REFUTED, 0
-completions, 0 UNREACHABLE. Open: b74 only, running at W=24. b82
-INCONCLUSIVE-resource with a measured `>36000 s` bound; b86 not attempted
-(irreducible regime).** b66, b78 and b84 are REFUTED, not open.
+**FINAL TALLY, 65–89 — the denominator is closed (2026-07-26 09:55Z).**
+Counted from the logs, not from a running total:
+
+| outcome | count | bases |
+|---|---:|---|
+| **REFUTED** (descending prefix, at that base's minimum width) | **22** | 65–73, 75–81, 83–85, 87–89 |
+| **completions found** | **0** | — |
+| **INCONCLUSIVE-resource** (explicit bound, *not* a result) | **2** | b74 `>10800 s`, b82 `>36000 s` |
+| **not attempted** (irreducible regime) | **1** | b86 |
+| **UNREACHABLE** | **0** | — the class is empty; an earlier claim placing b82/b86 here was retracted |
+
+**22 + 3 = 25 of 25. No hit anywhere above base 64.**
+
+Every refutation is bounded on **both** axes — it exhausts one prefix's window
+at one width, and says nothing about other prefixes or wider windows. The two
+inconclusive results are statements about our budget, not about those bases:
+**b78 proves the point**, having timed out at 3600 s on Saturday and then
+refuted in 4754 s once given 10800 s. **A cap is not a wall**, so b74 and b82
+remain open questions with lower bounds attached, not closed ones.
 
 **Note on b78 — a cap, not a wall.** It timed out at a 3600 s cap on Saturday
 and sat as INCONCLUSIVE-resource overnight. Re-run at its *derived minimum*
