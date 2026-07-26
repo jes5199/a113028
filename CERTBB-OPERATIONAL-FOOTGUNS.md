@@ -245,6 +245,28 @@ are ~99.99 % `[bucket-plan]` lines; `grep -v '^\[bucket-plan\]'` reduces a
 (`.githooks/pre-commit`, 20 MB limit) now refuses raw traces at commit time,
 after two were committed in one day without their size being checked.
 
+### Why the hook's limit is 20 MB and not 100
+
+The same reflex — staging a raw log without looking at its size — occurred
+three times in two days, with three different outcomes:
+
+| when | size | what caught it | cost |
+|---|---:|---|---|
+| day 1 | 585 MB | GitHub's 100 MB limit, **after the push was rejected** | unwind a commit |
+| day 1 | 97.26 MB | **nothing** — it walked under the limit | in the history permanently |
+| day 2 | 126 MB | **the hook, before the commit existed** | one `grep`; 2 KB committed |
+
+**126 MB would have sailed under a 100 MB check in the same way 97.26 MB did.**
+The hook is therefore not a duplicate of the remote's limit — it catches a
+class the remote's limit structurally cannot.
+
+> **A guard set at the same threshold as the cliff that already failed you is
+> just a second copy of the cliff.** It has to fire early enough that nothing
+> can walk under it.
+
+Note also what did *not* change across the three: the habit. The only instance
+with zero cost is the one where a machine did the remembering.
+
 Verified end-to-end on the run that caused the incident: startup passed at
 21.17 GiB against a 20.87 GiB floor, then aborted at 20.86 GiB after 634,880
 records / 161 MB. The same b64 run, bounded.
