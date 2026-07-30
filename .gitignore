@@ -22,3 +22,15 @@ gmon.out
 /candidates_log.txt
 /bucket_*.log
 /b[0-9]*_*.log
+# wind-down 2026-07-30: regenerable engine/gate outputs from the v10-v15 era
+# (summaries live in docs/results/RESULTS.md, FRONTIER-STATUS.md,
+# regression_baseline.txt; regression_logs regenerable via
+# scripts/regression_suite.sh)
+/regression_logs/
+/a113028_v13[a-z]
+/dual_campaign.txt
+/g[0-9]_*.txt
+/gate_*.txt
+/longrun*.txt
+/scorecard_rerun.txt
+/v1[0-9]_*.txt

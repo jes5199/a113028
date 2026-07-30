@@ -67,6 +67,31 @@ proof-producing SAT (DRAT/LRAT) as an independent engine family
 epic for bases ≥ 90 (finite.c is the existence proof the algorithm
 tolerates arbitrary precision).
 
+## Working-tree audit at wind-down (2026-07-30)
+
+The untracked working tree was classified file-by-file before exit:
+
+- **Committed as evidence** (wind-down commit 2): the b63 shard
+  manifests — final state; the loose shard2 has 3 records *more* than
+  the timestamped checkpoint, whose copy is an exact byte-prefix of it
+  — plus the hashed checkpoint bundle (its SHA256SUMS re-verified OK
+  at commit time), `merged_60.jsonl`, the b60 pre-merge backup,
+  `scripts/fit_planner.py` (source of the planner-calibration numbers
+  in FRONTIER-STATUS), and `sol-reference/` (contains the
+  proof-bearing nilpeel certificate verifiers AND a defective
+  reference engine — read its README before touching).
+- **Gitignored as regenerable**: `regression_logs/` (38 MB raw gate
+  logs; every outcome is summarized in-repo; regenerate via
+  `scripts/regression_suite.sh`), and the v10–v15-era gate/run outputs
+  (`gate_*`, `longrun*`, `v1?_*`, `g?_*` etc.). Nothing in them exists
+  only there.
+- **Uncertain, labeled as such**: the ELF binaries `a113028_v13b` /
+  `a113028_v13c` are interim "fixed v13" builds; the fixes are
+  recorded as landed in the tracked v13/v14 sources, but these exact
+  binaries were never byte-matched to a tracked source. They are
+  gitignored, still on disk; if bit-exact reproduction of the 07-23
+  long runs ever matters, that's the gap.
+
 ## Box constraints (verify, don't assume — they were true at wind-down)
 
 Hermes (live-money) shares these four cores — market hours are
