@@ -1,0 +1,78 @@
+import itertools
+
+def gcd(a, b):
+    while b:
+        a, b = b, a % b
+    return a
+
+def lcm(digits):
+    result = 1
+    for d in digits:
+        result = result * d // gcd(result, d)
+    return result
+
+def digits_to_int(digits, base):
+    result = 0
+    for d in digits:
+        result = result * base + d
+    return result
+
+def int_to_digits(n, base, length = 0):
+    digits = []
+    while n:
+        n, d = divmod(n, base)
+        digits.append(d)
+
+    while len(digits) < length:
+        digits.append(0)
+    return list(reversed(digits))
+
+def subsets_in_descending_order(lst):
+    n = len(lst)
+    for size in range(n, -1, -1):
+        for subset in itertools.combinations(lst, size):
+            yield list(subset)
+
+for base in range(2, 100):
+    # digits is an array from base-1 down to 1
+    base_digits = list(range(base-1, 0, -1))
+
+    for digits in subsets_in_descending_order(base_digits):
+        # Ten Rule
+        if lcm(digits) % base == 0:
+            #print("skipping due to 10 rule (number cannot end in 0)")
+            continue
+
+        # Nine Rule
+        if (base-1) in digits and sum(digits) % (base-1) != 0:
+            #print(f"skipping due to Nine rule for digit {base-1} (sum of digits must be divisible by base-1)")
+            continue
+        
+        # Three Rule (generalized Nine rule)
+        three_rule = False
+        for digit in digits:
+            if base % digit == 1 and (base*base) % digit == 1 and sum(digits) % digit != 0:
+                #print(f"skipping due to Three rule for digit {digit} (sum of digits must be divisible by n if base%n == 0)")
+                three_rule = True
+                break
+        if three_rule:
+            continue
+
+        #print("plausible digits:", digits)
+
+        n = digits_to_int(digits, base)
+        the_lcm = lcm(digits)
+        #print("lcm", the_lcm)
+
+        n -= n % the_lcm
+
+        set_of_digits = set(digits)
+        minimum = digits_to_int(list(sorted(digits)), base)
+
+        while set(int_to_digits(n, base)) != set_of_digits and n >= minimum:
+            n -= the_lcm
+        
+        if set(int_to_digits(n, base)) == set_of_digits:
+            #print(f"solution for base {base}:", int_to_digits(n, base))
+            print(base, n)
+            break

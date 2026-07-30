@@ -1,0 +1,11 @@
+Values known by April 2006 (not exhaustive; quoted in an email about base 48,
+which was unsolved at the time). Notation: 1-9 = 1..9, a-z = 10..35, A-Z = 36..61.
+
+2    1                                       1
+4    312                                     54
+8    7625134                                 2042460
+12   b9352176                                421877610
+16   fedcb59726a1348                         1147797065081426760
+24   nlkjihfea679541b32dc                    4005106906135094120287426500
+32   vutsrqponmlkjihf1758a9bc324e6dg         45624400749143691515203426155119190014607956400
+40   DCAzyxvutsrqpnmljifec6ab13d9254h7k      2949491266532658135493053371770319593915307331801883500
